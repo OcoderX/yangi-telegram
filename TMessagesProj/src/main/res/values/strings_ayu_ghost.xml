@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="AyuGhostStoryAlertTitle">Ghost mode is off</string>
+    <string name="AyuGhostStoryAlertMessage">Ghost mode is off, the author will see that you viewed the story. Enable ghost mode?</string>
+    <string name="AyuGhostStoryAlertEnable">Enable ghost mode</string>
+    <string name="AyuGhostStoryAlertOpenAnyway">Open anyway</string>
+</resources>

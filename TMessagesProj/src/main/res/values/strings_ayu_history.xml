@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: message history UI (deleted/edited messages, edit history, message details) -->
+    <string name="AyuEditHistory">Edit history</string>
+    <string name="AyuEditHistoryEmpty">No saved revisions for this message.</string>
+    <string name="AyuEditHistoryOriginal">Original</string>
+    <string name="AyuEditHistoryCurrent">Current version</string>
+    <string name="AyuEditHistoryRevision">Revision %1$d</string>
+    <string name="AyuEditHistoryEmptyText">(no text)</string>
+
+    <string name="AyuMessageDetails">Message details</string>
+    <string name="AyuCopyJson">Copy JSON</string>
+    <string name="AyuCopiedToClipboard">Copied to clipboard</string>
+
+    <string name="AyuDeleteLocally">Delete locally</string>
+    <string name="AyuDeleteLocallyTitle">Delete locally</string>
+    <string name="AyuDeleteLocallyMessage">This message was already deleted on the server. Remove the local copy as well?</string>
+
+    <string name="AyuDetailsMessageId">Message ID</string>
+    <string name="AyuDetailsDialogId">Dialog ID</string>
+    <string name="AyuDetailsFromId">From ID</string>
+    <string name="AyuDetailsFromName">From</string>
+    <string name="AyuDetailsPeerId">Peer ID</string>
+    <string name="AyuDetailsDate">Date</string>
+    <string name="AyuDetailsEditDate">Edit date</string>
+    <string name="AyuDetailsForwardFrom">Forwarded from</string>
+    <string name="AyuDetailsForwardDate">Forward date</string>
+    <string name="AyuDetailsPostAuthor">Post author</string>
+    <string name="AyuDetailsReplyTo">Reply to message ID</string>
+    <string name="AyuDetailsGroupedId">Grouped ID</string>
+    <string name="AyuDetailsViews">Views</string>
+    <string name="AyuDetailsForwards">Forwards</string>
+    <string name="AyuDetailsMediaType">Media type</string>
+    <string name="AyuDetailsFileSize">File size</string>
+    <string name="AyuDetailsMimeType">MIME type</string>
+    <string name="AyuDetailsDcId">DC ID</string>
+    <string name="AyuDetailsFileId">File ID</string>
+    <string name="AyuDetailsTtl">TTL</string>
+    <string name="AyuDetailsDeleted">Deleted</string>
+    <string name="AyuDetailsEntities">Entities</string>
+    <string name="AyuDetailsRevisions">Saved revisions</string>
+    <string name="AyuDetailsSectionGeneral">General</string>
+    <string name="AyuDetailsSectionForward">Forward</string>
+    <string name="AyuDetailsSectionMedia">Media</string>
+    <string name="AyuDetailsSectionMisc">Misc</string>
+</resources>

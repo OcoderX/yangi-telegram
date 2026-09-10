@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: settings UI -->
+    <string name="AyuPreferences">AyuGram</string>
+    <string name="AyuPreferencesInfo">Ghost mode, message history, filters</string>
+
+    <!-- Ghost -->
+    <string name="AyuGhostEssentials">Ghost essentials</string>
+    <string name="AyuGhostMode">Ghost mode</string>
+    <string name="AyuGhostModeInfo">While ghost mode is on, Telegram will not know that you read messages, viewed stories or are online.</string>
+    <string name="AyuGhostSettings">Ghost mode settings</string>
+    <string name="AyuGhostDontReadMessages">Don\'t send read packets</string>
+    <string name="AyuGhostDontReadStories">Don\'t read stories</string>
+    <string name="AyuGhostDontSendOnline">Don\'t send online</string>
+    <string name="AyuGhostDontSendTyping">Don\'t send typing/upload progress</string>
+    <string name="AyuGhostSendOfflineAfterOnline">Go offline after online</string>
+    <string name="AyuGhostExtras">Ghost extras</string>
+    <string name="AyuGhostMarkReadAfterSend">Mark read after send</string>
+    <string name="AyuGhostMarkReadAfterAction">Read on interact</string>
+    <string name="AyuGhostUseScheduledMessages">Use scheduled messages</string>
+    <string name="AyuGhostUseScheduledMessagesInfo">Messages are sent as scheduled messages with a small delay, so your online status never leaks. Incompatible with \"Mark read after send\".</string>
+    <string name="AyuGhostAlertBeforeStory">Alert before opening story</string>
+    <string name="AyuGhostAlertBeforeStoryInfo">Warns you when ghost mode is off and you are about to open a story.</string>
+    <string name="AyuLocalPremiumInfo">Client-side only. Unlocks Premium-only interface features locally; the server still knows you are not a Premium subscriber.</string>
+    <string name="AyuGhostEnabledToast">Ghost mode enabled</string>
+    <string name="AyuGhostDisabledToast">Ghost mode disabled</string>
+
+    <!-- Spy -->
+    <string name="AyuSpyEssentials">Spy essentials</string>
+    <string name="AyuSaveDeletedMessages">Save deleted messages</string>
+    <string name="AyuSaveMessagesHistory">Save messages history</string>
+    <string name="AyuSpyEssentialsInfo">Deleted messages and edit history are stored in a separate database that survives cache clears.</string>
+    <string name="AyuMessageSaving">Message saving</string>
+    <string name="AyuSaveMedia">Save media</string>
+    <string name="AyuSaveMediaInfo">Choose which chats media is saved from.</string>
+    <string name="AyuSaveMediaPrivateChats">Private chats</string>
+    <string name="AyuSaveMediaPublicChannels">Public channels</string>
+    <string name="AyuSaveMediaPrivateChannels">Private channels</string>
+    <string name="AyuSaveMediaPublicGroups">Public groups</string>
+    <string name="AyuSaveMediaPrivateGroups">Private groups</string>
+    <string name="AyuSaveFormatting">Save formatting</string>
+    <string name="AyuSaveReactions">Save reactions</string>
+    <string name="AyuSaveForBots">Save for bots</string>
+    <string name="AyuSaveSelfDestructingMedia">Save self-destructing media</string>
+    <string name="AyuSaveSelfDestructingMediaInfo">Keeps a permanent copy of view-once and timed media once you open it.</string>
+
+    <!-- Filters -->
+    <string name="AyuFilters">Filters</string>
+    <string name="AyuRegexFilters">Regex filters</string>
+    <string name="AyuRegexFiltersInfo">Hide messages and chats matching your own regular expressions.</string>
+
+    <!-- QoL -->
+    <string name="AyuQualityOfLife">Quality of life</string>
+    <string name="AyuKeepAliveService">Keep alive service</string>
+    <string name="AyuDisableCrashlytics">Disable Crashlytics</string>
+    <string name="AyuQualityOfLifeInfo">Some of these options require a restart to take effect.</string>
+
+    <!-- Customization -->
+    <string name="AyuCustomization">Customization</string>
+    <string name="AyuDeletedMark">Deleted mark text</string>
+    <string name="AyuEditedMark">Edited mark text</string>
+    <string name="AyuMarkDefault">Default</string>
+    <string name="AyuShowGhostToggle">Show ghost toggle in main screen</string>
+    <string name="AyuShowKillButton">Show kill button</string>
+    <string name="AyuShowPeerId">Show peer ID in profile</string>
+    <string name="AyuShowMessageSeconds">Show message seconds</string>
+    <string name="AyuShowMessageDetails">Show \"Message details\" menu item</string>
+    <string name="AyuShowMessageShadow">Message shadow</string>
+    <string name="AyuSimpleQuotesAndReplies">Simple quotes and replies</string>
+    <string name="AyuCustomizationInfo">The ghost toggle and the kill button are shown in the chats list action bar.</string>
+
+    <!-- Sync -->
+    <string name="AyuSyncInfo">Synchronize AyuGram settings between your devices.</string>
+    <string name="AyuEnabled">Enabled</string>
+    <string name="AyuDisabled">Disabled</string>
+
+    <!-- Debug -->
+    <string name="AyuDebug">Debug</string>
+    <string name="AyuWalMode">WAL mode</string>
+    <string name="AyuWalModeInfo">Write-ahead logging makes the AyuGram database faster. Turn it off only if you experience problems.</string>
+    <string name="AyuClearDatabase">Clear AyuGram database</string>
+    <string name="AyuClearDatabaseTitle">Clear AyuGram database</string>
+    <string name="AyuClearDatabaseMessage">All saved deleted messages, edit history and saved media will be permanently removed. Continue?</string>
+    <string name="AyuClearDatabaseDone">AyuGram database cleared</string>
+    <string name="AyuEraseTelegramDatabase">Erase local Telegram database</string>
+    <string name="AyuEraseTelegramDatabaseTitle">Erase local Telegram database</string>
+    <string name="AyuEraseTelegramDatabaseMessage">The local Telegram cache database will be erased and the app will restart. Your account and messages on the server are not affected. Continue?</string>
+    <string name="AyuKillApp">Kill app</string>
+    <string name="AyuKillAppTitle">Kill app</string>
+    <string name="AyuKillAppMessage">The app process will be terminated immediately. Continue?</string>
+    <string name="AyuFooter">AyuGram features integrated · v%1$s</string>
+</resources>

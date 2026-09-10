@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: ghost mode story alert -->
+    <string name="AyuGhostStoryAlertTitle">Режим призрака выключен</string>
+    <string name="AyuGhostStoryAlertMessage">Режим призрака выключен, автор увидит, что вы просмотрели историю. Включить режим призрака?</string>
+    <string name="AyuGhostStoryAlertEnable">Включить режим призрака</string>
+    <string name="AyuGhostStoryAlertOpenAnyway">Всё равно открыть</string>
+
+    <!-- AyuGram: история сообщений (удалённые/изменённые сообщения, история изменений, сведения) -->
+    <string name="AyuEditHistory">История изменений</string>
+    <string name="AyuEditHistoryEmpty">Для этого сообщения нет сохранённых версий.</string>
+    <string name="AyuEditHistoryOriginal">Оригинал</string>
+    <string name="AyuEditHistoryCurrent">Текущая версия</string>
+    <string name="AyuEditHistoryRevision">Версия %1$d</string>
+    <string name="AyuEditHistoryEmptyText">(без текста)</string>
+
+    <string name="AyuMessageDetails">Сведения о сообщении</string>
+    <string name="AyuCopyJson">Копировать JSON</string>
+    <string name="AyuCopiedToClipboard">Скопировано в буфер обмена</string>
+
+    <string name="AyuDeleteLocally">Удалить локально</string>
+    <string name="AyuDeleteLocallyTitle">Удалить локально</string>
+    <string name="AyuDeleteLocallyMessage">Это сообщение уже удалено на сервере. Удалить и локальную копию?</string>
+
+    <string name="AyuDetailsMessageId">ID сообщения</string>
+    <string name="AyuDetailsDialogId">ID диалога</string>
+    <string name="AyuDetailsFromId">ID отправителя</string>
+    <string name="AyuDetailsFromName">Отправитель</string>
+    <string name="AyuDetailsPeerId">ID пира</string>
+    <string name="AyuDetailsDate">Дата</string>
+    <string name="AyuDetailsEditDate">Дата изменения</string>
+    <string name="AyuDetailsForwardFrom">Переслано от</string>
+    <string name="AyuDetailsForwardDate">Дата пересылки</string>
+    <string name="AyuDetailsPostAuthor">Автор поста</string>
+    <string name="AyuDetailsReplyTo">ID сообщения, на которое отвечают</string>
+    <string name="AyuDetailsGroupedId">ID группы медиа</string>
+    <string name="AyuDetailsViews">Просмотры</string>
+    <string name="AyuDetailsForwards">Пересылки</string>
+    <string name="AyuDetailsMediaType">Тип медиа</string>
+    <string name="AyuDetailsFileSize">Размер файла</string>
+    <string name="AyuDetailsMimeType">MIME-тип</string>
+    <string name="AyuDetailsDcId">ID дата-центра</string>
+    <string name="AyuDetailsFileId">ID файла</string>
+    <string name="AyuDetailsTtl">TTL</string>
+    <string name="AyuDetailsDeleted">Удалено</string>
+    <string name="AyuDetailsEntities">Сущности</string>
+    <string name="AyuDetailsRevisions">Сохранённые версии</string>
+    <string name="AyuDetailsSectionGeneral">Основное</string>
+    <string name="AyuDetailsSectionForward">Пересылка</string>
+    <string name="AyuDetailsSectionMedia">Медиа</string>
+    <string name="AyuDetailsSectionMisc">Разное</string>
+
+    <!-- AyuGram: regex-фильтры сообщений -->
+    <string name="AyuFiltersTitle">Фильтры сообщений</string>
+    <string name="AyuFiltersGeneralHeader">Основное</string>
+    <string name="AyuFiltersEnable">Включить фильтры</string>
+    <string name="AyuFiltersHideInChats">Скрывать в чатах</string>
+    <string name="AyuFiltersCaseInsensitive">Без учёта регистра</string>
+    <string name="AyuFiltersHideBlocked">Скрывать сообщения от заблокированных пользователей</string>
+    <string name="AyuFiltersGeneralInfo">Сообщения, подходящие под любое из регулярных выражений ниже, будут скрыты из уведомлений, а если включено \"Скрывать в чатах\" — то и из истории чата.</string>
+    <string name="AyuFiltersListHeader">Фильтры</string>
+    <string name="AyuFiltersAdd">Добавить фильтр</string>
+    <string name="AyuFiltersShare">Поделиться фильтрами</string>
+    <string name="AyuFiltersImport">Импортировать фильтры</string>
+    <string name="AyuFiltersListInfo">Нажмите на фильтр, чтобы изменить его, удерживайте для других действий.</string>
+    <string name="AyuFiltersEmpty">У вас пока нет фильтров.</string>
+    <string name="AyuFiltersScopeGlobal">Везде</string>
+    <string name="AyuFiltersScopeChat">Только в %1$s</string>
+    <string name="AyuFiltersInvalidRegex">Некорректное регулярное выражение</string>
+    <string name="AyuFiltersDisabled">Отключён</string>
+
+    <!-- экран редактирования -->
+    <string name="AyuFilterEditTitle">Изменить фильтр</string>
+    <string name="AyuFilterNewTitle">Новый фильтр</string>
+    <string name="AyuFilterRegexHeader">Регулярное выражение</string>
+    <string name="AyuFilterRegexHint">Регулярное выражение</string>
+    <string name="AyuFilterRegexInfo">Синтаксис регулярных выражений Java. Шаблон применяется к тексту сообщения в режиме MULTILINE.</string>
+    <string name="AyuFilterRegexValid">Шаблон корректен</string>
+    <string name="AyuFilterTestHeader">Проверка</string>
+    <string name="AyuFilterTestHint">Текст для проверки</string>
+    <string name="AyuFilterTestMatches">Совпадает — это сообщение было бы скрыто</string>
+    <string name="AyuFilterTestNoMatch">Не совпадает</string>
+    <string name="AyuFilterTestEmpty">Введите текст, чтобы проверить шаблон</string>
+    <string name="AyuFilterScopeHeader">Область действия</string>
+    <string name="AyuFilterScope">Применять к</string>
+    <string name="AyuFilterScopeSelectChat">Выберите чат</string>
+    <string name="AyuFilterOptionsHeader">Параметры</string>
+    <string name="AyuFilterEnabled">Включён</string>
+    <string name="AyuFilterCaseInsensitiveOverride">Без учёта регистра</string>
+    <string name="AyuFilterCaseInsensitiveDefault">Использовать общую настройку</string>
+    <string name="AyuFilterMatchCaption">Проверять подписи к медиа</string>
+    <string name="AyuFilterMatchSenderName">Проверять имя отправителя</string>
+    <string name="AyuFilterDelete">Удалить фильтр</string>
+    <string name="AyuFilterDeleteTitle">Удалить фильтр</string>
+    <string name="AyuFilterDeleteMessage">Вы уверены, что хотите удалить этот фильтр?</string>
+    <string name="AyuFilterEmptyError">Введите регулярное выражение.</string>
+    <string name="AyuFilterEnable">Включить</string>
+    <string name="AyuFilterDisable">Отключить</string>
+    <string name="AyuFilterEdit">Изменить</string>
+    <string name="AyuFilterMoveUp">Переместить вверх</string>
+    <string name="AyuFilterMoveDown">Переместить вниз</string>
+
+    <!-- импорт / экспорт -->
+    <string name="AyuFiltersImportTitle">Импорт фильтров</string>
+    <string name="AyuFiltersImportHint">Вставьте ссылку на фильтры</string>
+    <string name="AyuFiltersImportMessage">Вставьте ссылку, полученную от другого пользователя AyuGram.</string>
+    <string name="AyuFiltersImportDone">Импортировано фильтров: %1$d.</string>
+    <string name="AyuFiltersImportNothing">Нет новых фильтров для импорта.</string>
+    <string name="AyuFiltersImportFailed">Эта ссылка не содержит фильтров.</string>
+    <string name="AyuFiltersShareEmpty">Пока нечем поделиться.</string>
+    <string name="AyuFiltersLinkCopied">Ссылка на фильтры скопирована в буфер обмена.</string>
+
+    <!-- чат / превью -->
+    <string name="AyuFiltersHiddenHint">Скрыто фильтрами сообщений: %1$d</string>
+    <string name="AyuFilteredMessage">Отфильтрованное сообщение</string>
+
+    <!-- AyuGram: удобства -->
+    <string name="AyuExpireMedia">Просрочить</string>
+    <string name="AyuExpireMediaInfo">Немедленно запустить таймер самоуничтожения для этого медиа.</string>
+    <string name="AyuDisableAds">Отключить рекламу</string>
+    <string name="AyuDisableProxySponsor">Отключить спонсорский канал прокси</string>
+    <string name="AyuLocalPremium">Локальный Telegram Premium</string>
+    <string name="AyuHideStories">Скрыть истории</string>
+    <string name="AyuKeepKickedChats">Оставлять чаты после блокировки</string>
+    <string name="AyuAllowScreenshotsInSecretChats">Разрешить скриншоты в секретных чатах</string>
+    <string name="AyuDisableEmulatorDetection">Отключить обнаружение эмулятора</string>
+    <string name="AyuShowExpireButton">Показывать кнопку \"Просрочить\"</string>
+
+    <!-- AyuForward -->
+    <string name="AyuForward">AyuForward</string>
+    <string name="AyuForwardProgress">Подготовка сообщений…</string>
+    <string name="AyuForwardDownloading">Загрузка медиа…</string>
+    <string name="AyuForwardFailed">Не удалось воссоздать сообщений: %1$d</string>
+    <string name="AyuForwardNoFile">Медиа недоступно локально</string>
+
+    <!-- AyuGram: настройки -->
+    <string name="AyuPreferences">AyuGram</string>
+    <string name="AyuPreferencesInfo">Режим призрака, история сообщений, фильтры</string>
+
+    <!-- Ghost -->
+    <string name="AyuGhostEssentials">Основное режима призрака</string>
+    <string name="AyuGhostMode">Режим призрака</string>
+    <string name="AyuGhostModeInfo">Пока включён режим призрака, Telegram не будет знать, что вы прочитали сообщения, просмотрели истории или находитесь в сети.</string>
+    <string name="AyuGhostSettings">Настройки режима призрака</string>
+    <string name="AyuGhostDontReadMessages">Не отправлять отметки о прочтении</string>
+    <string name="AyuGhostDontReadStories">Не отмечать истории просмотренными</string>
+    <string name="AyuGhostDontSendOnline">Не показывать, что вы в сети</string>
+    <string name="AyuGhostDontSendTyping">Не отправлять статус набора и загрузки</string>
+    <string name="AyuGhostSendOfflineAfterOnline">Уходить в офлайн после появления в сети</string>
+    <string name="AyuGhostExtras">Дополнительно</string>
+    <string name="AyuGhostMarkReadAfterSend">Отмечать прочитанным после отправки</string>
+    <string name="AyuGhostMarkReadAfterAction">Читать при взаимодействии</string>
+    <string name="AyuGhostUseScheduledMessages">Использовать отложенные сообщения</string>
+    <string name="AyuGhostUseScheduledMessagesInfo">Сообщения отправляются как отложенные с небольшой задержкой, поэтому статус «в сети» не раскрывается. Несовместимо с параметром \"Отмечать прочитанным после отправки\".</string>
+    <string name="AyuGhostAlertBeforeStory">Предупреждать перед открытием истории</string>
+    <string name="AyuGhostAlertBeforeStoryInfo">Предупреждает, когда режим призрака выключен, а вы собираетесь открыть историю.</string>
+    <string name="AyuLocalPremiumInfo">Работает только на стороне клиента. Локально открывает функции интерфейса, доступные только с Premium; сервер по-прежнему знает, что у вас нет подписки Premium.</string>
+    <string name="AyuGhostEnabledToast">Режим призрака включён</string>
+    <string name="AyuGhostDisabledToast">Режим призрака выключен</string>
+
+    <!-- Spy -->
+    <string name="AyuSpyEssentials">Основное режима шпиона</string>
+    <string name="AyuSaveDeletedMessages">Сохранять удалённые сообщения</string>
+    <string name="AyuSaveMessagesHistory">Сохранять историю изменений</string>
+    <string name="AyuSpyEssentialsInfo">Удалённые сообщения и история изменений хранятся в отдельной базе данных, которая не очищается вместе с кэшем.</string>
+    <string name="AyuMessageSaving">Сохранение сообщений</string>
+    <string name="AyuSaveMedia">Сохранять медиа</string>
+    <string name="AyuSaveMediaInfo">Выберите, из каких чатов сохранять медиа.</string>
+    <string name="AyuSaveMediaPrivateChats">Личные чаты</string>
+    <string name="AyuSaveMediaPublicChannels">Публичные каналы</string>
+    <string name="AyuSaveMediaPrivateChannels">Приватные каналы</string>
+    <string name="AyuSaveMediaPublicGroups">Публичные группы</string>
+    <string name="AyuSaveMediaPrivateGroups">Приватные группы</string>
+    <string name="AyuSaveFormatting">Сохранять форматирование</string>
+    <string name="AyuSaveReactions">Сохранять реакции</string>
+    <string name="AyuSaveForBots">Сохранять для ботов</string>
+    <string name="AyuSaveSelfDestructingMedia">Сохранять самоуничтожающиеся медиа</string>
+    <string name="AyuSaveSelfDestructingMediaInfo">Сохраняет постоянную копию одноразовых и временных медиа после того, как вы их откроете.</string>
+
+    <!-- Фильтры -->
+    <string name="AyuFilters">Фильтры</string>
+    <string name="AyuRegexFilters">Regex-фильтры</string>
+    <string name="AyuRegexFiltersInfo">Скрывайте сообщения и чаты по собственным регулярным выражениям.</string>
+
+    <!-- QoL -->
+    <string name="AyuQualityOfLife">Удобства</string>
+    <string name="AyuKeepAliveService">Служба keep-alive</string>
+    <string name="AyuDisableCrashlytics">Отключить Crashlytics</string>
+    <string name="AyuQualityOfLifeInfo">Некоторые из этих настроек применяются только после перезапуска.</string>
+
+    <!-- Оформление -->
+    <string name="AyuCustomization">Оформление</string>
+    <string name="AyuDeletedMark">Текст метки «удалено»</string>
+    <string name="AyuEditedMark">Текст метки «изменено»</string>
+    <string name="AyuMarkDefault">По умолчанию</string>
+    <string name="AyuShowGhostToggle">Показывать переключатель призрака на главном экране</string>
+    <string name="AyuShowKillButton">Показывать кнопку завершения</string>
+    <string name="AyuShowPeerId">Показывать ID в профиле</string>
+    <string name="AyuShowMessageSeconds">Показывать секунды в сообщениях</string>
+    <string name="AyuShowMessageDetails">Показывать пункт меню \"Сведения о сообщении\"</string>
+    <string name="AyuShowMessageShadow">Тень сообщений</string>
+    <string name="AyuSimpleQuotesAndReplies">Простые цитаты и ответы</string>
+    <string name="AyuCustomizationInfo">Переключатель призрака и кнопка завершения показываются на панели действий в списке чатов.</string>
+
+    <!-- Синхронизация -->
+    <string name="AyuSyncInfo">Синхронизация настроек AyuGram между вашими устройствами.</string>
+    <string name="AyuEnabled">Включено</string>
+    <string name="AyuDisabled">Отключено</string>
+
+    <!-- Отладка -->
+    <string name="AyuDebug">Отладка</string>
+    <string name="AyuWalMode">Режим WAL</string>
+    <string name="AyuWalModeInfo">Журналирование WAL ускоряет базу данных AyuGram. Отключайте его, только если возникают проблемы.</string>
+    <string name="AyuClearDatabase">Очистить базу данных AyuGram</string>
+    <string name="AyuClearDatabaseTitle">Очистить базу данных AyuGram</string>
+    <string name="AyuClearDatabaseMessage">Все сохранённые удалённые сообщения, история изменений и сохранённые медиа будут удалены безвозвратно. Продолжить?</string>
+    <string name="AyuClearDatabaseDone">База данных AyuGram очищена</string>
+    <string name="AyuEraseTelegramDatabase">Стереть локальную базу данных Telegram</string>
+    <string name="AyuEraseTelegramDatabaseTitle">Стереть локальную базу данных Telegram</string>
+    <string name="AyuEraseTelegramDatabaseMessage">Локальная база данных кэша Telegram будет стёрта, и приложение перезапустится. Ваш аккаунт и сообщения на сервере не пострадают. Продолжить?</string>
+    <string name="AyuKillApp">Завершить приложение</string>
+    <string name="AyuKillAppTitle">Завершить приложение</string>
+    <string name="AyuKillAppMessage">Процесс приложения будет немедленно завершён. Продолжить?</string>
+    <string name="AyuFooter">Функции AyuGram интегрированы · v%1$s</string>
+
+    <!-- AyuGram: ID в профиле -->
+    <string name="AyuPeerId">ID</string>
+    <string name="AyuPeerIdCopied">ID скопирован в буфер обмена</string>
+
+    <!-- AyuGram: AyuSync -->
+    <string name="AyuSyncScreenTitle">AyuSync</string>
+    <string name="AyuSyncEnable">Включить AyuSync</string>
+    <string name="AyuSyncEnableInfo">Синхронизирует режим призрака, отметки о прочтении и историю удалённых и изменённых сообщений между вашими устройствами с AyuGram через сервер AyuSync.</string>
+    <string name="AyuSyncServerSection">Сервер</string>
+    <string name="AyuSyncSecureConnection">Защищённое соединение</string>
+    <string name="AyuSyncServerUrl">Адрес сервера</string>
+    <string name="AyuSyncToken">Токен</string>
+    <string name="AyuSyncNotSet">Не задано</string>
+    <string name="AyuSyncStatus">Статус</string>
+    <string name="AyuSyncStatusDisabled">Отключено</string>
+    <string name="AyuSyncStatusConnecting">Подключение…</string>
+    <string name="AyuSyncStatusConnected">Подключено</string>
+    <string name="AyuSyncStatusError">Ошибка</string>
+    <string name="AyuSyncServerInfo">Отключайте \"Защищённое соединение\" только для сервера в вашей локальной сети. Токен отправляется в заголовке Authorization с каждым запросом.</string>
+    <string name="AyuSyncForceSync">Синхронизировать сейчас</string>
+    <string name="AyuSyncForceSyncStarted">Синхронизация…</string>
+    <string name="AyuSyncNotEnabled">Сначала включите AyuSync.</string>
+    <string name="AyuSyncRegisterDevice">Зарегистрировать устройство</string>
+    <string name="AyuSyncRegisterSuccess">Устройство зарегистрировано</string>
+    <string name="AyuSyncRegisterFailed">Не удалось зарегистрировать: %1$s</string>
+    <string name="AyuSyncWhatIsSyncedInfo">Синхронизируются: отметки о прочтении, состояние режима призрака и уведомления о сообщениях, которые были удалены или изменены. Содержимое сообщений не покидает ваше устройство — отправляются только идентификаторы, предыдущий текст изменённых сообщений и метки времени.</string>
+
+    <!-- AyuGram: служба keep-alive -->
+    <string name="AyuKeepAliveNotification">AyuGram keep-alive</string>
+</resources>

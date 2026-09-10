@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuForward: forwarding / copying / saving content of restricted ("protected content") chats
+         and of locally restored deleted messages. -->
+    <string name="AyuForward">AyuForward</string>
+    <string name="AyuForwardProgress">Preparing messages…</string>
+    <string name="AyuForwardDownloading">Downloading media…</string>
+    <string name="AyuForwardFailed">Couldn\'t re-create %1$d message(s)</string>
+    <string name="AyuForwardNoFile">Media is not available locally</string>
+</resources>

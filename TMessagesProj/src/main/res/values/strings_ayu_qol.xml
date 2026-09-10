@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="AyuExpireMedia">Expire</string>
+    <string name="AyuExpireMediaInfo">Immediately start the self-destruct countdown for this media.</string>
+    <string name="AyuDisableAds">Disable ads</string>
+    <string name="AyuDisableProxySponsor">Disable proxy sponsor channel</string>
+    <string name="AyuLocalPremium">Local Telegram Premium</string>
+    <string name="AyuHideStories">Hide stories</string>
+    <string name="AyuKeepKickedChats">Keep banned chats</string>
+    <string name="AyuAllowScreenshotsInSecretChats">Allow screenshots in secret chats</string>
+    <string name="AyuDisableEmulatorDetection">Disable emulator detection</string>
+    <string name="AyuShowExpireButton">Show \"Expire\" button</string>
+</resources>

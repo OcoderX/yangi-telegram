@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Ghost rejimi, hikoya ogohlantirishi -->
+    <string name="AyuGhostStoryAlertTitle">Ghost rejimi o\'chiq</string>
+    <string name="AyuGhostStoryAlertMessage">Ghost rejimi o\'chiq, muallif siz hikoyani ko\'rganingizni biladi. Ghost rejimi yoqilsinmi?</string>
+    <string name="AyuGhostStoryAlertEnable">Ghost rejimini yoqish</string>
+    <string name="AyuGhostStoryAlertOpenAnyway">Baribir ochish</string>
+
+    <!-- AyuGram: xabarlar tarixi (o\'chirilgan/tahrirlangan xabarlar, tafsilotlar) -->
+    <string name="AyuEditHistory">Tahrirlar tarixi</string>
+    <string name="AyuEditHistoryEmpty">Bu xabar uchun saqlangan versiyalar yo\'q.</string>
+    <string name="AyuEditHistoryOriginal">Asl nusxa</string>
+    <string name="AyuEditHistoryCurrent">Joriy versiya</string>
+    <string name="AyuEditHistoryRevision">Versiya %1$d</string>
+    <string name="AyuEditHistoryEmptyText">(matn yo\'q)</string>
+
+    <string name="AyuMessageDetails">Xabar tafsilotlari</string>
+    <string name="AyuCopyJson">JSON\'dan nusxa olish</string>
+    <string name="AyuCopiedToClipboard">Vaqtinchalik xotiraga nusxalandi</string>
+
+    <string name="AyuDeleteLocally">Lokal o\'chirish</string>
+    <string name="AyuDeleteLocallyTitle">Lokal o\'chirish</string>
+    <string name="AyuDeleteLocallyMessage">Bu xabar serverda allaqachon o\'chirilgan. Lokal nusxasi ham o\'chirilsinmi?</string>
+
+    <string name="AyuDetailsMessageId">Xabar ID</string>
+    <string name="AyuDetailsDialogId">Dialog ID</string>
+    <string name="AyuDetailsFromId">Jo\'natuvchi ID</string>
+    <string name="AyuDetailsFromName">Jo\'natuvchi</string>
+    <string name="AyuDetailsPeerId">Peer ID</string>
+    <string name="AyuDetailsDate">Sana</string>
+    <string name="AyuDetailsEditDate">Tahrirlangan sana</string>
+    <string name="AyuDetailsForwardFrom">Kimdan yo\'naltirilgan</string>
+    <string name="AyuDetailsForwardDate">Yo\'naltirilgan sana</string>
+    <string name="AyuDetailsPostAuthor">Post muallifi</string>
+    <string name="AyuDetailsReplyTo">Javob berilgan xabar ID</string>
+    <string name="AyuDetailsGroupedId">Media guruhi ID</string>
+    <string name="AyuDetailsViews">Ko\'rishlar</string>
+    <string name="AyuDetailsForwards">Yo\'naltirishlar</string>
+    <string name="AyuDetailsMediaType">Media turi</string>
+    <string name="AyuDetailsFileSize">Fayl hajmi</string>
+    <string name="AyuDetailsMimeType">MIME turi</string>
+    <string name="AyuDetailsDcId">DC ID</string>
+    <string name="AyuDetailsFileId">Fayl ID</string>
+    <string name="AyuDetailsTtl">TTL</string>
+    <string name="AyuDetailsDeleted">O\'chirilgan</string>
+    <string name="AyuDetailsEntities">Obyektlar</string>
+    <string name="AyuDetailsRevisions">Saqlangan versiyalar</string>
+    <string name="AyuDetailsSectionGeneral">Umumiy</string>
+    <string name="AyuDetailsSectionForward">Yo\'naltirish</string>
+    <string name="AyuDetailsSectionMedia">Media</string>
+    <string name="AyuDetailsSectionMisc">Boshqa</string>
+
+    <!-- AyuGram: regex xabar filtrlari -->
+    <string name="AyuFiltersTitle">Xabar filtrlari</string>
+    <string name="AyuFiltersGeneralHeader">Umumiy</string>
+    <string name="AyuFiltersEnable">Filtrlarni yoqish</string>
+    <string name="AyuFiltersHideInChats">Chatlarda yashirish</string>
+    <string name="AyuFiltersCaseInsensitive">Katta-kichik harf farqlanmasin</string>
+    <string name="AyuFiltersHideBlocked">Bloklangan foydalanuvchilar xabarlarini yashirish</string>
+    <string name="AyuFiltersGeneralInfo">Quyidagi regulyar ifodalarning birortasiga mos keladigan xabarlar bildirishnomalardan, agar \"Chatlarda yashirish\" yoqilgan bo\'lsa — chat tarixidan ham yashiriladi.</string>
+    <string name="AyuFiltersListHeader">Filtrlar</string>
+    <string name="AyuFiltersAdd">Filtr qo\'shish</string>
+    <string name="AyuFiltersShare">Filtrlarni ulashish</string>
+    <string name="AyuFiltersImport">Filtrlarni import qilish</string>
+    <string name="AyuFiltersListInfo">Tahrirlash uchun filtrga bosing, boshqa amallar uchun bosib turing.</string>
+    <string name="AyuFiltersEmpty">Sizda hali filtrlar yo\'q.</string>
+    <string name="AyuFiltersScopeGlobal">Hamma joyda</string>
+    <string name="AyuFiltersScopeChat">Faqat %1$s ichida</string>
+    <string name="AyuFiltersInvalidRegex">Noto\'g\'ri regulyar ifoda</string>
+    <string name="AyuFiltersDisabled">O\'chirilgan</string>
+
+    <!-- tahrirlash ekrani -->
+    <string name="AyuFilterEditTitle">Filtrni tahrirlash</string>
+    <string name="AyuFilterNewTitle">Yangi filtr</string>
+    <string name="AyuFilterRegexHeader">Regulyar ifoda</string>
+    <string name="AyuFilterRegexHint">Regulyar ifoda</string>
+    <string name="AyuFilterRegexInfo">Java regulyar ifodalari sintaksisi. Shablon xabar matniga MULTILINE rejimida qo\'llanadi.</string>
+    <string name="AyuFilterRegexValid">Shablon to\'g\'ri</string>
+    <string name="AyuFilterTestHeader">Sinov</string>
+    <string name="AyuFilterTestHint">Sinov matni</string>
+    <string name="AyuFilterTestMatches">Mos keladi — bu xabar yashirilgan bo\'lardi</string>
+    <string name="AyuFilterTestNoMatch">Mos kelmaydi</string>
+    <string name="AyuFilterTestEmpty">Shablonni sinash uchun matn kiriting</string>
+    <string name="AyuFilterScopeHeader">Qamrov</string>
+    <string name="AyuFilterScope">Qo\'llash</string>
+    <string name="AyuFilterScopeSelectChat">Chatni tanlang</string>
+    <string name="AyuFilterOptionsHeader">Parametrlar</string>
+    <string name="AyuFilterEnabled">Yoqilgan</string>
+    <string name="AyuFilterCaseInsensitiveOverride">Katta-kichik harf farqlanmasin</string>
+    <string name="AyuFilterCaseInsensitiveDefault">Umumiy sozlamadan foydalanish</string>
+    <string name="AyuFilterMatchCaption">Media izohlarini ham tekshirish</string>
+    <string name="AyuFilterMatchSenderName">Jo\'natuvchi ismini ham tekshirish</string>
+    <string name="AyuFilterDelete">Filtrni o\'chirish</string>
+    <string name="AyuFilterDeleteTitle">Filtrni o\'chirish</string>
+    <string name="AyuFilterDeleteMessage">Bu filtrni o\'chirmoqchimisiz?</string>
+    <string name="AyuFilterEmptyError">Iltimos, regulyar ifodani kiriting.</string>
+    <string name="AyuFilterEnable">Yoqish</string>
+    <string name="AyuFilterDisable">O\'chirish</string>
+    <string name="AyuFilterEdit">Tahrirlash</string>
+    <string name="AyuFilterMoveUp">Yuqoriga surish</string>
+    <string name="AyuFilterMoveDown">Pastga surish</string>
+
+    <!-- import / eksport -->
+    <string name="AyuFiltersImportTitle">Filtrlarni import qilish</string>
+    <string name="AyuFiltersImportHint">Filtrlar havolasini joylashtiring</string>
+    <string name="AyuFiltersImportMessage">Boshqa AyuGram foydalanuvchisidan olgan havolangizni joylashtiring.</string>
+    <string name="AyuFiltersImportDone">%1$d ta filtr import qilindi.</string>
+    <string name="AyuFiltersImportNothing">Import qilish uchun yangi filtrlar yo\'q.</string>
+    <string name="AyuFiltersImportFailed">Bu havolada filtrlar yo\'q.</string>
+    <string name="AyuFiltersShareEmpty">Hozircha ulashadigan narsa yo\'q.</string>
+    <string name="AyuFiltersLinkCopied">Filtrlar havolasi vaqtinchalik xotiraga nusxalandi.</string>
+
+    <!-- chat / ko\'rinishlar -->
+    <string name="AyuFiltersHiddenHint">%1$d ta xabar filtrlar bilan yashirildi</string>
+    <string name="AyuFilteredMessage">Filtrlangan xabar</string>
+
+    <!-- AyuGram: qulayliklar -->
+    <string name="AyuExpireMedia">Muddatini tugatish</string>
+    <string name="AyuExpireMediaInfo">Bu media uchun o\'z-o\'zini yo\'q qilish hisobini darhol boshlash.</string>
+    <string name="AyuDisableAds">Reklamani o\'chirish</string>
+    <string name="AyuDisableProxySponsor">Proksi homiy kanalini o\'chirish</string>
+    <string name="AyuLocalPremium">Lokal Telegram Premium</string>
+    <string name="AyuHideStories">Hikoyalarni yashirish</string>
+    <string name="AyuKeepKickedChats">Bloklangan chatlarni saqlab qolish</string>
+    <string name="AyuAllowScreenshotsInSecretChats">Maxfiy chatlarda skrinshotga ruxsat berish</string>
+    <string name="AyuDisableEmulatorDetection">Emulyator aniqlashni o\'chirish</string>
+    <string name="AyuShowExpireButton">\"Muddatini tugatish\" tugmasini ko\'rsatish</string>
+
+    <!-- AyuForward -->
+    <string name="AyuForward">AyuForward</string>
+    <string name="AyuForwardProgress">Xabarlar tayyorlanmoqda…</string>
+    <string name="AyuForwardDownloading">Media yuklanmoqda…</string>
+    <string name="AyuForwardFailed">%1$d ta xabarni qayta yaratib bo\'lmadi</string>
+    <string name="AyuForwardNoFile">Media qurilmada mavjud emas</string>
+
+    <!-- AyuGram: sozlamalar -->
+    <string name="AyuPreferences">AyuGram</string>
+    <string name="AyuPreferencesInfo">Ghost rejimi, xabarlar tarixi, filtrlar</string>
+
+    <!-- Ghost -->
+    <string name="AyuGhostEssentials">Ghost asoslari</string>
+    <string name="AyuGhostMode">Ghost rejimi</string>
+    <string name="AyuGhostModeInfo">Ghost rejimi yoqilganda Telegram siz xabarlarni o\'qiganingizni, hikoyalarni ko\'rganingizni yoki tarmoqda ekanligingizni bilmaydi.</string>
+    <string name="AyuGhostSettings">Ghost rejimi sozlamalari</string>
+    <string name="AyuGhostDontReadMessages">O\'qilganlik belgisini yubormaslik</string>
+    <string name="AyuGhostDontReadStories">Hikoyalarni o\'qilgan deb belgilamaslik</string>
+    <string name="AyuGhostDontSendOnline">Tarmoqda ekanligini yubormaslik</string>
+    <string name="AyuGhostDontSendTyping">Yozayotgan/yuklayotgan holatini yubormaslik</string>
+    <string name="AyuGhostSendOfflineAfterOnline">Tarmoqda ko\'ringandan so\'ng oflaynga o\'tish</string>
+    <string name="AyuGhostExtras">Ghost qo\'shimchalari</string>
+    <string name="AyuGhostMarkReadAfterSend">Yuborgandan keyin o\'qilgan deb belgilash</string>
+    <string name="AyuGhostMarkReadAfterAction">Amal bajarganda o\'qish</string>
+    <string name="AyuGhostUseScheduledMessages">Rejalashtirilgan xabarlardan foydalanish</string>
+    <string name="AyuGhostUseScheduledMessagesInfo">Xabarlar kichik kechikish bilan rejalashtirilgan xabar sifatida yuboriladi, shuning uchun tarmoqdagi holatingiz oshkor bo\'lmaydi. \"Yuborgandan keyin o\'qilgan deb belgilash\" bilan mos kelmaydi.</string>
+    <string name="AyuGhostAlertBeforeStory">Hikoyani ochishdan oldin ogohlantirish</string>
+    <string name="AyuGhostAlertBeforeStoryInfo">Ghost rejimi o\'chiq bo\'lsa va siz hikoyani ochmoqchi bo\'lsangiz ogohlantiradi.</string>
+    <string name="AyuLocalPremiumInfo">Faqat mijoz tomonida ishlaydi. Premium interfeys imkoniyatlarini lokal ochadi; server esa sizda Premium obuna yo\'qligini baribir biladi.</string>
+    <string name="AyuGhostEnabledToast">Ghost rejimi yoqildi</string>
+    <string name="AyuGhostDisabledToast">Ghost rejimi o\'chirildi</string>
+
+    <!-- Spy -->
+    <string name="AyuSpyEssentials">Kuzatuv asoslari</string>
+    <string name="AyuSaveDeletedMessages">O\'chirilgan xabarlarni saqlash</string>
+    <string name="AyuSaveMessagesHistory">Xabarlar tarixini saqlash</string>
+    <string name="AyuSpyEssentialsInfo">O\'chirilgan xabarlar va tahrirlar tarixi kesh tozalanganda ham saqlanib qoladigan alohida ma\'lumotlar bazasida saqlanadi.</string>
+    <string name="AyuMessageSaving">Xabarlarni saqlash</string>
+    <string name="AyuSaveMedia">Mediani saqlash</string>
+    <string name="AyuSaveMediaInfo">Qaysi chatlardan media saqlanishini tanlang.</string>
+    <string name="AyuSaveMediaPrivateChats">Shaxsiy chatlar</string>
+    <string name="AyuSaveMediaPublicChannels">Ochiq kanallar</string>
+    <string name="AyuSaveMediaPrivateChannels">Yopiq kanallar</string>
+    <string name="AyuSaveMediaPublicGroups">Ochiq guruhlar</string>
+    <string name="AyuSaveMediaPrivateGroups">Yopiq guruhlar</string>
+    <string name="AyuSaveFormatting">Formatlashni saqlash</string>
+    <string name="AyuSaveReactions">Reaksiyalarni saqlash</string>
+    <string name="AyuSaveForBots">Botlar uchun saqlash</string>
+    <string name="AyuSaveSelfDestructingMedia">O\'z-o\'zini yo\'q qiluvchi mediani saqlash</string>
+    <string name="AyuSaveSelfDestructingMediaInfo">Bir marta ko\'riladigan va muddatli medialarni ochganingizdan keyin ularning doimiy nusxasini saqlab qoladi.</string>
+
+    <!-- Filtrlar -->
+    <string name="AyuFilters">Filtrlar</string>
+    <string name="AyuRegexFilters">Regex filtrlar</string>
+    <string name="AyuRegexFiltersInfo">O\'zingizning regulyar ifodalaringizga mos xabar va chatlarni yashiring.</string>
+
+    <!-- QoL -->
+    <string name="AyuQualityOfLife">Qulayliklar</string>
+    <string name="AyuKeepAliveService">Keep-alive xizmati</string>
+    <string name="AyuDisableCrashlytics">Crashlytics\'ni o\'chirish</string>
+    <string name="AyuQualityOfLifeInfo">Ba\'zi sozlamalar faqat ilova qayta ishga tushirilgandan keyin kuchga kiradi.</string>
+
+    <!-- Moslashtirish -->
+    <string name="AyuCustomization">Moslashtirish</string>
+    <string name="AyuDeletedMark">«O\'chirilgan» belgisi matni</string>
+    <string name="AyuEditedMark">«Tahrirlangan» belgisi matni</string>
+    <string name="AyuMarkDefault">Standart</string>
+    <string name="AyuShowGhostToggle">Bosh ekranda Ghost tugmasini ko\'rsatish</string>
+    <string name="AyuShowKillButton">Yopish tugmasini ko\'rsatish</string>
+    <string name="AyuShowPeerId">Profilda peer ID ko\'rsatish</string>
+    <string name="AyuShowMessageSeconds">Xabar vaqtida soniyalarni ko\'rsatish</string>
+    <string name="AyuShowMessageDetails">\"Xabar tafsilotlari\" menyu bandini ko\'rsatish</string>
+    <string name="AyuShowMessageShadow">Xabar soyasi</string>
+    <string name="AyuSimpleQuotesAndReplies">Oddiy iqtibos va javoblar</string>
+    <string name="AyuCustomizationInfo">Ghost tugmasi va yopish tugmasi chatlar ro\'yxatidagi amallar panelida ko\'rsatiladi.</string>
+
+    <!-- Sinxronlash -->
+    <string name="AyuSyncInfo">AyuGram sozlamalarini qurilmalaringiz o\'rtasida sinxronlash.</string>
+    <string name="AyuEnabled">Yoqilgan</string>
+    <string name="AyuDisabled">O\'chirilgan</string>
+
+    <!-- Debug -->
+    <string name="AyuDebug">Debug</string>
+    <string name="AyuWalMode">WAL rejimi</string>
+    <string name="AyuWalModeInfo">Write-ahead logging AyuGram ma\'lumotlar bazasini tezlashtiradi. Muammo yuzaga kelgandagina o\'chiring.</string>
+    <string name="AyuClearDatabase">AyuGram bazasini tozalash</string>
+    <string name="AyuClearDatabaseTitle">AyuGram bazasini tozalash</string>
+    <string name="AyuClearDatabaseMessage">Barcha saqlangan o\'chirilgan xabarlar, tahrirlar tarixi va saqlangan medialar butunlay o\'chiriladi. Davom etilsinmi?</string>
+    <string name="AyuClearDatabaseDone">AyuGram bazasi tozalandi</string>
+    <string name="AyuEraseTelegramDatabase">Telegram lokal bazasini o\'chirish</string>
+    <string name="AyuEraseTelegramDatabaseTitle">Telegram lokal bazasini o\'chirish</string>
+    <string name="AyuEraseTelegramDatabaseMessage">Telegram lokal kesh bazasi o\'chiriladi va ilova qayta ishga tushadi. Bu hisobingizga va serverdagi xabarlaringizga ta\'sir qilmaydi. Davom etilsinmi?</string>
+    <string name="AyuKillApp">Ilovani yopish</string>
+    <string name="AyuKillAppTitle">Ilovani yopish</string>
+    <string name="AyuKillAppMessage">Ilova jarayoni darhol tugatiladi. Davom etilsinmi?</string>
+    <string name="AyuFooter">AyuGram funksiyalari integratsiya qilingan · v%1$s</string>
+
+    <!-- AyuGram: profildagi ID -->
+    <string name="AyuPeerId">ID</string>
+    <string name="AyuPeerIdCopied">ID vaqtinchalik xotiraga nusxalandi</string>
+
+    <!-- AyuGram: AyuSync -->
+    <string name="AyuSyncScreenTitle">AyuSync</string>
+    <string name="AyuSyncEnable">AyuSync\'ni yoqish</string>
+    <string name="AyuSyncEnableInfo">Ghost rejimi, o\'qilganlik belgilari va o\'chirilgan/tahrirlangan xabarlar tarixini AyuSync serveri orqali AyuGram qurilmalaringiz o\'rtasida sinxronlab turadi.</string>
+    <string name="AyuSyncServerSection">Server</string>
+    <string name="AyuSyncSecureConnection">Xavfsiz ulanishdan foydalanish</string>
+    <string name="AyuSyncServerUrl">Server manzili</string>
+    <string name="AyuSyncToken">Token</string>
+    <string name="AyuSyncNotSet">Belgilanmagan</string>
+    <string name="AyuSyncStatus">Holat</string>
+    <string name="AyuSyncStatusDisabled">O\'chirilgan</string>
+    <string name="AyuSyncStatusConnecting">Ulanmoqda…</string>
+    <string name="AyuSyncStatusConnected">Ulandi</string>
+    <string name="AyuSyncStatusError">Xatolik</string>
+    <string name="AyuSyncServerInfo">\"Xavfsiz ulanishdan foydalanish\"ni faqat lokal tarmoqdagi server uchun o\'chiring. Token har bir so\'rovda Authorization sarlavhasi bilan yuboriladi.</string>
+    <string name="AyuSyncForceSync">Hozir sinxronlash</string>
+    <string name="AyuSyncForceSyncStarted">Sinxronlanmoqda…</string>
+    <string name="AyuSyncNotEnabled">Avval AyuSync\'ni yoqing.</string>
+    <string name="AyuSyncRegisterDevice">Qurilmani ro\'yxatdan o\'tkazish</string>
+    <string name="AyuSyncRegisterSuccess">Qurilma ro\'yxatdan o\'tkazildi</string>
+    <string name="AyuSyncRegisterFailed">Ro\'yxatdan o\'tkazib bo\'lmadi: %1$s</string>
+    <string name="AyuSyncWhatIsSyncedInfo">Sinxronlanadigan hodisalar: o\'qilganlik belgilari, Ghost rejimi holati va o\'chirilgan yoki tahrirlangan xabarlar haqidagi bildirishnomalar. Xabarlar mazmuni qurilmangizdan chiqmaydi — faqat ID\'lar, tahrirlangan xabarlarning oldingi matni va vaqt belgilari yuboriladi.</string>
+
+    <!-- AyuGram: keep-alive xizmati -->
+    <string name="AyuKeepAliveNotification">AyuGram keep-alive</string>
+</resources>

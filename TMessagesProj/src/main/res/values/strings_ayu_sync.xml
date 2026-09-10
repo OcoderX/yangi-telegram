@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: peer id row in the profile -->
+    <string name="AyuPeerId">ID</string>
+    <string name="AyuPeerIdCopied">ID copied to clipboard</string>
+
+    <!-- AyuGram: AyuSync -->
+    <string name="AyuSyncScreenTitle">AyuSync</string>
+    <string name="AyuSyncEnable">Enable AyuSync</string>
+    <string name="AyuSyncEnableInfo">Keeps ghost mode, read receipts and the deleted/edited message history in sync between your AyuGram devices through an AyuSync server.</string>
+    <string name="AyuSyncServerSection">Server</string>
+    <string name="AyuSyncSecureConnection">Use secure connection</string>
+    <string name="AyuSyncServerUrl">Server URL</string>
+    <string name="AyuSyncToken">Token</string>
+    <string name="AyuSyncNotSet">Not set</string>
+    <string name="AyuSyncStatus">Status</string>
+    <string name="AyuSyncStatusDisabled">Disabled</string>
+    <string name="AyuSyncStatusConnecting">Connecting…</string>
+    <string name="AyuSyncStatusConnected">Connected</string>
+    <string name="AyuSyncStatusError">Error</string>
+    <string name="AyuSyncServerInfo">Turn off \"Use secure connection\" only for a server on your local network. The token is sent as an Authorization header with every request.</string>
+    <string name="AyuSyncForceSync">Force sync now</string>
+    <string name="AyuSyncForceSyncStarted">Syncing…</string>
+    <string name="AyuSyncNotEnabled">Enable AyuSync first.</string>
+    <string name="AyuSyncRegisterDevice">Register device</string>
+    <string name="AyuSyncRegisterSuccess">Device registered</string>
+    <string name="AyuSyncRegisterFailed">Registration failed: %1$s</string>
+    <string name="AyuSyncWhatIsSyncedInfo">Synced events: read receipts, ghost mode state, and notifications about messages that were deleted or edited. Message contents never leave your device — only ids, the previous text of edited messages and timestamps are sent.</string>
+
+    <!-- AyuGram: keep-alive service -->
+    <string name="AyuKeepAliveNotification">AyuGram keep-alive</string>
+</resources>

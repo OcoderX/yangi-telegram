@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: regex message filters -->
+    <string name="AyuFiltersTitle">Message Filters</string>
+    <string name="AyuFiltersGeneralHeader">General</string>
+    <string name="AyuFiltersEnable">Enable filters</string>
+    <string name="AyuFiltersHideInChats">Hide in chats</string>
+    <string name="AyuFiltersCaseInsensitive">Case insensitive</string>
+    <string name="AyuFiltersHideBlocked">Hide messages from blocked users</string>
+    <string name="AyuFiltersGeneralInfo">Messages matching any of the regular expressions below will be hidden from notifications, and — if \"Hide in chats\" is on — from the chat history as well.</string>
+    <string name="AyuFiltersListHeader">Filters</string>
+    <string name="AyuFiltersAdd">Add filter</string>
+    <string name="AyuFiltersShare">Share filters</string>
+    <string name="AyuFiltersImport">Import filters</string>
+    <string name="AyuFiltersListInfo">Tap a filter to edit it, hold it for more options.</string>
+    <string name="AyuFiltersEmpty">You have no filters yet.</string>
+    <string name="AyuFiltersScopeGlobal">Global</string>
+    <string name="AyuFiltersScopeChat">Only in %1$s</string>
+    <string name="AyuFiltersInvalidRegex">Invalid regular expression</string>
+    <string name="AyuFiltersDisabled">Disabled</string>
+
+    <!-- edit screen -->
+    <string name="AyuFilterEditTitle">Edit Filter</string>
+    <string name="AyuFilterNewTitle">New Filter</string>
+    <string name="AyuFilterRegexHeader">Regular expression</string>
+    <string name="AyuFilterRegexHint">Regular expression</string>
+    <string name="AyuFilterRegexInfo">Java regular expression syntax. The pattern is matched with MULTILINE against the message text.</string>
+    <string name="AyuFilterRegexValid">Pattern is valid</string>
+    <string name="AyuFilterTestHeader">Test</string>
+    <string name="AyuFilterTestHint">Test text</string>
+    <string name="AyuFilterTestMatches">Matches — this message would be hidden</string>
+    <string name="AyuFilterTestNoMatch">Does not match</string>
+    <string name="AyuFilterTestEmpty">Enter a text to test the pattern against</string>
+    <string name="AyuFilterScopeHeader">Scope</string>
+    <string name="AyuFilterScope">Apply to</string>
+    <string name="AyuFilterScopeSelectChat">Choose a chat</string>
+    <string name="AyuFilterOptionsHeader">Options</string>
+    <string name="AyuFilterEnabled">Enabled</string>
+    <string name="AyuFilterCaseInsensitiveOverride">Case insensitive</string>
+    <string name="AyuFilterCaseInsensitiveDefault">Use global setting</string>
+    <string name="AyuFilterMatchCaption">Match media captions</string>
+    <string name="AyuFilterMatchSenderName">Match sender name</string>
+    <string name="AyuFilterDelete">Delete filter</string>
+    <string name="AyuFilterDeleteTitle">Delete filter</string>
+    <string name="AyuFilterDeleteMessage">Are you sure you want to delete this filter?</string>
+    <string name="AyuFilterEmptyError">Please enter a regular expression.</string>
+    <string name="AyuFilterEnable">Enable</string>
+    <string name="AyuFilterDisable">Disable</string>
+    <string name="AyuFilterEdit">Edit</string>
+    <string name="AyuFilterMoveUp">Move up</string>
+    <string name="AyuFilterMoveDown">Move down</string>
+
+    <!-- import / export -->
+    <string name="AyuFiltersImportTitle">Import filters</string>
+    <string name="AyuFiltersImportHint">Paste a filters link</string>
+    <string name="AyuFiltersImportMessage">Paste a link you received from another AyuGram user.</string>
+    <string name="AyuFiltersImportDone">Imported %1$d filter(s).</string>
+    <string name="AyuFiltersImportNothing">No new filters to import.</string>
+    <string name="AyuFiltersImportFailed">This link does not contain any filters.</string>
+    <string name="AyuFiltersShareEmpty">There is nothing to share yet.</string>
+    <string name="AyuFiltersLinkCopied">Filters link copied to clipboard.</string>
+
+    <!-- chat / previews -->
+    <string name="AyuFiltersHiddenHint">%1$d message(s) hidden by filters</string>
+    <string name="AyuFilteredMessage">Filtered message</string>
+</resources>
