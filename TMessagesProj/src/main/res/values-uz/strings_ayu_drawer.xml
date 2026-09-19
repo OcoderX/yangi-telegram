@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    "OcoderX funksiyalari" bo'limi uchun matnlar (asosiy menyu).
+-->
+<resources>
+    <string name="AyuDrawerSection">OcoderX funksiyalari</string>
+    <string name="AyuDrawerGhostMode">Arvoh rejimi</string>
+    <string name="AyuDrawerAntiDelete">Oʻchirilgan xabarlar</string>
+    <string name="AyuDrawerEditHistory">Tahrirlar tarixi</string>
+    <string name="AyuDrawerMediaVault">Media ombori</string>
+    <string name="AyuDrawerRegexFilters">Regex filtrlari</string>
+    <string name="AyuDrawerFirewall">Xavfsizlik devori</string>
+    <string name="AyuDrawerTurboDownload">Turbo yuklab olish</string>
+    <string name="AyuDrawerUploadAccelerator">Yuborishni tezlatish</string>
+    <string name="AyuDrawerUploadQueue">Yuborish navbati</string>
+    <string name="AyuDrawerReupload">Qayta yuklamasdan yuborish</string>
+    <string name="AyuDrawerMentionRadar">Eslatmalar radari</string>
+    <string name="AyuDrawerNetDiag">Tarmoq diagnostikasi</string>
+    <string name="AyuDrawerDynamicIsland">Dinamik orol</string>
+    <string name="AyuDrawerKeepAlive">Faol saqlash xizmati</string>
+    <string name="AyuDrawerFileExplorer">Fayl menejeri</string>
+    <string name="AyuDrawerDuplicates">Nusxalarni tozalash</string>
+    <string name="AyuDrawerSync">AyuSync</string>
+    <string name="AyuDrawerAllSettings">Barcha OcoderX sozlamalari</string>
+</resources>

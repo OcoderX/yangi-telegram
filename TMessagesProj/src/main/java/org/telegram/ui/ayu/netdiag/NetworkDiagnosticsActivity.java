@@ -371,7 +371,7 @@ public class NetworkDiagnosticsActivity extends BaseFragment implements NetworkD
     private void copyReport() {
         StringBuilder sb = new StringBuilder();
         NetworkDiagnostics.Sample s = sample;
-        sb.append("AyuGram network diagnostics\n");
+        sb.append("OcoderX-gram network diagnostics\n");
         sb.append("account: ").append(UserConfig.selectedAccount).append('\n');
         if (s != null) {
             sb.append("dc: ").append(s.datacenterId).append('\n');

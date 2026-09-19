@@ -103,7 +103,7 @@
     <!-- import / eksport -->
     <string name="AyuFiltersImportTitle">Filtrlarni import qilish</string>
     <string name="AyuFiltersImportHint">Filtrlar havolasini joylashtiring</string>
-    <string name="AyuFiltersImportMessage">Boshqa AyuGram foydalanuvchisidan olgan havolangizni joylashtiring.</string>
+    <string name="AyuFiltersImportMessage">Boshqa OcoderX-gram foydalanuvchisidan olgan havolangizni joylashtiring.</string>
     <string name="AyuFiltersImportDone">%1$d ta filtr import qilindi.</string>
     <string name="AyuFiltersImportNothing">Import qilish uchun yangi filtrlar yo\'q.</string>
     <string name="AyuFiltersImportFailed">Bu havolada filtrlar yo\'q.</string>
@@ -127,14 +127,14 @@
     <string name="AyuShowExpireButton">\"Muddatini tugatish\" tugmasini ko\'rsatish</string>
 
     <!-- AyuForward -->
-    <string name="AyuForward">AyuForward</string>
+    <string name="AyuForward">OcoderX-gram Forward</string>
     <string name="AyuForwardProgress">Xabarlar tayyorlanmoqda…</string>
     <string name="AyuForwardDownloading">Media yuklanmoqda…</string>
     <string name="AyuForwardFailed">%1$d ta xabarni qayta yaratib bo\'lmadi</string>
     <string name="AyuForwardNoFile">Media qurilmada mavjud emas</string>
 
     <!-- AyuGram: sozlamalar -->
-    <string name="AyuPreferences">AyuGram</string>
+    <string name="AyuPreferences">OcoderX-gram</string>
     <string name="AyuPreferencesInfo">Ghost rejimi, xabarlar tarixi, filtrlar</string>
 
     <!-- Ghost -->
@@ -203,34 +203,34 @@
     <string name="AyuCustomizationInfo">Ghost tugmasi va yopish tugmasi chatlar ro\'yxatidagi amallar panelida ko\'rsatiladi.</string>
 
     <!-- Sinxronlash -->
-    <string name="AyuSyncInfo">AyuGram sozlamalarini qurilmalaringiz o\'rtasida sinxronlash.</string>
+    <string name="AyuSyncInfo">OcoderX-gram sozlamalarini qurilmalaringiz o\'rtasida sinxronlash.</string>
     <string name="AyuEnabled">Yoqilgan</string>
     <string name="AyuDisabled">O\'chirilgan</string>
 
     <!-- Debug -->
     <string name="AyuDebug">Debug</string>
     <string name="AyuWalMode">WAL rejimi</string>
-    <string name="AyuWalModeInfo">Write-ahead logging AyuGram ma\'lumotlar bazasini tezlashtiradi. Muammo yuzaga kelgandagina o\'chiring.</string>
-    <string name="AyuClearDatabase">AyuGram bazasini tozalash</string>
-    <string name="AyuClearDatabaseTitle">AyuGram bazasini tozalash</string>
+    <string name="AyuWalModeInfo">Write-ahead logging OcoderX-gram ma\'lumotlar bazasini tezlashtiradi. Muammo yuzaga kelgandagina o\'chiring.</string>
+    <string name="AyuClearDatabase">OcoderX-gram bazasini tozalash</string>
+    <string name="AyuClearDatabaseTitle">OcoderX-gram bazasini tozalash</string>
     <string name="AyuClearDatabaseMessage">Barcha saqlangan o\'chirilgan xabarlar, tahrirlar tarixi va saqlangan medialar butunlay o\'chiriladi. Davom etilsinmi?</string>
-    <string name="AyuClearDatabaseDone">AyuGram bazasi tozalandi</string>
+    <string name="AyuClearDatabaseDone">OcoderX-gram bazasi tozalandi</string>
     <string name="AyuEraseTelegramDatabase">Telegram lokal bazasini o\'chirish</string>
     <string name="AyuEraseTelegramDatabaseTitle">Telegram lokal bazasini o\'chirish</string>
     <string name="AyuEraseTelegramDatabaseMessage">Telegram lokal kesh bazasi o\'chiriladi va ilova qayta ishga tushadi. Bu hisobingizga va serverdagi xabarlaringizga ta\'sir qilmaydi. Davom etilsinmi?</string>
     <string name="AyuKillApp">Ilovani yopish</string>
     <string name="AyuKillAppTitle">Ilovani yopish</string>
     <string name="AyuKillAppMessage">Ilova jarayoni darhol tugatiladi. Davom etilsinmi?</string>
-    <string name="AyuFooter">AyuGram funksiyalari integratsiya qilingan · v%1$s</string>
+    <string name="AyuFooter">OcoderX-gram funksiyalari integratsiya qilingan · v%1$s</string>
 
     <!-- AyuGram: profildagi ID -->
     <string name="AyuPeerId">ID</string>
     <string name="AyuPeerIdCopied">ID vaqtinchalik xotiraga nusxalandi</string>
 
     <!-- AyuGram: AyuSync -->
-    <string name="AyuSyncScreenTitle">AyuSync</string>
-    <string name="AyuSyncEnable">AyuSync\'ni yoqish</string>
-    <string name="AyuSyncEnableInfo">Ghost rejimi, o\'qilganlik belgilari va o\'chirilgan/tahrirlangan xabarlar tarixini AyuSync serveri orqali AyuGram qurilmalaringiz o\'rtasida sinxronlab turadi.</string>
+    <string name="AyuSyncScreenTitle">OcoderX-gram Sync</string>
+    <string name="AyuSyncEnable">OcoderX-gram Sync\'ni yoqish</string>
+    <string name="AyuSyncEnableInfo">Ghost rejimi, o\'qilganlik belgilari va o\'chirilgan/tahrirlangan xabarlar tarixini OcoderX-gram Sync serveri orqali OcoderX-gram qurilmalaringiz o\'rtasida sinxronlab turadi.</string>
     <string name="AyuSyncServerSection">Server</string>
     <string name="AyuSyncSecureConnection">Xavfsiz ulanishdan foydalanish</string>
     <string name="AyuSyncServerUrl">Server manzili</string>
@@ -244,14 +244,14 @@
     <string name="AyuSyncServerInfo">\"Xavfsiz ulanishdan foydalanish\"ni faqat lokal tarmoqdagi server uchun o\'chiring. Token har bir so\'rovda Authorization sarlavhasi bilan yuboriladi.</string>
     <string name="AyuSyncForceSync">Hozir sinxronlash</string>
     <string name="AyuSyncForceSyncStarted">Sinxronlanmoqda…</string>
-    <string name="AyuSyncNotEnabled">Avval AyuSync\'ni yoqing.</string>
+    <string name="AyuSyncNotEnabled">Avval OcoderX-gram Sync\'ni yoqing.</string>
     <string name="AyuSyncRegisterDevice">Qurilmani ro\'yxatdan o\'tkazish</string>
     <string name="AyuSyncRegisterSuccess">Qurilma ro\'yxatdan o\'tkazildi</string>
     <string name="AyuSyncRegisterFailed">Ro\'yxatdan o\'tkazib bo\'lmadi: %1$s</string>
     <string name="AyuSyncWhatIsSyncedInfo">Sinxronlanadigan hodisalar: o\'qilganlik belgilari, Ghost rejimi holati va o\'chirilgan yoki tahrirlangan xabarlar haqidagi bildirishnomalar. Xabarlar mazmuni qurilmangizdan chiqmaydi — faqat ID\'lar, tahrirlangan xabarlarning oldingi matni va vaqt belgilari yuboriladi.</string>
 
     <!-- AyuGram: keep-alive xizmati -->
-    <string name="AyuKeepAliveNotification">AyuGram keep-alive</string>
+    <string name="AyuKeepAliveNotification">OcoderX-gram keep-alive</string>
     <!-- AyuGram: Dynamic Island -->
     <string name="AyuDynamicIsland">Dynamic Island</string>
     <string name="AyuDynamicIslandInfo">Ekran tepasida iPhone uslubidagi orolcha: joriy qo\'ng\'iroq, ijro etilayotgan audio, ovozli yozuv va yuklab olishlar ko\'rsatiladi.</string>

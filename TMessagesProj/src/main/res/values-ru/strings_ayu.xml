@@ -103,7 +103,7 @@
     <!-- импорт / экспорт -->
     <string name="AyuFiltersImportTitle">Импорт фильтров</string>
     <string name="AyuFiltersImportHint">Вставьте ссылку на фильтры</string>
-    <string name="AyuFiltersImportMessage">Вставьте ссылку, полученную от другого пользователя AyuGram.</string>
+    <string name="AyuFiltersImportMessage">Вставьте ссылку, полученную от другого пользователя OcoderX-gram.</string>
     <string name="AyuFiltersImportDone">Импортировано фильтров: %1$d.</string>
     <string name="AyuFiltersImportNothing">Нет новых фильтров для импорта.</string>
     <string name="AyuFiltersImportFailed">Эта ссылка не содержит фильтров.</string>
@@ -127,14 +127,14 @@
     <string name="AyuShowExpireButton">Показывать кнопку \"Просрочить\"</string>
 
     <!-- AyuForward -->
-    <string name="AyuForward">AyuForward</string>
+    <string name="AyuForward">OcoderX-gram Forward</string>
     <string name="AyuForwardProgress">Подготовка сообщений…</string>
     <string name="AyuForwardDownloading">Загрузка медиа…</string>
     <string name="AyuForwardFailed">Не удалось воссоздать сообщений: %1$d</string>
     <string name="AyuForwardNoFile">Медиа недоступно локально</string>
 
     <!-- AyuGram: настройки -->
-    <string name="AyuPreferences">AyuGram</string>
+    <string name="AyuPreferences">OcoderX-gram</string>
     <string name="AyuPreferencesInfo">Режим призрака, история сообщений, фильтры</string>
 
     <!-- Ghost -->
@@ -203,34 +203,34 @@
     <string name="AyuCustomizationInfo">Переключатель призрака и кнопка завершения показываются на панели действий в списке чатов.</string>
 
     <!-- Синхронизация -->
-    <string name="AyuSyncInfo">Синхронизация настроек AyuGram между вашими устройствами.</string>
+    <string name="AyuSyncInfo">Синхронизация настроек OcoderX-gram между вашими устройствами.</string>
     <string name="AyuEnabled">Включено</string>
     <string name="AyuDisabled">Отключено</string>
 
     <!-- Отладка -->
     <string name="AyuDebug">Отладка</string>
     <string name="AyuWalMode">Режим WAL</string>
-    <string name="AyuWalModeInfo">Журналирование WAL ускоряет базу данных AyuGram. Отключайте его, только если возникают проблемы.</string>
-    <string name="AyuClearDatabase">Очистить базу данных AyuGram</string>
-    <string name="AyuClearDatabaseTitle">Очистить базу данных AyuGram</string>
+    <string name="AyuWalModeInfo">Журналирование WAL ускоряет базу данных OcoderX-gram. Отключайте его, только если возникают проблемы.</string>
+    <string name="AyuClearDatabase">Очистить базу данных OcoderX-gram</string>
+    <string name="AyuClearDatabaseTitle">Очистить базу данных OcoderX-gram</string>
     <string name="AyuClearDatabaseMessage">Все сохранённые удалённые сообщения, история изменений и сохранённые медиа будут удалены безвозвратно. Продолжить?</string>
-    <string name="AyuClearDatabaseDone">База данных AyuGram очищена</string>
+    <string name="AyuClearDatabaseDone">База данных OcoderX-gram очищена</string>
     <string name="AyuEraseTelegramDatabase">Стереть локальную базу данных Telegram</string>
     <string name="AyuEraseTelegramDatabaseTitle">Стереть локальную базу данных Telegram</string>
     <string name="AyuEraseTelegramDatabaseMessage">Локальная база данных кэша Telegram будет стёрта, и приложение перезапустится. Ваш аккаунт и сообщения на сервере не пострадают. Продолжить?</string>
     <string name="AyuKillApp">Завершить приложение</string>
     <string name="AyuKillAppTitle">Завершить приложение</string>
     <string name="AyuKillAppMessage">Процесс приложения будет немедленно завершён. Продолжить?</string>
-    <string name="AyuFooter">Функции AyuGram интегрированы · v%1$s</string>
+    <string name="AyuFooter">Функции OcoderX-gram интегрированы · v%1$s</string>
 
     <!-- AyuGram: ID в профиле -->
     <string name="AyuPeerId">ID</string>
     <string name="AyuPeerIdCopied">ID скопирован в буфер обмена</string>
 
     <!-- AyuGram: AyuSync -->
-    <string name="AyuSyncScreenTitle">AyuSync</string>
-    <string name="AyuSyncEnable">Включить AyuSync</string>
-    <string name="AyuSyncEnableInfo">Синхронизирует режим призрака, отметки о прочтении и историю удалённых и изменённых сообщений между вашими устройствами с AyuGram через сервер AyuSync.</string>
+    <string name="AyuSyncScreenTitle">OcoderX-gram Sync</string>
+    <string name="AyuSyncEnable">Включить OcoderX-gram Sync</string>
+    <string name="AyuSyncEnableInfo">Синхронизирует режим призрака, отметки о прочтении и историю удалённых и изменённых сообщений между вашими устройствами с OcoderX-gram через сервер OcoderX-gram Sync.</string>
     <string name="AyuSyncServerSection">Сервер</string>
     <string name="AyuSyncSecureConnection">Защищённое соединение</string>
     <string name="AyuSyncServerUrl">Адрес сервера</string>
@@ -244,14 +244,14 @@
     <string name="AyuSyncServerInfo">Отключайте \"Защищённое соединение\" только для сервера в вашей локальной сети. Токен отправляется в заголовке Authorization с каждым запросом.</string>
     <string name="AyuSyncForceSync">Синхронизировать сейчас</string>
     <string name="AyuSyncForceSyncStarted">Синхронизация…</string>
-    <string name="AyuSyncNotEnabled">Сначала включите AyuSync.</string>
+    <string name="AyuSyncNotEnabled">Сначала включите OcoderX-gram Sync.</string>
     <string name="AyuSyncRegisterDevice">Зарегистрировать устройство</string>
     <string name="AyuSyncRegisterSuccess">Устройство зарегистрировано</string>
     <string name="AyuSyncRegisterFailed">Не удалось зарегистрировать: %1$s</string>
     <string name="AyuSyncWhatIsSyncedInfo">Синхронизируются: отметки о прочтении, состояние режима призрака и уведомления о сообщениях, которые были удалены или изменены. Содержимое сообщений не покидает ваше устройство — отправляются только идентификаторы, предыдущий текст изменённых сообщений и метки времени.</string>
 
     <!-- AyuGram: служба keep-alive -->
-    <string name="AyuKeepAliveNotification">AyuGram keep-alive</string>
+    <string name="AyuKeepAliveNotification">OcoderX-gram keep-alive</string>
     <!-- AyuGram: Dynamic Island -->
     <string name="AyuDynamicIsland">Dynamic Island</string>
     <string name="AyuDynamicIslandInfo">Показывать в верхней части экрана «островок» в стиле iPhone с текущим звонком, воспроизводимым аудио, записью голоса и загрузками.</string>

@@ -44,6 +44,6 @@
     <string name="AyuScreenshotTooMany">Выбрано слишком много сообщений, будут сохранены только первые %1$d.</string>
 
     <string name="AyuScreenshotHiddenName">•••</string>
-    <string name="AyuScreenshotWatermark">Сделано в AyuGram</string>
+    <string name="AyuScreenshotWatermark">Сделано в OcoderX-gram</string>
     <string name="AyuScreenshotMessages">%1$d сообщений</string>
 </resources>

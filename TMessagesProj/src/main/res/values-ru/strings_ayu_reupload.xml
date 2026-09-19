@@ -2,7 +2,7 @@
 <resources>
     <string name="AyuZeroReupload">Без повторной загрузки</string>
     <string name="AyuZeroReuploadEnable">Включить Zero-Reupload</string>
-    <string name="AyuZeroReuploadInfo">Перед отправкой файла AyuGram вычисляет его отпечаток и проверяет, отправлялся ли точно такой же файл с этого аккаунта. Если да, отправляется копия, уже лежащая на серверах Telegram, и ничего не загружается заново. В секретных чатах не используется.</string>
+    <string name="AyuZeroReuploadInfo">Перед отправкой файла OcoderX-gram вычисляет его отпечаток и проверяет, отправлялся ли точно такой же файл с этого аккаунта. Если да, отправляется копия, уже лежащая на серверах Telegram, и ничего не загружается заново. В секретных чатах не используется.</string>
     <string name="AyuZeroReuploadOptions">Параметры</string>
     <string name="AyuZeroReuploadIndexReceived">Индексировать полученные файлы</string>
     <string name="AyuZeroReuploadShowBulletin">Уведомлять о пропущенной загрузке</string>

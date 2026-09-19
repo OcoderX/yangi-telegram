@@ -1,7 +1,7 @@
 package org.telegram.messenger.ayu;
 
 public class AyuConstants {
-    public static final String APP_NAME = "AyuGram";
+    public static final String APP_NAME = "OcoderX-gram";
     public static final String PREFS_NAME = "ayuconfig";
     public static final String DB_NAME = "ayu_data.db";
 

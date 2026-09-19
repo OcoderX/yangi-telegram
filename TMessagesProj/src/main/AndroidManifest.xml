@@ -129,10 +129,10 @@
 
         <activity-alias
             android:enabled="false"
-            android:name="org.telegram.messenger.VintageIcon"
+            android:name="org.telegram.messenger.CrimsonIcon"
             android:targetActivity="org.telegram.ui.LaunchActivity"
-            android:icon="@mipmap/icon_6_launcher"
-            android:roundIcon="@mipmap/icon_6_launcher_round"
+            android:icon="@mipmap/icon_crimson_launcher"
+            android:roundIcon="@mipmap/icon_crimson_launcher_round"
             android:exported="true">
 
             <intent-filter>
@@ -145,10 +145,10 @@
 
         <activity-alias
             android:enabled="false"
-            android:name="org.telegram.messenger.AquaIcon"
+            android:name="org.telegram.messenger.EmeraldIcon"
             android:targetActivity="org.telegram.ui.LaunchActivity"
-            android:icon="@mipmap/icon_4_launcher"
-            android:roundIcon="@mipmap/icon_4_launcher_round"
+            android:icon="@mipmap/icon_emerald_launcher"
+            android:roundIcon="@mipmap/icon_emerald_launcher_round"
             android:exported="true">
 
             <intent-filter>
@@ -161,10 +161,10 @@
 
         <activity-alias
             android:enabled="false"
-            android:name="org.telegram.messenger.PremiumIcon"
+            android:name="org.telegram.messenger.AuroraIcon"
             android:targetActivity="org.telegram.ui.LaunchActivity"
-            android:icon="@mipmap/icon_3_launcher"
-            android:roundIcon="@mipmap/icon_3_launcher_round"
+            android:icon="@mipmap/icon_aurora_launcher"
+            android:roundIcon="@mipmap/icon_aurora_launcher_round"
             android:exported="true">
 
             <intent-filter>
@@ -177,10 +177,10 @@
 
         <activity-alias
             android:enabled="false"
-            android:name="org.telegram.messenger.TurboIcon"
+            android:name="org.telegram.messenger.NeonCrimsonIcon"
             android:targetActivity="org.telegram.ui.LaunchActivity"
-            android:icon="@mipmap/icon_5_launcher"
-            android:roundIcon="@mipmap/icon_5_launcher_round"
+            android:icon="@mipmap/icon_neon_crimson_launcher"
+            android:roundIcon="@mipmap/icon_neon_crimson_launcher_round"
             android:exported="true">
 
             <intent-filter>
@@ -193,10 +193,42 @@
 
         <activity-alias
             android:enabled="false"
-            android:name="org.telegram.messenger.NoxIcon"
+            android:name="org.telegram.messenger.NeonEmeraldIcon"
             android:targetActivity="org.telegram.ui.LaunchActivity"
-            android:icon="@mipmap/icon_2_launcher"
-            android:roundIcon="@mipmap/icon_2_launcher_round"
+            android:icon="@mipmap/icon_neon_emerald_launcher"
+            android:roundIcon="@mipmap/icon_neon_emerald_launcher_round"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity-alias>
+
+        <activity-alias
+            android:enabled="false"
+            android:name="org.telegram.messenger.NeonAzureIcon"
+            android:targetActivity="org.telegram.ui.LaunchActivity"
+            android:icon="@mipmap/icon_neon_azure_launcher"
+            android:roundIcon="@mipmap/icon_neon_azure_launcher_round"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity-alias>
+
+        <activity-alias
+            android:enabled="false"
+            android:name="org.telegram.messenger.NeonAuroraIcon"
+            android:targetActivity="org.telegram.ui.LaunchActivity"
+            android:icon="@mipmap/icon_neon_aurora_launcher"
+            android:roundIcon="@mipmap/icon_neon_aurora_launcher_round"
             android:exported="true">
 
             <intent-filter>

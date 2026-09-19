@@ -34,12 +34,14 @@ public class LauncherIconController {
     }
 
     public enum LauncherIcon {
-        DEFAULT("DefaultIcon", R.drawable.icon_background_sa, R.mipmap.icon_foreground_sa, R.string.AppIconDefault),
-        VINTAGE("VintageIcon", R.drawable.icon_6_background_sa, R.mipmap.icon_6_foreground_sa, R.string.AppIconVintage),
-        AQUA("AquaIcon", R.drawable.icon_4_background_sa, R.mipmap.icon_foreground_sa, R.string.AppIconAqua),
-        PREMIUM("PremiumIcon", R.drawable.icon_3_background_sa, R.mipmap.icon_3_foreground_sa, R.string.AppIconPremium, true),
-        TURBO("TurboIcon", R.drawable.icon_5_background_sa, R.mipmap.icon_5_foreground_sa, R.string.AppIconTurbo, true),
-        NOX("NoxIcon", R.mipmap.icon_2_background_sa, R.mipmap.icon_foreground_sa, R.string.AppIconNox, true);
+        DEFAULT("DefaultIcon", R.drawable.icon_background_sa, R.mipmap.icon_foreground, R.string.AppIconDefault),
+        CRIMSON("CrimsonIcon", R.drawable.icon_crimson_background, R.mipmap.icon_foreground, R.string.AppIconCrimson),
+        EMERALD("EmeraldIcon", R.drawable.icon_emerald_background, R.mipmap.icon_foreground, R.string.AppIconEmerald),
+        AURORA("AuroraIcon", R.mipmap.icon_aurora_background, R.mipmap.icon_foreground, R.string.AppIconAurora),
+        NEON_CRIMSON("NeonCrimsonIcon", R.drawable.icon_neon_background, R.mipmap.icon_neon_crimson_foreground, R.string.AppIconNeonCrimson),
+        NEON_EMERALD("NeonEmeraldIcon", R.drawable.icon_neon_background, R.mipmap.icon_neon_emerald_foreground, R.string.AppIconNeonEmerald),
+        NEON_AZURE("NeonAzureIcon", R.drawable.icon_neon_background, R.mipmap.icon_neon_azure_foreground, R.string.AppIconNeonAzure),
+        NEON_AURORA("NeonAuroraIcon", R.drawable.icon_neon_background, R.mipmap.icon_neon_aurora_foreground, R.string.AppIconNeonAurora);
 
         public final String key;
         public final int background;

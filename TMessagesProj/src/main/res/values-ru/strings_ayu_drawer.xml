@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Строки раздела «Функции OcoderX» в главном меню.
+-->
+<resources>
+    <string name="AyuDrawerSection">Функции OcoderX</string>
+    <string name="AyuDrawerGhostMode">Режим призрака</string>
+    <string name="AyuDrawerAntiDelete">Удалённые сообщения</string>
+    <string name="AyuDrawerEditHistory">История изменений</string>
+    <string name="AyuDrawerMediaVault">Хранилище медиа</string>
+    <string name="AyuDrawerRegexFilters">Regex-фильтры</string>
+    <string name="AyuDrawerFirewall">Брандмауэр</string>
+    <string name="AyuDrawerTurboDownload">Турбо-загрузка</string>
+    <string name="AyuDrawerUploadAccelerator">Ускорение отправки</string>
+    <string name="AyuDrawerUploadQueue">Очередь отправки</string>
+    <string name="AyuDrawerReupload">Отправка без перезаливки</string>
+    <string name="AyuDrawerMentionRadar">Радар упоминаний</string>
+    <string name="AyuDrawerNetDiag">Диагностика сети</string>
+    <string name="AyuDrawerDynamicIsland">Динамический остров</string>
+    <string name="AyuDrawerKeepAlive">Фоновая служба</string>
+    <string name="AyuDrawerFileExplorer">Файловый менеджер</string>
+    <string name="AyuDrawerDuplicates">Очистка дубликатов</string>
+    <string name="AyuDrawerSync">AyuSync</string>
+    <string name="AyuDrawerAllSettings">Все настройки OcoderX</string>
+</resources>

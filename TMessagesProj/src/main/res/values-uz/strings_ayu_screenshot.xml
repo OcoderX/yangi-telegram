@@ -44,6 +44,6 @@
     <string name="AyuScreenshotTooMany">Juda ko\'p xabar tanlandi, faqat birinchi %1$d tasi saqlanadi.</string>
 
     <string name="AyuScreenshotHiddenName">•••</string>
-    <string name="AyuScreenshotWatermark">AyuGram yordamida</string>
+    <string name="AyuScreenshotWatermark">OcoderX-gram yordamida</string>
     <string name="AyuScreenshotMessages">%1$d ta xabar</string>
 </resources>

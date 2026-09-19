@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Strings for the "OcoderX Features" section of the main (drawer) menu.
+    Every key is prefixed with AyuDrawer and must exist in values-ru/ and values-uz/ as well.
+-->
+<resources>
+    <string name="AyuDrawerSection">OcoderX Features</string>
+    <string name="AyuDrawerGhostMode">Ghost mode</string>
+    <string name="AyuDrawerAntiDelete">Deleted messages</string>
+    <string name="AyuDrawerEditHistory">Edit history</string>
+    <string name="AyuDrawerMediaVault">Media vault</string>
+    <string name="AyuDrawerRegexFilters">Regex filters</string>
+    <string name="AyuDrawerFirewall">Firewall</string>
+    <string name="AyuDrawerTurboDownload">Turbo download</string>
+    <string name="AyuDrawerUploadAccelerator">Upload accelerator</string>
+    <string name="AyuDrawerUploadQueue">Upload queue</string>
+    <string name="AyuDrawerReupload">Zero-byte reupload</string>
+    <string name="AyuDrawerMentionRadar">Mention radar</string>
+    <string name="AyuDrawerNetDiag">Network diagnostics</string>
+    <string name="AyuDrawerDynamicIsland">Dynamic Island</string>
+    <string name="AyuDrawerKeepAlive">Keep-alive service</string>
+    <string name="AyuDrawerFileExplorer">File explorer</string>
+    <string name="AyuDrawerDuplicates">Duplicate cleaner</string>
+    <string name="AyuDrawerSync">AyuSync</string>
+    <string name="AyuDrawerAllSettings">All OcoderX settings</string>
+</resources>

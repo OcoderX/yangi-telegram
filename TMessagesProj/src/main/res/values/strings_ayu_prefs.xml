@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- AyuGram: settings UI -->
-    <string name="AyuPreferences">AyuGram</string>
+    <string name="AyuPreferences">OcoderX-gram</string>
     <string name="AyuPreferencesInfo">Ghost mode, message history, filters</string>
 
     <!-- Ghost -->
@@ -70,23 +70,23 @@
     <string name="AyuCustomizationInfo">The ghost toggle and the kill button are shown in the chats list action bar.</string>
 
     <!-- Sync -->
-    <string name="AyuSyncInfo">Synchronize AyuGram settings between your devices.</string>
+    <string name="AyuSyncInfo">Synchronize OcoderX-gram settings between your devices.</string>
     <string name="AyuEnabled">Enabled</string>
     <string name="AyuDisabled">Disabled</string>
 
     <!-- Debug -->
     <string name="AyuDebug">Debug</string>
     <string name="AyuWalMode">WAL mode</string>
-    <string name="AyuWalModeInfo">Write-ahead logging makes the AyuGram database faster. Turn it off only if you experience problems.</string>
-    <string name="AyuClearDatabase">Clear AyuGram database</string>
-    <string name="AyuClearDatabaseTitle">Clear AyuGram database</string>
+    <string name="AyuWalModeInfo">Write-ahead logging makes the OcoderX-gram database faster. Turn it off only if you experience problems.</string>
+    <string name="AyuClearDatabase">Clear OcoderX-gram database</string>
+    <string name="AyuClearDatabaseTitle">Clear OcoderX-gram database</string>
     <string name="AyuClearDatabaseMessage">All saved deleted messages, edit history and saved media will be permanently removed. Continue?</string>
-    <string name="AyuClearDatabaseDone">AyuGram database cleared</string>
+    <string name="AyuClearDatabaseDone">OcoderX-gram database cleared</string>
     <string name="AyuEraseTelegramDatabase">Erase local Telegram database</string>
     <string name="AyuEraseTelegramDatabaseTitle">Erase local Telegram database</string>
     <string name="AyuEraseTelegramDatabaseMessage">The local Telegram cache database will be erased and the app will restart. Your account and messages on the server are not affected. Continue?</string>
     <string name="AyuKillApp">Kill app</string>
     <string name="AyuKillAppTitle">Kill app</string>
     <string name="AyuKillAppMessage">The app process will be terminated immediately. Continue?</string>
-    <string name="AyuFooter">AyuGram features integrated · v%1$s</string>
+    <string name="AyuFooter">OcoderX-gram features integrated · v%1$s</string>
 </resources>

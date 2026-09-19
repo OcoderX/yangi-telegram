@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">텔레그램</string>
-    <string name="AppNameBeta">텔레그램</string>
+    <string name="AppName">Ox-gram</string>
+    <string name="AppNameBeta">Ox-gram Beta</string>
     <string name="LanguageName">한국어</string>
     <string name="English">영어</string>
     <string name="LanguageNameInEnglish">한국어</string>
@@ -193,8 +193,8 @@
     <string name="NotificationGroupFew">%1$s 님이 %2$s 그룹에 %3$s을(를) 보냈습니다</string>
     <string name="NotificationGroupAlbum">%1$s 님이 사진첩을 %2$s 그룹에 보냈습니다</string>
     <string name="NotificationGroupForwardedFew">%1$s 님이 %2$s 그룹에 %3$s을(를) 전달했습니다</string>
-    <string name="NotificationHiddenName">텔레그램</string>
-    <string name="NotificationHiddenChatName">텔레그램</string>
+    <string name="NotificationHiddenName">Ox-gram</string>
+    <string name="NotificationHiddenChatName">Ox-gram</string>
     <string name="NotificationHiddenChatUserName">사용자</string>
     <string name="NotificationHiddenMessage">새로운 메시지</string>
     <string name="Reply">답장</string>
@@ -258,7 +258,7 @@
     <string name="NotificationActionPinnedGeoLiveUser">%1$s님이 실시간 위치를 고정했습니다</string>
     <string name="NotificationActionPinnedGifUser">%1$s님이 GIF를 고정했습니다</string>
     <string name="NotificationActionPinnedMusicUser">%1$s님이 오디오 파일을 고정했습니다</string>
-    <string name="SecretChatName">텔레그램</string>
+    <string name="SecretChatName">Ox-gram</string>
     <!--contacts view-->
     <string name="SelectContact">연락처 선택</string>
     <string name="ShareContactTitle">연락처 공유</string>
@@ -589,7 +589,7 @@
     <string name="DirectShareInfo">안드로이드 공유 메뉴에 최근 대화방을 표시합니다</string>
     <string name="Emoji">이모지</string>
     <string name="LargeEmoji">큰 이모지</string>
-    <string name="TelegramVersion">Android용 텔레그램 %1$s</string>
+    <string name="TelegramVersion">Android용 Ox-gram %1$s</string>
     <string name="DebugMenu">디버그 메뉴</string>
     <string name="DebugMenuLongPress">디버그 메뉴로 이동하려면 길게 눌러주세요</string>
     <string name="DebugSendLogs">로그 보내기</string>

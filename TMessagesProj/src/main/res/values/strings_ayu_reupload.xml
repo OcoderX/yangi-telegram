@@ -2,7 +2,7 @@
 <resources>
     <string name="AyuZeroReupload">Zero-Reupload</string>
     <string name="AyuZeroReuploadEnable">Enable Zero-Reupload</string>
-    <string name="AyuZeroReuploadInfo">Before uploading a file, AyuGram fingerprints it and checks whether the very same file was already sent from this account. If it was, the copy stored on Telegram servers is sent instead, so nothing is uploaded again. Never used in secret chats.</string>
+    <string name="AyuZeroReuploadInfo">Before uploading a file, OcoderX-gram fingerprints it and checks whether the very same file was already sent from this account. If it was, the copy stored on Telegram servers is sent instead, so nothing is uploaded again. Never used in secret chats.</string>
     <string name="AyuZeroReuploadOptions">Options</string>
     <string name="AyuZeroReuploadIndexReceived">Also index received files</string>
     <string name="AyuZeroReuploadShowBulletin">Notify when an upload is skipped</string>

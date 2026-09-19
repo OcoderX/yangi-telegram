@@ -2,7 +2,7 @@
 <resources>
     <string name="AyuZeroReupload">Qayta yuklashsiz</string>
     <string name="AyuZeroReuploadEnable">Zero-Reupload yoqilsin</string>
-    <string name="AyuZeroReuploadInfo">Faylni yuborishdan oldin AyuGram uning barmoq izini hisoblaydi va aynan shu fayl ushbu akkauntdan avval yuborilgan yoki yuborilmaganini tekshiradi. Agar yuborilgan bolsa, Telegram serverlaridagi nusxa yuboriladi va hech narsa qaytadan yuklanmaydi. Maxfiy chatlarda ishlatilmaydi.</string>
+    <string name="AyuZeroReuploadInfo">Faylni yuborishdan oldin OcoderX-gram uning barmoq izini hisoblaydi va aynan shu fayl ushbu akkauntdan avval yuborilgan yoki yuborilmaganini tekshiradi. Agar yuborilgan bolsa, Telegram serverlaridagi nusxa yuboriladi va hech narsa qaytadan yuklanmaydi. Maxfiy chatlarda ishlatilmaydi.</string>
     <string name="AyuZeroReuploadOptions">Sozlamalar</string>
     <string name="AyuZeroReuploadIndexReceived">Qabul qilingan fayllar ham indekslansin</string>
     <string name="AyuZeroReuploadShowBulletin">Yuklash otkazib yuborilganda xabar berilsin</string>

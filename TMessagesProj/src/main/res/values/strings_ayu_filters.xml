@@ -53,7 +53,7 @@
     <!-- import / export -->
     <string name="AyuFiltersImportTitle">Import filters</string>
     <string name="AyuFiltersImportHint">Paste a filters link</string>
-    <string name="AyuFiltersImportMessage">Paste a link you received from another AyuGram user.</string>
+    <string name="AyuFiltersImportMessage">Paste a link you received from another OcoderX-gram user.</string>
     <string name="AyuFiltersImportDone">Imported %1$d filter(s).</string>
     <string name="AyuFiltersImportNothing">No new filters to import.</string>
     <string name="AyuFiltersImportFailed">This link does not contain any filters.</string>

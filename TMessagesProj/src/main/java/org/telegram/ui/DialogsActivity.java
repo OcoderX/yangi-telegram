@@ -10270,6 +10270,122 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
     }
 
+    /**
+     * Appends the "OcoderX Features" section to the main menu popup ({@link #showItemOptions()}):
+     * a section header, one check-marked row per custom (non stock Telegram) feature that owns a
+     * master switch, then the rows opening the tool screens and the AyuGram preferences hub.
+     * <p>
+     * Toggling a row never closes the menu: the rows are built by hand instead of through
+     * {@code ItemOptions.addChecked(...)} (which dismisses the popup after the click).
+     */
+    private void addOcoderXFeatureOptions(ItemOptions io) {
+        if (getContext() == null) {
+            return;
+        }
+        // every load() below is idempotent and returns immediately once the prefs are in memory
+        org.telegram.messenger.ayu.AyuConfig.load();
+        org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.load();
+        org.telegram.messenger.ayu.firewall.FirewallConfig.load();
+        org.telegram.messenger.ayu.upload.AyuUploadConfig.load();
+        org.telegram.messenger.ayu.reupload.ZeroReuploadConfig.load();
+        org.telegram.messenger.ayu.radar.RadarConfig.load();
+        org.telegram.messenger.ayu.netdiag.NetDiagConfig.load();
+
+        io.addGap();
+        io.addText(getString(R.string.AyuDrawerSection), 13);
+
+        // setGhostMode() flushes the online state (AyuGhostHelper.onOnlineSettingsChanged) and
+        // posts ayuGhostModeChanged itself, which repaints the ghost button in the action bar
+        addOcoderXToggle(io, R.drawable.msg_ghost, getString(R.string.AyuDrawerGhostMode),
+                org.telegram.messenger.ayu.AyuConfig.isGhostModeActive(),
+                org.telegram.messenger.ayu.AyuConfig::setGhostMode);
+        addOcoderXToggle(io, R.drawable.msg_delete, getString(R.string.AyuDrawerAntiDelete),
+                org.telegram.messenger.ayu.AyuConfig.saveDeletedMessages,
+                org.telegram.messenger.ayu.AyuConfig::setSaveDeletedMessages);
+        // capturing revisions is gated behind AyuConfig.saveMessagesHistory as well
+        // (AyuEditHistoryConfig.isCaptureEnabled), so enabling the row turns both of them on
+        addOcoderXToggle(io, R.drawable.msg_edit, getString(R.string.AyuDrawerEditHistory),
+                org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.isCaptureEnabled(),
+                value -> {
+                    org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.setCaptureEdits(value);
+                    if (value && !org.telegram.messenger.ayu.AyuConfig.saveMessagesHistory) {
+                        org.telegram.messenger.ayu.AyuConfig.setSaveMessagesHistory(true);
+                    }
+                });
+        addOcoderXToggle(io, R.drawable.msg_media, getString(R.string.AyuDrawerMediaVault),
+                org.telegram.messenger.ayu.AyuConfig.saveMedia,
+                org.telegram.messenger.ayu.AyuConfig::setSaveMedia);
+        addOcoderXToggle(io, R.drawable.msg_block2, getString(R.string.AyuDrawerRegexFilters),
+                org.telegram.messenger.ayu.AyuConfig.regexFiltersEnabled,
+                org.telegram.messenger.ayu.AyuConfig::setRegexFiltersEnabled);
+        addOcoderXToggle(io, R.drawable.msg_secret, getString(R.string.AyuDrawerFirewall),
+                org.telegram.messenger.ayu.firewall.FirewallConfig.enabled,
+                org.telegram.messenger.ayu.firewall.FirewallConfig::setEnabled);
+        addOcoderXToggle(io, R.drawable.msg_download, getString(R.string.AyuDrawerTurboDownload),
+                SharedConfig.turboDownloadEnabled,
+                value -> SharedConfig.toggleTurboDownload());
+        addOcoderXToggle(io, R.drawable.msg_shareout, getString(R.string.AyuDrawerUploadAccelerator),
+                SharedConfig.enableUploadAccelerator,
+                value -> SharedConfig.toggleUploadAccelerator());
+        addOcoderXToggle(io, R.drawable.msg_list, getString(R.string.AyuDrawerUploadQueue),
+                org.telegram.messenger.ayu.upload.AyuUploadConfig.queueEnabled,
+                org.telegram.messenger.ayu.upload.AyuUploadConfig::setQueueEnabled);
+        addOcoderXToggle(io, R.drawable.msg_replace, getString(R.string.AyuDrawerReupload),
+                org.telegram.messenger.ayu.reupload.ZeroReuploadConfig.isEnabled(),
+                org.telegram.messenger.ayu.reupload.ZeroReuploadConfig::setEnabled);
+        addOcoderXToggle(io, R.drawable.msg_mention, getString(R.string.AyuDrawerMentionRadar),
+                org.telegram.messenger.ayu.radar.RadarConfig.enabled,
+                org.telegram.messenger.ayu.radar.RadarConfig::setEnabled);
+        addOcoderXToggle(io, R.drawable.msg_stats, getString(R.string.AyuDrawerNetDiag),
+                org.telegram.messenger.ayu.netdiag.NetDiagConfig.islandNetwork,
+                org.telegram.messenger.ayu.netdiag.NetDiagConfig::setIslandNetwork);
+        addOcoderXToggle(io, R.drawable.msg_notifications, getString(R.string.AyuDrawerDynamicIsland),
+                org.telegram.messenger.ayu.AyuConfig.dynamicIsland,
+                org.telegram.messenger.ayu.AyuConfig::setDynamicIsland);
+        addOcoderXToggle(io, R.drawable.msg_online, getString(R.string.AyuDrawerKeepAlive),
+                org.telegram.messenger.ayu.AyuConfig.keepAliveService,
+                org.telegram.messenger.ayu.AyuConfig::setKeepAliveService);
+
+        io.addGap();
+        io.add(R.drawable.msg_folders, getString(R.string.AyuDrawerFileExplorer),
+                () -> presentFragment(new org.telegram.ui.ayu.explorer.FileExplorerActivity()));
+        io.add(R.drawable.msg_copy, getString(R.string.AyuDrawerDuplicates),
+                () -> presentFragment(new org.telegram.ui.ayu.duplicates.DuplicateCleanerActivity()));
+        io.add(R.drawable.msg_retry, getString(R.string.AyuDrawerSync),
+                () -> presentFragment(new org.telegram.ui.ayu.AyuSyncPreferencesActivity()));
+        io.add(R.drawable.msg_settings, getString(R.string.AyuDrawerAllSettings),
+                () -> presentFragment(new org.telegram.ui.ayu.AyuPreferencesActivity()));
+    }
+
+    /**
+     * One switchable row of the "OcoderX Features" section: icon + label + check mark. The click
+     * flips the check in place, writes the preference through {@code setter} and posts
+     * {@code ayuConfigChanged} so open screens and the keep-alive service pick the change up.
+     */
+    private void addOcoderXToggle(ItemOptions io, int iconResId, CharSequence text, boolean checked, Utilities.Callback<Boolean> setter) {
+        final Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        final int color = getThemedColor(Theme.key_actionBarDefaultTitle);
+        // 2 = check mark on the trailing side, icon on the leading one (see ActionBarMenuSubItem)
+        final ActionBarMenuSubItem item = new ActionBarMenuSubItem(context, 2, false, false, getResourceProvider());
+        item.setPadding(dp(18), 0, dp(18), 0);
+        item.setTextAndIcon(text, iconResId);
+        item.setColors(color, color);
+        item.setSelectorColor(Theme.multAlpha(color, .12f));
+        item.setChecked(checked);
+
+        final boolean[] value = new boolean[]{checked};
+        item.setOnClickListener(v -> {
+            value[0] = !value[0];
+            item.setChecked(value[0]);
+            setter.run(value[0]);
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.ayuConfigChanged);
+        });
+        io.addView(item, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+    }
+
     private void updateProxyButton(boolean animated, boolean force) {
         if (proxyDrawable == null || doneItem != null && doneItem.getVisibility() == View.VISIBLE) {
             return;
@@ -13883,6 +13999,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (ApplicationLoader.applicationLoaderInstance != null) {
             ApplicationLoader.applicationLoaderInstance.addItemOptions(io);
         }
+        // AyuGram: "OcoderX Features" section with the switches of our own features
+        addOcoderXFeatureOptions(io);
         TLRPC.TL_attachMenuBots menuBots = MediaDataController.getInstance(UserConfig.selectedAccount).getAttachMenuBots();
         if (launchActivity != null && menuBots != null && menuBots.bots != null && !menuBots.bots.isEmpty()) {
             for (TLRPC.TL_attachMenuBot attachMenuBot : menuBots.bots) {

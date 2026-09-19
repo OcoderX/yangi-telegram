@@ -40,6 +40,17 @@ public class PremiumAppIconsPreviewView extends FrameLayout implements PagerHead
                 break;
             }
         }
+        if (icons.size() < 3) {
+            // no (or not enough) premium-gated icons in this build: preview the alternative icons instead
+            for (LauncherIconController.LauncherIcon icon : LauncherIconController.LauncherIcon.values()) {
+                if (!icons.contains(icon) && icon != LauncherIconController.LauncherIcon.DEFAULT) {
+                    icons.add(icon);
+                }
+                if (icons.size() == 3) {
+                    break;
+                }
+            }
+        }
 
         if (icons.size() < 3) {
             FileLog.e(new IllegalArgumentException("There should be at least 3 premium icons!"));

@@ -44,6 +44,6 @@
     <string name="AyuScreenshotTooMany">Too many messages selected, only the first %1$d are captured.</string>
 
     <string name="AyuScreenshotHiddenName">•••</string>
-    <string name="AyuScreenshotWatermark">Made with AyuGram</string>
+    <string name="AyuScreenshotWatermark">Made with OcoderX-gram</string>
     <string name="AyuScreenshotMessages">%1$d messages</string>
 </resources>
