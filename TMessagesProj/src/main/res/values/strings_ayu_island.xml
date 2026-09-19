@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Dynamic Island -->
+    <string name="AyuDynamicIsland">Dynamic Island</string>
+    <string name="AyuDynamicIslandInfo">Show an iPhone-style pill at the top of the screen with the current call, playing audio, voice recording and downloads.</string>
+    <string name="AyuIslandEnable">Enable Dynamic Island</string>
+    <string name="AyuIslandSources">Show in the island</string>
+    <string name="AyuIslandCalls">Calls and voice chats</string>
+    <string name="AyuIslandMusic">Music and voice messages</string>
+    <string name="AyuIslandRecording">Voice recording</string>
+    <string name="AyuIslandDownloads">Downloads</string>
+    <string name="AyuIslandGhost">Ghost mode indicator</string>
+    <string name="AyuIslandSourcesInfo">Tap the island to expand it and see quick actions. Tap outside or wait a few seconds to collapse it.</string>
+    <string name="AyuIslandIdle">Always show around the camera</string>
+    <string name="AyuIslandIdleInfo">Keep a small black pill around the camera cut-out even when nothing is happening.</string>
+    <string name="AyuIslandRecordingText">Recording…</string>
+    <string name="AyuIslandDownloadingFiles_one">Downloading %1$d file</string>
+    <string name="AyuIslandDownloadingFiles_other">Downloading %1$d files</string>
+    <string name="AyuIslandCancelAll">Cancel all</string>
+    <string name="AyuIslandGhostOn">Ghost mode is on</string>
+    <string name="AyuIslandGhostInfo">Read receipts, online status and typing are hidden</string>
+    <string name="AyuIslandGhostOff">Turn off</string>
+</resources>

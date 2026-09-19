@@ -161,6 +161,7 @@ public class FileLoadOperation {
     //load small parts for stream
     private int downloadChunkSizeAnimation = 1024 * 128;
     private int maxDownloadRequestsAnimation = 4;
+    private int downloadConnectionsCount = 2;
 
     private final static int preloadMaxBytes = 2 * 1024 * 1024;
 
@@ -304,6 +305,13 @@ public class FileLoadOperation {
             maxDownloadRequests = 4;
             maxDownloadRequestsBig = 4;
             maxDownloadRequestsAnimation = 4;
+        }
+        if (SharedConfig.enableDownloadAccelerator && !forceSmallChunk) {
+            // one TCP connection per parallel request (up to the native pool size) so the per-connection
+            // throttling applied by Telegram servers does not cap the total transfer speed
+            downloadConnectionsCount = Math.min(ConnectionsManager.DownloadConnectionsCount, Math.max(2, SharedConfig.downloadThreadsCount));
+        } else {
+            downloadConnectionsCount = 2;
         }
         maxCdnParts = (int) (FileLoader.DEFAULT_MAX_FILE_SIZE / downloadChunkSizeBig);
     }
@@ -1419,7 +1427,7 @@ public class FileLoadOperation {
         FileLog.d("cancelRequests" + (fullyCancelled != null ? " with callback" : ""));
         if (requestInfos != null) {
             int[] waitingForCancelledCount = new int[1];
-            int[] waitingDownloadSize = new int[2];
+            int[] waitingDownloadSize = new int[ConnectionsManager.DownloadConnectionsCount];
             for (int a = 0; a < requestInfos.size(); a++) {
                 RequestInfo requestInfo = requestInfos.get(a);
                 if (requestInfo.requestToken != 0) {
@@ -1445,12 +1453,12 @@ public class FileLoadOperation {
                             }
                         });
                     }
-                    int index = requestInfo.connectionType == ConnectionsManager.ConnectionTypeDownload ? 0 : 1;
+                    int index = Math.min(waitingDownloadSize.length - 1, (requestInfo.connectionType >> 16) & 0xff);
                     waitingDownloadSize[index] += requestInfo.chunkSize;
                 }
             }
-            for (int i = 0; i < 2; i++) {
-                int connectionType = i == 0 ? ConnectionsManager.ConnectionTypeDownload : ConnectionsManager.ConnectionTypeDownload2;
+            for (int i = 0; i < waitingDownloadSize.length; i++) {
+                int connectionType = ConnectionsManager.ConnectionTypeDownload | (i << 16);
                 if (waitingDownloadSize[i] > 1024 * 1024)  {
                     int datacenterId = isCdn ? cdnDatacenterId : this.datacenterId;
                     ConnectionsManager.getInstance(currentAccount).discardConnection(datacenterId, connectionType);
@@ -2153,7 +2161,7 @@ public class FileLoadOperation {
 
     private void clearOperation(RequestInfo currentInfo, boolean preloadChanged, boolean acceptChunksAfterCancel) {
         long minOffset = Long.MAX_VALUE;
-        int[] waitingDownloadSize = new int[2];
+        int[] waitingDownloadSize = new int[ConnectionsManager.DownloadConnectionsCount];
         for (int a = 0; a < requestInfos.size(); a++) {
             RequestInfo info = requestInfos.get(a);
             minOffset = Math.min(info.offset, minOffset);
@@ -2185,8 +2193,8 @@ public class FileLoadOperation {
                 }
             }
         }
-        for (int i = 0; i < 2; i++) {
-            int connectionType = i == 0 ? ConnectionsManager.ConnectionTypeDownload : ConnectionsManager.ConnectionTypeDownload2;
+        for (int i = 0; i < waitingDownloadSize.length; i++) {
+            int connectionType = ConnectionsManager.ConnectionTypeDownload | (i << 16);
             if (waitingDownloadSize[i] > 512 * 1024 * 2)  {
                 int datacenterId = isCdn ? cdnDatacenterId : this.datacenterId;
                 ConnectionsManager.getInstance(currentAccount).discardConnection(datacenterId, connectionType);
@@ -2376,7 +2384,7 @@ public class FileLoadOperation {
             final TLObject request;
             int connectionType;
             if (useConnectionType == -1) {
-                connectionType = requestsCount % 2 == 0 ? ConnectionsManager.ConnectionTypeDownload : ConnectionsManager.ConnectionTypeDownload2;
+                connectionType = ConnectionsManager.ConnectionTypeDownload | ((requestsCount % downloadConnectionsCount) << 16);
                 //globalRequestPointer++;
             } else {
                 connectionType = useConnectionType;

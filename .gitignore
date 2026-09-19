@@ -17,3 +17,5 @@ TMessagesProj/jni/ffmpeg/build_android
 
 # Claude Code agent worktrees and local state
 .claude/
+
+*.apk

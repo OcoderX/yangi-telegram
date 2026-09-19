@@ -404,6 +404,8 @@ public class MessagesController extends BaseController implements NotificationCe
     private int statusRequest;
     private int statusSettingState;
     private boolean offlineSent;
+    /** ghost mode: last time an explicit offline packet was attempted while in the foreground (backoff on errors) */
+    private long ayuLastOfflineAttempt;
     private String uploadingAvatar;
 
     private HashMap<String, Object> uploadingThemes = new HashMap<>();
@@ -9638,6 +9640,22 @@ public class MessagesController extends BaseController implements NotificationCe
         serverDialogsEndReached.put(0, true);
     }
 
+    /**
+     * A bot cannot ask the server for its dialog list, so whatever is in the local cache is the
+     * whole list. Without this the chat list keeps showing loading placeholders forever.
+     */
+    public void markBotDialogsEndReached(int folderId) {
+        dialogsEndReached.put(folderId, true);
+        serverDialogsEndReached.put(folderId, true);
+        loadingDialogs.put(folderId, false);
+        dialogsLoaded = true;
+        // otherwise sortDialogs() drops every locally built dialog
+        dialogsLoadedTillDate = Integer.MIN_VALUE;
+        getUserConfig().setDialogsLoadOffset(folderId, Integer.MAX_VALUE, 0, 0, 0, 0, 0);
+        getUserConfig().saveConfig(false);
+        AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload));
+    }
+
     public boolean isDialogsEndReached(int folderId) {
         return dialogsEndReached.get(folderId);
     }
@@ -10492,6 +10510,38 @@ public class MessagesController extends BaseController implements NotificationCe
         });
     }
 
+    /**
+     * Ghost mode: one of the online-related options changed. Push the new state to the server right away:
+     * an offline packet when online packets are disabled, otherwise reset the timer so the next tick re-announces online.
+     */
+    public void ayuOnOnlineSettingsChanged() {
+        if (!getUserConfig().isClientActivated()) {
+            return;
+        }
+        if (statusRequest != 0) {
+            getConnectionsManager().cancelRequest(statusRequest, true);
+            statusRequest = 0;
+        }
+        statusSettingState = 0;
+        lastStatusUpdateTime = 0;
+        if (!AyuConfig.sendOnlinePackets) {
+            statusSettingState = 2;
+            ayuLastOfflineAttempt = System.currentTimeMillis();
+            TL_account.updateStatus req = new TL_account.updateStatus();
+            req.offline = true;
+            statusRequest = getConnectionsManager().sendRequest(req, (response, error) -> {
+                if (error == null) {
+                    offlineSent = true;
+                }
+                statusSettingState = 0;
+                statusRequest = 0;
+            });
+        } else {
+            // force the online branch of updateTimerProc to run on the next tick
+            offlineSent = true;
+        }
+    }
+
     public void updateTimerProc() {
         long currentTime = System.currentTimeMillis();
 
@@ -10523,6 +10573,22 @@ public class MessagesController extends BaseController implements NotificationCe
                                     lastStatusUpdateTime += 5000;
                                 }
                             }
+                            statusRequest = 0;
+                        });
+                    } else if (!AyuConfig.sendOnlinePackets && !offlineSent && statusSettingState != 2 && Math.abs(currentTime - ayuLastOfflineAttempt) >= 5000) {
+                        // ghost mode: make sure the server sees us as offline even while the app is in the foreground
+                        ayuLastOfflineAttempt = currentTime;
+                        statusSettingState = 2;
+                        if (statusRequest != 0) {
+                            getConnectionsManager().cancelRequest(statusRequest, true);
+                        }
+                        TL_account.updateStatus req = new TL_account.updateStatus();
+                        req.offline = true;
+                        statusRequest = getConnectionsManager().sendRequest(req, (response, error) -> {
+                            if (error == null) {
+                                offlineSent = true;
+                            }
+                            statusSettingState = 0;
                             statusRequest = 0;
                         });
                     }
@@ -12427,6 +12493,13 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         if (fromCache) {
             getMessagesStorage().getDialogs(folderId, offset == 0 ? 0 : nextDialogsCacheOffset.get(folderId, 0), count, folderId == 0 && offset == 0);
+        } else if (getUserConfig().isBotAccount()) {
+            // the server refuses messages.getDialogs for bots: the local cache is all there is,
+            // so declare the list complete instead of leaving the UI loading forever
+            markBotDialogsEndReached(folderId);
+            if (onEmptyCallback != null) {
+                AndroidUtilities.runOnUIThread(onEmptyCallback);
+            }
         } else {
             TLRPC.TL_messages_getDialogs req = new TLRPC.TL_messages_getDialogs();
             req.limit = count;
@@ -12797,6 +12870,17 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     private void resetDialogs(boolean query, int seq, int newPts, int date, int qts) {
+        if (getUserConfig().isBotAccount()) {
+            // both requests this needs are bot-forbidden; going ahead would leave resetingDialogs
+            // stuck on and block every later loadDialogs call
+            getMessagesStorage().setLastPtsValue(newPts);
+            getMessagesStorage().setLastDateValue(date);
+            getMessagesStorage().setLastQtsValue(qts);
+            getMessagesStorage().setLastSeqValue(seq);
+            getMessagesStorage().saveDiffParams(seq, newPts, date, qts);
+            markBotDialogsEndReached(0);
+            return;
+        }
         if (query) {
             if (resetingDialogs) {
                 return;
@@ -16459,7 +16543,65 @@ public class MessagesController extends BaseController implements NotificationCe
         setUpdatesStartTime(type, 0);
     }
 
+    /**
+     * Bot version of {@link #loadUnknownDialog}: messages.getPeerDialogs is forbidden for bots, so
+     * the dialog is fabricated from the message that just arrived and pushed through the very same
+     * pipeline. That persists it, clears the "unknown dialog" mark in storage and brings
+     * dialogsLoadedTillDate down so sortDialogs stops hiding it.
+     */
+    private void createLocalDialogForBot(long dialogId, MessageObject lastMessage) {
+        if (lastMessage == null || lastMessage.messageOwner == null || dialogId == 0) {
+            return;
+        }
+        final TLRPC.Message message = lastMessage.messageOwner;
+        Utilities.stageQueue.postRunnable(() -> {
+            try {
+                TLRPC.TL_dialog dialog = new TLRPC.TL_dialog();
+                dialog.id = dialogId;
+                dialog.peer = getPeer(dialogId);
+                dialog.top_message = message.id;
+                dialog.last_message_date = message.date;
+                dialog.folder_id = 0;
+                dialog.notify_settings = new TLRPC.TL_peerNotifySettings();
+                if (message.out) {
+                    dialog.read_inbox_max_id = message.id;
+                    dialog.read_outbox_max_id = message.id;
+                } else {
+                    dialog.unread_count = 1;
+                }
+
+                TLRPC.TL_messages_dialogs dialogs = new TLRPC.TL_messages_dialogs();
+                dialogs.dialogs.add(dialog);
+                dialogs.messages.add(message);
+                if (dialogId > 0) {
+                    TLRPC.User user = getUser(dialogId);
+                    if (user != null) {
+                        dialogs.users.add(user);
+                    }
+                } else {
+                    TLRPC.Chat chat = getChat(-dialogId);
+                    if (chat != null) {
+                        dialogs.chats.add(chat);
+                    }
+                }
+                dialogs.count = 1;
+
+                dialogsLoadedTillDate = Integer.MIN_VALUE;
+                processLoadedDialogs(dialogs, null, null, 0, 0, 1, DIALOGS_LOAD_TYPE_UNKNOWN, false, false, false);
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        });
+    }
+
     protected void loadUnknownChannel(final TLRPC.Chat channel, long taskId) {
+        if (getUserConfig().isBotAccount()) {
+            // messages.getPeerDialogs is bot-forbidden; the dialog is built locally from updates
+            if (taskId != 0) {
+                getMessagesStorage().removePendingTask(taskId);
+            }
+            return;
+        }
         if (!(channel instanceof TLRPC.TL_channel) || gettingUnknownChannels.indexOfKey(channel.id) >= 0) {
             return;
         }
@@ -22023,6 +22165,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
             }
             TLRPC.Dialog dialogFinal = dialog;
+            final MessageObject lastMessageFinal = lastMessage;
             getMessagesStorage().getDialogFolderId(dialogId, param -> {
                 if (param != -1) {
                     if (param != 0) {
@@ -22032,7 +22175,11 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
                 } else if (mid > 0) {
                     if (!DialogObject.isEncryptedDialog(dialogId)) {
-                        loadUnknownDialog(getInputPeer(dialogId), 0);
+                        if (getUserConfig().isBotAccount()) {
+                            createLocalDialogForBot(dialogId, lastMessageFinal);
+                        } else {
+                            loadUnknownDialog(getInputPeer(dialogId), 0);
+                        }
                     }
                 }
             });

@@ -252,4 +252,47 @@
 
     <!-- AyuGram: служба keep-alive -->
     <string name="AyuKeepAliveNotification">AyuGram keep-alive</string>
+    <!-- AyuGram: Dynamic Island -->
+    <string name="AyuDynamicIsland">Dynamic Island</string>
+    <string name="AyuDynamicIslandInfo">Показывать в верхней части экрана «островок» в стиле iPhone с текущим звонком, воспроизводимым аудио, записью голоса и загрузками.</string>
+    <string name="AyuIslandEnable">Включить Dynamic Island</string>
+    <string name="AyuIslandSources">Показывать в островке</string>
+    <string name="AyuIslandCalls">Звонки и голосовые чаты</string>
+    <string name="AyuIslandMusic">Музыка и голосовые сообщения</string>
+    <string name="AyuIslandRecording">Запись голоса</string>
+    <string name="AyuIslandDownloads">Загрузки</string>
+    <string name="AyuIslandGhost">Индикатор режима призрака</string>
+    <string name="AyuIslandSourcesInfo">Нажмите на островок, чтобы развернуть его и увидеть быстрые действия. Нажмите снаружи или подождите пару секунд, чтобы свернуть.</string>
+    <string name="AyuIslandIdle">Всегда показывать вокруг камеры</string>
+    <string name="AyuIslandIdleInfo">Оставлять небольшой чёрный островок вокруг выреза камеры, даже когда ничего не происходит.</string>
+    <string name="AyuIslandRecordingText">Запись…</string>
+    <string name="AyuIslandDownloadingFiles_one">Загружается %1$d файл</string>
+    <string name="AyuIslandDownloadingFiles_few">Загружается %1$d файла</string>
+    <string name="AyuIslandDownloadingFiles_many">Загружается %1$d файлов</string>
+    <string name="AyuIslandDownloadingFiles_other">Загружается %1$d файлов</string>
+    <string name="AyuIslandCancelAll">Отменить все</string>
+    <string name="AyuIslandGhostOn">Режим призрака включён</string>
+    <string name="AyuIslandGhostInfo">Отметки о прочтении, статус онлайн и набор текста скрыты</string>
+    <string name="AyuIslandGhostOff">Выключить</string>
+
+    <!-- AyuGram: вход по токену бота -->
+    <string name="AyuBotLoginTitle">Токен бота</string>
+    <string name="AyuBotLoginHeader">Вход как бот</string>
+    <string name="AyuBotLoginSubtitle">Вставьте токен, который выдал @BotFather. Бот будет добавлен отдельным аккаунтом.</string>
+    <string name="AyuBotLoginField">Токен бота</string>
+    <string name="AyuBotLoginPaste">Вставить из буфера</string>
+    <string name="AyuBotLoginInfo">Telegram не даёт боту загрузить список чатов, контакты и старую переписку. Чаты появятся здесь по мере поступления сообщений и сохранятся на этом устройстве.</string>
+    <string name="AyuBotLoginLink">Войти по токену бота</string>
+    <string name="AyuBotLoginInvalid">Это не похоже на токен бота. Он выглядит так: 123456789:AA…</string>
+    <string name="AyuBotLoginErrorInvalid">Этот токен бота недействителен.</string>
+    <string name="AyuBotLoginErrorExpired">Этот токен бота отозван. Получите новый у @BotFather.</string>
+    <string name="AyuBotAccount">Аккаунт бота</string>
+    <string name="AyuBotNoDialogs">Пока нет чатов</string>
+    <string name="AyuBotNoDialogsInfo">Чаты появятся здесь, когда кто-нибудь напишет вашему боту или бота добавят в группу.</string>
+    <string name="AyuBotUnavailable">Недоступно для аккаунтов-ботов</string>
+    <string name="AyuBotOpenChat">Открыть чат</string>
+    <string name="AyuBotOpenChatInfo">Введите @username, ссылку t.me или числовой ID.</string>
+    <string name="AyuBotOpenChatHint">@username или ID</string>
+    <string name="AyuBotOpenChatNotFound">Такой чат не найден.</string>
+    <string name="AyuBotHistoryUnavailable">Для аккаунта-бота старые сообщения загрузить нельзя.</string>
 </resources>

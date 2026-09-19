@@ -66,6 +66,15 @@ public class AyuConfig {
     public static boolean showExpireButton = true;
     public static boolean disableCrashlytics = false;
 
+    // ---------------- Dynamic Island ----------------
+    public static boolean dynamicIsland = true;
+    public static boolean islandCalls = true;
+    public static boolean islandMusic = true;
+    public static boolean islandRecording = true;
+    public static boolean islandDownloads = true;
+    public static boolean islandGhost = true;
+    public static boolean islandIdle = false;
+
     // ---------------- Regex filters ----------------
     public static boolean regexFiltersEnabled = false;
     public static boolean regexFiltersInChats = false;
@@ -133,6 +142,14 @@ public class AyuConfig {
         disableEmulatorDetection = preferences.getBoolean("disableEmulatorDetection", true);
         showExpireButton = preferences.getBoolean("showExpireButton", true);
         disableCrashlytics = preferences.getBoolean("disableCrashlytics", false);
+
+        dynamicIsland = preferences.getBoolean("dynamicIsland", true);
+        islandCalls = preferences.getBoolean("islandCalls", true);
+        islandMusic = preferences.getBoolean("islandMusic", true);
+        islandRecording = preferences.getBoolean("islandRecording", true);
+        islandDownloads = preferences.getBoolean("islandDownloads", true);
+        islandGhost = preferences.getBoolean("islandGhost", true);
+        islandIdle = preferences.getBoolean("islandIdle", false);
 
         regexFiltersEnabled = preferences.getBoolean("regexFiltersEnabled", false);
         regexFiltersInChats = preferences.getBoolean("regexFiltersInChats", false);
@@ -214,6 +231,7 @@ public class AyuConfig {
                 .putBoolean("sendUploadProgress", sendUploadProgress)
                 .putBoolean("sendOfflinePacketAfterOnline", sendOfflinePacketAfterOnline)
                 .apply();
+        AyuGhostHelper.onOnlineSettingsChanged();
         AyuState.onGhostModeChanged();
     }
 
@@ -223,9 +241,9 @@ public class AyuConfig {
 
     public static void setSendReadPackets(boolean v) { sendReadPackets = v; putBoolean("sendReadPackets", v); AyuState.onGhostModeChanged(); }
     public static void setSendReadStories(boolean v) { sendReadStories = v; putBoolean("sendReadStories", v); AyuState.onGhostModeChanged(); }
-    public static void setSendOnlinePackets(boolean v) { sendOnlinePackets = v; putBoolean("sendOnlinePackets", v); AyuState.onGhostModeChanged(); }
+    public static void setSendOnlinePackets(boolean v) { sendOnlinePackets = v; putBoolean("sendOnlinePackets", v); AyuGhostHelper.onOnlineSettingsChanged(); AyuState.onGhostModeChanged(); }
     public static void setSendUploadProgress(boolean v) { sendUploadProgress = v; putBoolean("sendUploadProgress", v); AyuState.onGhostModeChanged(); }
-    public static void setSendOfflinePacketAfterOnline(boolean v) { sendOfflinePacketAfterOnline = v; putBoolean("sendOfflinePacketAfterOnline", v); AyuState.onGhostModeChanged(); }
+    public static void setSendOfflinePacketAfterOnline(boolean v) { sendOfflinePacketAfterOnline = v; putBoolean("sendOfflinePacketAfterOnline", v); AyuGhostHelper.onOnlineSettingsChanged(); AyuState.onGhostModeChanged(); }
     public static void setMarkReadAfterSend(boolean v) { markReadAfterSend = v; putBoolean("markReadAfterSend", v); }
     public static void setMarkReadAfterAction(boolean v) { markReadAfterAction = v; putBoolean("markReadAfterAction", v); }
     public static void setUseScheduledMessages(boolean v) { useScheduledMessages = v; putBoolean("useScheduledMessages", v); }
@@ -254,6 +272,14 @@ public class AyuConfig {
     public static void setDisableEmulatorDetection(boolean v) { disableEmulatorDetection = v; putBoolean("disableEmulatorDetection", v); }
     public static void setShowExpireButton(boolean v) { showExpireButton = v; putBoolean("showExpireButton", v); }
     public static void setDisableCrashlytics(boolean v) { disableCrashlytics = v; putBoolean("disableCrashlytics", v); }
+
+    public static void setDynamicIsland(boolean v) { dynamicIsland = v; putBoolean("dynamicIsland", v); }
+    public static void setIslandCalls(boolean v) { islandCalls = v; putBoolean("islandCalls", v); }
+    public static void setIslandMusic(boolean v) { islandMusic = v; putBoolean("islandMusic", v); }
+    public static void setIslandRecording(boolean v) { islandRecording = v; putBoolean("islandRecording", v); }
+    public static void setIslandDownloads(boolean v) { islandDownloads = v; putBoolean("islandDownloads", v); }
+    public static void setIslandGhost(boolean v) { islandGhost = v; putBoolean("islandGhost", v); }
+    public static void setIslandIdle(boolean v) { islandIdle = v; putBoolean("islandIdle", v); }
 
     public static void setRegexFiltersEnabled(boolean v) { regexFiltersEnabled = v; putBoolean("regexFiltersEnabled", v); }
     public static void setRegexFiltersInChats(boolean v) { regexFiltersInChats = v; putBoolean("regexFiltersInChats", v); }

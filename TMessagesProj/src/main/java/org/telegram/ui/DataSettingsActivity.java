@@ -118,6 +118,10 @@ public class DataSettingsActivity extends BaseFragment {
     private int downloadAcceleratorRow;
     @Keep
     private int downloadThreadsRow;
+    @Keep
+    private int uploadAcceleratorRow;
+    @Keep
+    private int uploadThreadsRow;
     private int downloadAcceleratorInfoRow;
 
     private int rowCount;
@@ -187,6 +191,12 @@ public class DataSettingsActivity extends BaseFragment {
             downloadThreadsRow = rowCount++;
         } else {
             downloadThreadsRow = -1;
+        }
+        uploadAcceleratorRow = rowCount++;
+        if (SharedConfig.enableUploadAccelerator) {
+            uploadThreadsRow = rowCount++;
+        } else {
+            uploadThreadsRow = -1;
         }
         downloadAcceleratorInfoRow = rowCount++;
 
@@ -566,6 +576,39 @@ public class DataSettingsActivity extends BaseFragment {
                 showDialog(builder.create());
             } else if (position == proxyRow) {
                 presentFragment(new ProxyListActivity());
+            } else if (position == uploadAcceleratorRow) {
+                SharedConfig.toggleUploadAccelerator();
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(SharedConfig.enableUploadAccelerator);
+                }
+                updateRows(false);
+                if (listAdapter != null) {
+                    listAdapter.notifyDataSetChanged();
+                }
+            } else if (position == uploadThreadsRow) {
+                if (getParentActivity() == null) {
+                    return;
+                }
+                AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+                builder.setTitle("Upload Acceleration Threads");
+                builder.setItems(new CharSequence[]{
+                        "4x Standard (512 KB parts)",
+                        "8x Fast (512 KB parts - Default)",
+                        "12x Turbo (512 KB parts)",
+                        "16x Maximum (512 KB parts)"
+                }, (dialog, which) -> {
+                    int threads = 8;
+                    if (which == 0) threads = 4;
+                    else if (which == 1) threads = 8;
+                    else if (which == 2) threads = 12;
+                    else if (which == 3) threads = 16;
+                    SharedConfig.setUploadThreadsCount(threads);
+                    if (listAdapter != null) {
+                        listAdapter.notifyItemChanged(position);
+                    }
+                });
+                builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+                showDialog(builder.create());
             } else if (position == downloadAcceleratorRow) {
                 SharedConfig.toggleDownloadAccelerator();
                 if (view instanceof TextCheckCell) {
@@ -781,7 +824,14 @@ public class DataSettingsActivity extends BaseFragment {
                         else if (SharedConfig.downloadThreadsCount == 8) threadsStr += " (Fast)";
                         else if (SharedConfig.downloadThreadsCount == 12) threadsStr += " (Turbo)";
                         else if (SharedConfig.downloadThreadsCount == 16) threadsStr += " (Max)";
-                        textCell.setTextAndValue("Parallel Connections", threadsStr, false);
+                        textCell.setTextAndValue("Download Connections", threadsStr, true);
+                    } else if (position == uploadThreadsRow) {
+                        String threadsStr = SharedConfig.uploadThreadsCount + "x Threads";
+                        if (SharedConfig.uploadThreadsCount == 4) threadsStr += " (Standard)";
+                        else if (SharedConfig.uploadThreadsCount == 8) threadsStr += " (Fast)";
+                        else if (SharedConfig.uploadThreadsCount == 12) threadsStr += " (Turbo)";
+                        else if (SharedConfig.uploadThreadsCount == 16) threadsStr += " (Max)";
+                        textCell.setTextAndValue("Upload Connections", threadsStr, false);
                     }
                     break;
                 }
@@ -802,7 +852,7 @@ public class DataSettingsActivity extends BaseFragment {
                     } else if (position == saveToGallerySectionRow) {
                         headerCell.setText(LocaleController.getString(R.string.SaveToGallerySettings));
                     } else if (position == downloadAcceleratorSectionRow) {
-                        headerCell.setText("Download Accelerator");
+                        headerCell.setText("Download & Upload Accelerator");
                     }
                     break;
                 }
@@ -821,7 +871,9 @@ public class DataSettingsActivity extends BaseFragment {
                     } else if (position == autoplayVideoRow) {
                         checkCell.setTextAndCheck(LocaleController.getString(R.string.AutoplayVideo), SharedConfig.isAutoplayVideo(), false);
                     } else if (position == downloadAcceleratorRow) {
-                        checkCell.setTextAndCheck("Multi-Connection Accelerator", SharedConfig.enableDownloadAccelerator, downloadThreadsRow != -1);
+                        checkCell.setTextAndCheck("Download Accelerator", SharedConfig.enableDownloadAccelerator, true);
+                    } else if (position == uploadAcceleratorRow) {
+                        checkCell.setTextAndCheck("Upload Accelerator", SharedConfig.enableUploadAccelerator, uploadThreadsRow != -1);
                     }
                     break;
                 }
@@ -830,7 +882,7 @@ public class DataSettingsActivity extends BaseFragment {
                     if (position == enableAllStreamInfoRow) {
                         cell.setText(LocaleController.getString(R.string.EnableAllStreamingInfo));
                     } else if (position == downloadAcceleratorInfoRow) {
-                        cell.setText("Downloads files using multiple parallel MTProto connection streams to achieve maximum transfer speed.");
+                        cell.setText("Transfers files over multiple parallel MTProto connections with 512 KB parts to bypass per-connection speed limits. Disable if you are on a metered or unstable network.");
                     }
                     break;
                 }
@@ -942,6 +994,8 @@ public class DataSettingsActivity extends BaseFragment {
                     checkCell.setChecked(SharedConfig.isAutoplayVideo());
                 } else if (position == downloadAcceleratorRow) {
                     checkCell.setChecked(SharedConfig.enableDownloadAccelerator);
+                } else if (position == uploadAcceleratorRow) {
+                    checkCell.setChecked(SharedConfig.enableUploadAccelerator);
                 }
             }
         }
@@ -950,7 +1004,7 @@ public class DataSettingsActivity extends BaseFragment {
             return position == mobileRow || position == roamingRow || position == wifiRow || position == storageUsageRow || position == useLessDataForCallsRow || position == dataUsageRow || position == proxyRow || position == clearDraftsRow ||
                     position == enableCacheStreamRow || position == enableStreamRow || position == enableAllStreamRow || position == enableMkvRow || position == quickRepliesRow || position == autoplayVideoRow || position == autoplayGifsRow ||
                     position == storageNumRow || position == saveToGalleryGroupsRow || position == saveToGalleryPeerRow || position == saveToGalleryChannelsRow || position == resetDownloadRow ||
-                    position == downloadAcceleratorRow || position == downloadThreadsRow;
+                    position == downloadAcceleratorRow || position == downloadThreadsRow || position == uploadAcceleratorRow || position == uploadThreadsRow;
         }
 
         @Override
@@ -995,7 +1049,7 @@ public class DataSettingsActivity extends BaseFragment {
                 return 0;
             } else if (position == mediaDownloadSectionRow || position == streamSectionRow || position == callsSectionRow || position == usageSectionRow || position == proxySectionRow || position == autoplayHeaderRow || position == saveToGallerySectionRow || position == downloadAcceleratorSectionRow) {
                 return 2;
-            } else if (position == enableCacheStreamRow || position == enableStreamRow || position == enableAllStreamRow || position == enableMkvRow || position == autoplayGifsRow || position == autoplayVideoRow || position == downloadAcceleratorRow) {
+            } else if (position == enableCacheStreamRow || position == enableStreamRow || position == enableAllStreamRow || position == enableMkvRow || position == autoplayGifsRow || position == autoplayVideoRow || position == downloadAcceleratorRow || position == uploadAcceleratorRow) {
                 return 3;
             } else if (position == enableAllStreamInfoRow || position == downloadAcceleratorInfoRow) {
                 return 4;

@@ -246,6 +246,20 @@ public class UserConfig extends BaseController {
         }
     }
 
+    /**
+     * True when this account slot was logged in with a bot token (auth.importBotAuthorization).
+     * Derived from the stored user, so it survives restarts without extra persistence.
+     */
+    public boolean isBotAccount() {
+        synchronized (sync) {
+            return currentUser != null && currentUser.bot;
+        }
+    }
+
+    public static boolean isBotAccount(int account) {
+        return account >= 0 && account < MAX_ACCOUNT_COUNT && getInstance(account).isBotAccount();
+    }
+
     public String getClientPhone() {
         synchronized (sync) {
             return currentUser != null && currentUser.phone != null ? currentUser.phone : "";

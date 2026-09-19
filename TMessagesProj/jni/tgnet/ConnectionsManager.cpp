@@ -2431,10 +2431,10 @@ inline void addMessageToDatacenter(uint32_t datacenterId, NetworkMessage *networ
 
 // since we no longer save 3 global refs per request, can we make request count limits higher?
 #define MAX_GENERAL_REQUESTS 60 * 8
-#define MAX_DOWNLOAD_REQUESTS_CANCELS 24 * 2
-#define MAX_DOWNLOAD_REQUESTS_PREMIUM 32 * 2
-#define MAX_DOWNLOAD_REQUESTS 16 * 2
-#define MAX_UPLOAD_REQUESTS 10 * 3
+#define MAX_DOWNLOAD_REQUESTS_CANCELS 24 * 4
+#define MAX_DOWNLOAD_REQUESTS_PREMIUM 32 * 4
+#define MAX_DOWNLOAD_REQUESTS 16 * 4
+#define MAX_UPLOAD_REQUESTS 10 * 4
 
 void ConnectionsManager::processRequestQueue(uint32_t connectionTypes, uint32_t dc) {
     genericMessagesToDatacenters.clear();

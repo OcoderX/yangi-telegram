@@ -252,4 +252,45 @@
 
     <!-- AyuGram: keep-alive xizmati -->
     <string name="AyuKeepAliveNotification">AyuGram keep-alive</string>
+    <!-- AyuGram: Dynamic Island -->
+    <string name="AyuDynamicIsland">Dynamic Island</string>
+    <string name="AyuDynamicIslandInfo">Ekran tepasida iPhone uslubidagi orolcha: joriy qo\'ng\'iroq, ijro etilayotgan audio, ovozli yozuv va yuklab olishlar ko\'rsatiladi.</string>
+    <string name="AyuIslandEnable">Dynamic Island\'ni yoqish</string>
+    <string name="AyuIslandSources">Orolchada ko\'rsatish</string>
+    <string name="AyuIslandCalls">Qo\'ng\'iroqlar va ovozli chatlar</string>
+    <string name="AyuIslandMusic">Musiqa va ovozli xabarlar</string>
+    <string name="AyuIslandRecording">Ovoz yozish</string>
+    <string name="AyuIslandDownloads">Yuklab olishlar</string>
+    <string name="AyuIslandGhost">Ghost rejimi ko\'rsatkichi</string>
+    <string name="AyuIslandSourcesInfo">Orolchani bosib kengaytiring va tezkor amallarni ko\'ring. Tashqarisiga bosing yoki bir necha soniya kuting — u yig\'iladi.</string>
+    <string name="AyuIslandIdle">Kamera atrofida doim ko\'rsatish</string>
+    <string name="AyuIslandIdleInfo">Hech narsa bo\'lmaganda ham kamera kesigi atrofida kichik qora orolcha turadi.</string>
+    <string name="AyuIslandRecordingText">Yozilmoqda…</string>
+    <string name="AyuIslandDownloadingFiles_one">%1$d ta fayl yuklanmoqda</string>
+    <string name="AyuIslandDownloadingFiles_other">%1$d ta fayl yuklanmoqda</string>
+    <string name="AyuIslandCancelAll">Barchasini bekor qilish</string>
+    <string name="AyuIslandGhostOn">Ghost rejimi yoqilgan</string>
+    <string name="AyuIslandGhostInfo">O\'qilganlik, onlayn holat va yozish belgisi yashirilgan</string>
+    <string name="AyuIslandGhostOff">O\'chirish</string>
+
+    <!-- AyuGram: bot token orqali kirish -->
+    <string name="AyuBotLoginTitle">Bot tokeni</string>
+    <string name="AyuBotLoginHeader">Bot sifatida kirish</string>
+    <string name="AyuBotLoginSubtitle">@BotFather bergan tokenni joylashtiring. Bot alohida akkaunt sifatida qo\'shiladi.</string>
+    <string name="AyuBotLoginField">Bot tokeni</string>
+    <string name="AyuBotLoginPaste">Buferdan joylashtirish</string>
+    <string name="AyuBotLoginInfo">Telegram botga chatlar ro\'yxatini, kontaktlarni va eski yozishmalarni yuklab olishga ruxsat bermaydi. Chatlar xabar kelgan sari shu yerda paydo bo\'ladi va qurilmada saqlanadi.</string>
+    <string name="AyuBotLoginLink">Bot tokeni bilan kirish</string>
+    <string name="AyuBotLoginInvalid">Bu bot tokeniga o\'xshamaydi. U 123456789:AA… ko\'rinishida bo\'lishi kerak.</string>
+    <string name="AyuBotLoginErrorInvalid">Bu bot tokeni yaroqsiz.</string>
+    <string name="AyuBotLoginErrorExpired">Bu bot tokeni bekor qilingan. @BotFather dan yangisini oling.</string>
+    <string name="AyuBotAccount">Bot akkaunti</string>
+    <string name="AyuBotNoDialogs">Hozircha chatlar yo\'q</string>
+    <string name="AyuBotNoDialogsInfo">Kimdir botingizga yozganda yoki bot guruhga qo\'shilganda chatlar shu yerda paydo bo\'ladi.</string>
+    <string name="AyuBotUnavailable">Bot akkauntlari uchun mavjud emas</string>
+    <string name="AyuBotOpenChat">Chatni ochish</string>
+    <string name="AyuBotOpenChatInfo">@username, t.me havolasi yoki raqamli ID kiriting.</string>
+    <string name="AyuBotOpenChatHint">@username yoki ID</string>
+    <string name="AyuBotOpenChatNotFound">Bunday chat topilmadi.</string>
+    <string name="AyuBotHistoryUnavailable">Bot akkaunti uchun eski xabarlarni yuklab bo\'lmaydi.</string>
 </resources>

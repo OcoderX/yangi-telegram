@@ -1,5 +1,7 @@
 package org.telegram.messenger.ayu;
 
+import android.os.SystemClock;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.NotificationCenter;
 
@@ -10,24 +12,27 @@ import java.util.Map;
 
 /**
  * Transient runtime state for AyuGram features (not persisted).
+ * Every accessor is thread-safe: the read-receipt overrides are consulted from the UI thread,
+ * the stage queue and the storage queue at the same time.
  */
 public class AyuState {
 
-    /** One-shot override that lets the next read-history call go through even in ghost mode
-     *  (e.g. "mark read after send", "read on interact", manual "mark as read" from a menu). */
-    private static boolean allowReadPacket;
-    private static long allowReadPacketDialogId;
-    private static boolean allowReadPacketReset = true;
+    /** dialogId used by {@link #setAllowReadPacket(boolean, boolean)} to allow every dialog */
+    private static final long ANY_DIALOG = 0;
 
-    /** Set while the client is sending a message that was rewritten as "scheduled" by useScheduledMessages. */
-    public static boolean automaticallyScheduled;
+    /**
+     * Per-dialog one-shot overrides that let a read-history call go through even in ghost mode
+     * (e.g. "mark read after send", "read on interact", manual "mark as read" from a menu).
+     * value = true when the override must be consumed by the first matching read.
+     */
+    private static final HashMap<Long, Boolean> allowReadPackets = new HashMap<>();
 
     /** One-shot flag: the next local deletion must NOT be written into the AyuGram history database
      *  (used by "delete locally" on messages that are already stored as deleted). */
-    public static boolean skipNextSave;
+    public static volatile boolean skipNextSave;
 
     /** reads and clears {@link #skipNextSave} */
-    public static boolean consumeSkipNextSave() {
+    public static synchronized boolean consumeSkipNextSave() {
         if (skipNextSave) {
             skipNextSave = false;
             return true;
@@ -35,37 +40,59 @@ public class AyuState {
         return false;
     }
 
+    /** allow (or forbid) read packets for every dialog */
     public static void setAllowReadPacket(boolean allow, boolean reset) {
-        allowReadPacket = allow;
-        allowReadPacketReset = reset;
-        allowReadPacketDialogId = 0;
-    }
-
-    public static void setAllowReadPacket(long dialogId, boolean allow, boolean reset) {
-        allowReadPacket = allow;
-        allowReadPacketReset = reset;
-        allowReadPacketDialogId = dialogId;
+        setAllowReadPacket(ANY_DIALOG, allow, reset);
     }
 
     /**
-     * Whether a read packet may be sent for the given dialog. Honors the ghost mode option and the one-shot override.
+     * @param dialogId dialog the override applies to, 0 = every dialog
+     * @param allow    true to permit read packets, false to remove a previously granted override
+     * @param reset    true = the override is consumed by the first read that uses it
+     */
+    public static void setAllowReadPacket(long dialogId, boolean allow, boolean reset) {
+        synchronized (allowReadPackets) {
+            if (allow) {
+                allowReadPackets.put(dialogId, reset);
+            } else {
+                allowReadPackets.remove(dialogId);
+            }
+        }
+    }
+
+    /**
+     * Whether a read packet may be sent for the given dialog. Honors the ghost mode option and the one-shot overrides.
      */
     public static boolean isAllowReadPacket(long dialogId) {
         if (AyuConfig.sendReadPackets) {
             return true;
         }
-        if (allowReadPacket && (allowReadPacketDialogId == 0 || allowReadPacketDialogId == dialogId)) {
-            if (allowReadPacketReset) {
-                allowReadPacket = false;
-                allowReadPacketDialogId = 0;
+        synchronized (allowReadPackets) {
+            if (allowReadPackets.isEmpty()) {
+                return false;
             }
-            return true;
+            Boolean reset = allowReadPackets.get(dialogId);
+            if (reset != null) {
+                if (reset) {
+                    allowReadPackets.remove(dialogId);
+                }
+                return true;
+            }
+            if (dialogId != ANY_DIALOG) {
+                reset = allowReadPackets.get(ANY_DIALOG);
+                if (reset != null) {
+                    if (reset) {
+                        allowReadPackets.remove(ANY_DIALOG);
+                    }
+                    return true;
+                }
+            }
         }
         return false;
     }
 
     public static boolean isAllowReadPacket() {
-        return isAllowReadPacket(0);
+        return isAllowReadPacket(ANY_DIALOG);
     }
 
     /**
@@ -123,10 +150,42 @@ public class AyuState {
         }
     }
 
-    /** marks the message that is being sent right now as automatically rescheduled by useScheduledMessages */
-    public static void markAutomaticallyScheduled() {
-        automaticallyScheduled = true;
-        AndroidUtilities.runOnUIThread(() -> automaticallyScheduled = false);
+    // ---------------- "send messages as scheduled" ----------------
+
+    /** dialogId -> elapsedRealtime deadline until which sends to that dialog count as automatically scheduled */
+    private static final HashMap<Long, Long> automaticallyScheduled = new HashMap<>();
+
+    /** extra grace period added to the schedule delay so the server round-trip is covered too */
+    private static final long AUTO_SCHEDULED_GRACE_MS = 30_000L;
+
+    /**
+     * Marks the dialog as having a message that was rescheduled by useScheduledMessages, so that the chat UI
+     * does not jump to the "scheduled messages" screen when the local copy shows up.
+     */
+    public static void markAutomaticallyScheduled(long dialogId, int delaySeconds) {
+        long deadline = SystemClock.elapsedRealtime() + delaySeconds * 1000L + AUTO_SCHEDULED_GRACE_MS;
+        synchronized (automaticallyScheduled) {
+            Long current = automaticallyScheduled.get(dialogId);
+            if (current == null || current < deadline) {
+                automaticallyScheduled.put(dialogId, deadline);
+            }
+        }
+    }
+
+    /** whether a scheduled message that shows up in the given dialog right now was created automatically */
+    public static boolean isAutomaticallyScheduled(long dialogId) {
+        long now = SystemClock.elapsedRealtime();
+        synchronized (automaticallyScheduled) {
+            Long deadline = automaticallyScheduled.get(dialogId);
+            if (deadline == null) {
+                return false;
+            }
+            if (deadline < now) {
+                automaticallyScheduled.remove(dialogId);
+                return false;
+            }
+            return true;
+        }
     }
 
     public static void onGhostModeChanged() {

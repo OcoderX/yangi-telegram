@@ -258,7 +258,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             VIEW_CODE_FRAGMENT_SMS = 15,
             VIEW_CODE_WORD = 16,
             VIEW_CODE_PHRASE = 17,
-            VIEW_PAY = 18;
+            VIEW_PAY = 18,
+            VIEW_BOT_TOKEN = 19;
 
     public final static int COUNTRY_STATE_NOT_SET_OR_VALID = 0,
             COUNTRY_STATE_EMPTY = 1,
@@ -306,7 +307,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             VIEW_CODE_FRAGMENT_SMS,
             VIEW_CODE_WORD,
             VIEW_CODE_PHRASE,
-            VIEW_PAY
+            VIEW_PAY,
+            VIEW_BOT_TOKEN
     })
     private @interface ViewNumber {}
 
@@ -319,7 +321,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     @ViewNumber
     private int currentViewNum;
-    private final SlideView[] views = new SlideView[19];
+    private final SlideView[] views = new SlideView[20];
     private CustomPhoneKeyboardView keyboardView;
     private ValueAnimator keyboardAnimator;
     private boolean paid;
@@ -685,6 +687,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         views[VIEW_CODE_WORD] = new LoginActivityPhraseView(context, AUTH_TYPE_WORD);
         views[VIEW_CODE_PHRASE] = new LoginActivityPhraseView(context, AUTH_TYPE_PHRASE);
         views[VIEW_PAY] = new LoginPayView(context);
+        views[VIEW_BOT_TOKEN] = new LoginActivityBotTokenView(context);
 
         for (int a = 0; a < views.length; a++) {
             views[a].setVisibility(a == 0 ? View.VISIBLE : View.GONE);
@@ -812,7 +815,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 currentDoneType = DONE_TYPE_FLOATING;
                 boolean needFloatingButton = a == VIEW_PHONE_INPUT || a == VIEW_REGISTER ||
                         a == VIEW_PASSWORD || a == VIEW_NEW_PASSWORD_STAGE_1 || a == VIEW_NEW_PASSWORD_STAGE_2 ||
-                        a == VIEW_ADD_EMAIL;
+                        a == VIEW_ADD_EMAIL || a == VIEW_BOT_TOKEN;
                 showDoneButton(needFloatingButton, false);
                 if (a == VIEW_CODE_MESSAGE || a == VIEW_CODE_SMS || a == VIEW_CODE_FLASH_CALL || a == VIEW_CODE_CALL) {
                     currentDoneType = DONE_TYPE_ACTION;
@@ -1501,7 +1504,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     public void setPage(@ViewNumber int page, boolean animated, Bundle params, boolean back) {
         boolean needFloatingButton = page == VIEW_PHONE_INPUT || page == VIEW_REGISTER || page == VIEW_PASSWORD ||
-                page == VIEW_NEW_PASSWORD_STAGE_1 || page == VIEW_NEW_PASSWORD_STAGE_2 || page == VIEW_ADD_EMAIL || page == VIEW_CODE_PHRASE || page == VIEW_CODE_WORD;
+                page == VIEW_NEW_PASSWORD_STAGE_1 || page == VIEW_NEW_PASSWORD_STAGE_2 || page == VIEW_ADD_EMAIL || page == VIEW_CODE_PHRASE || page == VIEW_CODE_WORD || page == VIEW_BOT_TOKEN;
         if (page == currentViewNum) {
             animated = false;
         }
@@ -1967,6 +1970,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         private ImageView chevronRight;
         private CheckBoxCell syncContactsBox;
         private CheckBoxCell testBackendCheckBox;
+        private TextView botTokenLoginView;
 
         @CountryState
         private int countryState = COUNTRY_STATE_NOT_SET_OR_VALID;
@@ -2455,6 +2459,16 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             });
 
             int bottomMargin = 72;
+            if (activityMode == MODE_LOGIN) {
+                botTokenLoginView = new TextView(context);
+                botTokenLoginView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+                botTokenLoginView.setGravity(Gravity.CENTER);
+                botTokenLoginView.setText(getString(R.string.AyuBotLoginLink));
+                botTokenLoginView.setPadding(dp(16), dp(14), dp(16), dp(14));
+                botTokenLoginView.setOnClickListener(v -> setPage(VIEW_BOT_TOKEN, true, null, false));
+                addView(botTokenLoginView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 16, 4, 16, 0));
+                bottomMargin -= 24;
+            }
             if (newAccount && activityMode == MODE_LOGIN) {
                 syncContactsBox = new CheckBoxCell(context, 2);
                 syncContactsBox.setText(getString("SyncContacts", R.string.SyncContacts), "", syncContacts, false);
@@ -2688,6 +2702,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             codeField.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated));
 
             codeDividerView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhiteInputField));
+
+            if (botTokenLoginView != null) {
+                botTokenLoginView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
+            }
 
             phoneField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             phoneField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
@@ -10317,6 +10335,235 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         public void onHide() {
             super.onHide();
             stopPoll();
+        }
+    }
+
+    /**
+     * Login with a bot token (auth.importBotAuthorization) instead of a phone number.
+     * The bot ends up in a regular account slot; {@link UserConfig#isBotAccount()} then gates
+     * everything the server refuses to do for bots.
+     */
+    public class LoginActivityBotTokenView extends SlideView {
+
+        private final TextView titleView;
+        private final TextView subtitleView;
+        private final OutlineTextContainerView tokenOutlineView;
+        private final EditTextBoldCursor tokenField;
+        private final TextView pasteView;
+        private final TextView infoView;
+
+        private boolean requesting;
+
+        public LoginActivityBotTokenView(Context context) {
+            super(context);
+
+            setOrientation(VERTICAL);
+
+            titleView = new TextView(context);
+            titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
+            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setText(getString(R.string.AyuBotLoginHeader));
+            titleView.setGravity(Gravity.CENTER);
+            titleView.setLineSpacing(dp(2), 1.0f);
+            addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 32, 16, 32, 0));
+
+            subtitleView = new TextView(context);
+            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            subtitleView.setGravity(Gravity.CENTER);
+            subtitleView.setLineSpacing(dp(2), 1.0f);
+            subtitleView.setText(getString(R.string.AyuBotLoginSubtitle));
+            addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 32, 8, 32, 0));
+
+            tokenOutlineView = new OutlineTextContainerView(context);
+            tokenOutlineView.setText(getString(R.string.AyuBotLoginField));
+
+            tokenField = new EditTextBoldCursor(context);
+            tokenField.setCursorSize(dp(20));
+            tokenField.setCursorWidth(1.5f);
+            tokenField.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+            tokenField.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            tokenField.setMaxLines(1);
+            tokenField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+            tokenField.setOnFocusChangeListener((v, hasFocus) -> tokenOutlineView.animateSelection(hasFocus ? 1f : 0f));
+            tokenField.setBackground(null);
+            tokenField.setPadding(dp(16), dp(16), dp(16), dp(16));
+            tokenField.setOnEditorActionListener((textView, i, keyEvent) -> {
+                if (i == EditorInfo.IME_ACTION_DONE) {
+                    onNextPressed(null);
+                    return true;
+                }
+                return false;
+            });
+
+            tokenOutlineView.attachEditText(tokenField);
+            tokenOutlineView.addView(tokenField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
+            addView(tokenOutlineView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 58, 16, 24, 16, 0));
+
+            pasteView = new TextView(context);
+            pasteView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            pasteView.setGravity(Gravity.CENTER);
+            pasteView.setText(getString(R.string.AyuBotLoginPaste));
+            pasteView.setPadding(dp(16), dp(12), dp(16), dp(12));
+            pasteView.setOnClickListener(v -> pasteFromClipboard());
+            addView(pasteView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 16, 4, 16, 0));
+
+            infoView = new TextView(context);
+            infoView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            infoView.setGravity(Gravity.CENTER);
+            infoView.setLineSpacing(dp(2), 1.0f);
+            infoView.setText(getString(R.string.AyuBotLoginInfo));
+            addView(infoView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 24, 16, 24, 0));
+
+            Space space = new Space(context);
+            addView(space, LayoutHelper.createLinear(0, 0, 1f));
+        }
+
+        private void pasteFromClipboard() {
+            try {
+                ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null && clipboard.hasPrimaryClip() && clipboard.getPrimaryClip() != null && clipboard.getPrimaryClip().getItemCount() > 0) {
+                    CharSequence text = clipboard.getPrimaryClip().getItemAt(0).coerceToText(getContext());
+                    if (!TextUtils.isEmpty(text)) {
+                        tokenField.setText(text.toString().trim());
+                        tokenField.setSelection(tokenField.length());
+                    }
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+
+        private boolean looksLikeBotToken(String token) {
+            return token != null && token.matches("\\d{3,}:[A-Za-z0-9_\\-]{10,}");
+        }
+
+        @Override
+        public void updateColors() {
+            titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
+            infoView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
+            pasteView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
+            tokenField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            tokenOutlineView.invalidate();
+        }
+
+        @Override
+        public boolean needBackButton() {
+            return true;
+        }
+
+        @Override
+        public String getHeaderName() {
+            return getString(R.string.AyuBotLoginTitle);
+        }
+
+        @Override
+        public void onShow() {
+            super.onShow();
+            AndroidUtilities.runOnUIThread(() -> {
+                if (tokenField != null) {
+                    tokenField.requestFocus();
+                    AndroidUtilities.showKeyboard(tokenField);
+                }
+            }, SHOW_DELAY);
+        }
+
+        @Override
+        public void onCancelPressed() {
+            requesting = false;
+        }
+
+        @Override
+        public void saveStateParams(Bundle bundle) {
+            String token = tokenField != null ? tokenField.getText().toString() : null;
+            if (!TextUtils.isEmpty(token)) {
+                bundle.putString("bottokenview_token", token);
+            }
+        }
+
+        @Override
+        public void restoreStateParams(Bundle bundle) {
+            String token = bundle.getString("bottokenview_token");
+            if (token != null && tokenField != null) {
+                tokenField.setText(token);
+            }
+        }
+
+        @Override
+        public void onNextPressed(String code) {
+            if (requesting || getParentActivity() == null) {
+                return;
+            }
+            final String token = tokenField.getText().toString().trim();
+            if (!looksLikeBotToken(token)) {
+                onFieldError(tokenOutlineView, true);
+                needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString(R.string.AyuBotLoginInvalid));
+                return;
+            }
+            requesting = true;
+            AndroidUtilities.hideKeyboard(tokenField);
+
+            ConnectionsManager.getInstance(currentAccount).cleanup(false);
+
+            final TLRPC.TL_auth_importBotAuthorization req = new TLRPC.TL_auth_importBotAuthorization();
+            req.api_id = BuildVars.APP_ID;
+            req.api_hash = BuildVars.APP_HASH;
+            req.bot_auth_token = token;
+
+            final boolean testBackend = ConnectionsManager.getInstance(currentAccount).isTestBackend();
+            final int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                requesting = false;
+                needHideProgress(false);
+
+                if (error != null) {
+                    onFieldError(tokenOutlineView, true);
+                    if (error.code != -1000) {
+                        needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), botTokenErrorText(error));
+                    }
+                    return;
+                }
+                if (!(response instanceof TLRPC.TL_auth_authorization) || ((TLRPC.TL_auth_authorization) response).user == null) {
+                    onFieldError(tokenOutlineView, true);
+                    needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString(R.string.ErrorOccurred));
+                    return;
+                }
+
+                final TLRPC.TL_auth_authorization auth = (TLRPC.TL_auth_authorization) response;
+                if (getParentActivity() instanceof LaunchActivity) {
+                    for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                        UserConfig userConfig = UserConfig.getInstance(a);
+                        if (a == currentAccount || !userConfig.isClientActivated()) {
+                            continue;
+                        }
+                        if (userConfig.getClientUserId() == auth.user.id && ConnectionsManager.getInstance(a).isTestBackend() == testBackend) {
+                            if (UserConfig.selectedAccount != a) {
+                                ((LaunchActivity) getParentActivity()).switchToAccount(a, true);
+                            }
+                            finishFragment();
+                            return;
+                        }
+                    }
+                }
+                onAuthSuccess(auth);
+            }), ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin |
+                    ConnectionsManager.RequestFlagTryDifferentDc | ConnectionsManager.RequestFlagEnableUnauthorized);
+            needShowProgress(reqId);
+        }
+
+        private String botTokenErrorText(TLRPC.TL_error error) {
+            if (error == null || error.text == null) {
+                return getString(R.string.ErrorOccurred);
+            }
+            if (error.text.contains("ACCESS_TOKEN_INVALID") || error.text.contains("AUTH_TOKEN_INVALID")) {
+                return getString(R.string.AyuBotLoginErrorInvalid);
+            }
+            if (error.text.contains("ACCESS_TOKEN_EXPIRED")) {
+                return getString(R.string.AyuBotLoginErrorExpired);
+            }
+            if (error.text.contains("FLOOD_WAIT")) {
+                return getString(R.string.FloodWait);
+            }
+            return error.text;
         }
     }
 

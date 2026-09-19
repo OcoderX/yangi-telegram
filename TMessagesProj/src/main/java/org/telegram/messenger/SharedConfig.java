@@ -323,6 +323,8 @@ public class SharedConfig {
     public static boolean bottomNavigationFolders = true;
     public static boolean enableDownloadAccelerator = true;
     public static int downloadThreadsCount = 8;
+    public static boolean enableUploadAccelerator = true;
+    public static int uploadThreadsCount = 8;
     public static int maxParallelActiveFiles = 4;
     public static int fontSize = 16;
     public static boolean fontSizeIsDefault;
@@ -628,6 +630,8 @@ public class SharedConfig {
             bottomNavigationFolders = preferences.getBoolean("bottomNavigationFolders", true);
             enableDownloadAccelerator = preferences.getBoolean("enableDownloadAccelerator", true);
             downloadThreadsCount = preferences.getInt("downloadThreadsCount", 8);
+            enableUploadAccelerator = preferences.getBoolean("enableUploadAccelerator", true);
+            uploadThreadsCount = preferences.getInt("uploadThreadsCount", 8);
             maxParallelActiveFiles = preferences.getInt("maxParallelActiveFiles", 4);
             forceForumTabs = preferences.getBoolean("forceForumTabs", false);
             fastWallpaperDisabled = preferences.getBoolean("fastWallpaperDisabled", false);
@@ -1195,6 +1199,22 @@ public class SharedConfig {
         SharedPreferences preferences = MessagesController.getGlobalMainSettings();
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("downloadThreadsCount", downloadThreadsCount);
+        editor.apply();
+    }
+
+    public static void toggleUploadAccelerator() {
+        enableUploadAccelerator = !enableUploadAccelerator;
+        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("enableUploadAccelerator", enableUploadAccelerator);
+        editor.apply();
+    }
+
+    public static void setUploadThreadsCount(int count) {
+        uploadThreadsCount = Math.max(4, Math.min(16, count));
+        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("uploadThreadsCount", uploadThreadsCount);
         editor.apply();
     }
 

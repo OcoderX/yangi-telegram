@@ -135,8 +135,15 @@ public class DialogsEmptyCell extends LinearLayout {
             case TYPE_WELCOME_WITH_CONTACTS:
             case TYPE_WELCOME_NO_CONTACTS:
                 icon = R.raw.utyan_newborn;
-                help = LocaleController.getString(R.string.NoChatsHelp);
-                titleView.setText(LocaleController.getString(R.string.NoChats));
+                if (UserConfig.getInstance(currentAccount).isBotAccount()) {
+                    // a bot cannot start a conversation, so the stock "write to a contact" copy
+                    // would only be misleading
+                    help = LocaleController.getString(R.string.AyuBotNoDialogsInfo);
+                    titleView.setText(LocaleController.getString(R.string.AyuBotNoDialogs));
+                } else {
+                    help = LocaleController.getString(R.string.NoChatsHelp);
+                    titleView.setText(LocaleController.getString(R.string.NoChats));
+                }
                 break;
             case TYPE_FILTER_NO_CHATS_TO_DISPLAY:
                 imageView.setAutoRepeat(false);

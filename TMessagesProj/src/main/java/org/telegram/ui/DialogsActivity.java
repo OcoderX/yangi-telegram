@@ -218,6 +218,7 @@ import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 import org.telegram.ui.bots.BotWebViewSheet;
 import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatAvatarContainer;
 import org.telegram.ui.Components.CombinedDrawable;
@@ -9590,6 +9591,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         getMessagesController().markMentionsAsRead(did, 0);
         getMessagesController().markDialogAsRead(did, dialog.top_message, dialog.top_message, dialog.last_message_date, false, 0, 0, true, 0);
+        // ghost mode: an explicit "mark as read" chosen by the user is always delivered to the server
+        org.telegram.messenger.ayu.AyuGhostHelper.onManualMarkAsRead(currentAccount, did);
 
         if (selectedDialogIndex >= 0) {
             frozenDialogsList.remove(selectedDialogIndex);
@@ -13562,9 +13565,93 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void openWriteContacts() {
+        if (getUserConfig().isBotAccount()) {
+            // a bot has no contact list, so let it jump straight to a @username or a known id
+            openChatByName();
+            return;
+        }
         Bundle args = new Bundle();
         args.putBoolean("destroyAfterSelect", true);
         presentFragment(new ContactsActivity(args));
+    }
+
+    private void openChatByName() {
+        Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        final EditTextBoldCursor editText = new EditTextBoldCursor(context);
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        editText.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
+        editText.setBackgroundDrawable(Theme.createEditTextDrawable(context, true));
+        editText.setHint(LocaleController.getString(R.string.AyuBotOpenChatHint));
+        editText.setSingleLine(true);
+        editText.setPadding(0, AndroidUtilities.dp(4), 0, 0);
+
+        LinearLayout container = new LinearLayout(context);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(AndroidUtilities.dp(24), 0, AndroidUtilities.dp(24), 0);
+        container.addView(editText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 36));
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString(R.string.AyuBotOpenChat));
+        builder.setMessage(LocaleController.getString(R.string.AyuBotOpenChatInfo));
+        builder.setView(container);
+        builder.setPositiveButton(LocaleController.getString(R.string.Open), (dialog, which) -> resolveAndOpenChat(editText.getText().toString()));
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        showDialog(builder.create());
+        AndroidUtilities.runOnUIThread(() -> {
+            editText.requestFocus();
+            AndroidUtilities.showKeyboard(editText);
+        }, 100);
+    }
+
+    private void resolveAndOpenChat(String query) {
+        if (query == null) {
+            return;
+        }
+        query = query.trim();
+        if (TextUtils.isEmpty(query)) {
+            return;
+        }
+        int index = query.lastIndexOf('/');
+        if (index >= 0) {
+            query = query.substring(index + 1);
+        }
+        if (query.startsWith("@")) {
+            query = query.substring(1);
+        }
+        if (TextUtils.isEmpty(query)) {
+            return;
+        }
+        // a bare id only works for a peer the bot already knows, there is no way to fetch an
+        // access_hash for a stranger
+        try {
+            long id = Long.parseLong(query);
+            long dialogId = 0;
+            if (getMessagesController().getUser(id) != null) {
+                dialogId = id;
+            } else if (getMessagesController().getChat(Math.abs(id)) != null) {
+                dialogId = -Math.abs(id);
+            } else if (id < 0 && getMessagesController().getChat(-id) != null) {
+                dialogId = id;
+            }
+            if (dialogId != 0) {
+                Bundle args = new Bundle();
+                if (dialogId > 0) {
+                    args.putLong("user_id", dialogId);
+                } else {
+                    args.putLong("chat_id", -dialogId);
+                }
+                presentFragment(new ChatActivity(args));
+            } else {
+                BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.AyuBotOpenChatNotFound)).show();
+            }
+            return;
+        } catch (NumberFormatException ignore) {
+        }
+        getMessagesController().openByUserName(query, this, 0);
     }
 
     private void openStoriesRecorder() {

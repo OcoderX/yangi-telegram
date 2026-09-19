@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: bot token login -->
+    <string name="AyuBotLoginTitle">Bot token</string>
+    <string name="AyuBotLoginHeader">Log in as a bot</string>
+    <string name="AyuBotLoginSubtitle">Paste the token @BotFather gave you. The bot is added as a separate account.</string>
+    <string name="AyuBotLoginField">Bot token</string>
+    <string name="AyuBotLoginPaste">Paste from clipboard</string>
+    <string name="AyuBotLoginInfo">Telegram does not let a bot download its chat list, contacts or old history. Chats show up here as messages arrive and stay saved on this device.</string>
+    <string name="AyuBotLoginLink">Log in with a bot token</string>
+    <string name="AyuBotLoginInvalid">This does not look like a bot token. It should look like 123456789:AA…</string>
+    <string name="AyuBotLoginErrorInvalid">This bot token is invalid.</string>
+    <string name="AyuBotLoginErrorExpired">This bot token has been revoked. Get a new one from @BotFather.</string>
+
+    <!-- AyuGram: bot account limitations -->
+    <string name="AyuBotAccount">Bot account</string>
+    <string name="AyuBotNoDialogs">No chats yet</string>
+    <string name="AyuBotNoDialogsInfo">Chats appear here when somebody writes to your bot or the bot is added to a group.</string>
+    <string name="AyuBotUnavailable">Not available for bot accounts</string>
+    <string name="AyuBotOpenChat">Open a chat</string>
+    <string name="AyuBotOpenChatInfo">Enter a @username, a t.me link or a numeric ID.</string>
+    <string name="AyuBotOpenChatHint">@username or ID</string>
+    <string name="AyuBotOpenChatNotFound">Could not find that chat.</string>
+    <string name="AyuBotHistoryUnavailable">Older messages cannot be loaded for a bot account.</string>
+</resources>

@@ -84,6 +84,7 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
 
     // ---- sync ----
     private static final int SYNC = 50;
+    private static final int DYNAMIC_ISLAND = 55;
 
     // ---- debug ----
     private static final int DEBUG_WAL = 60;
@@ -237,6 +238,12 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
         items.add(UItem.asCheck(CUSTOM_SIMPLE_QUOTES, getString(R.string.AyuSimpleQuotesAndReplies)).setChecked(AyuConfig.simpleQuotesAndReplies));
         items.add(UItem.asShadow(getString(R.string.AyuCustomizationInfo)));
 
+        // ------------- dynamic island -------------
+        items.add(UItem.asHeader(getString(R.string.AyuDynamicIsland)));
+        items.add(UItem.asSettingsCell(DYNAMIC_ISLAND, 0, getString(R.string.AyuDynamicIsland),
+                getString(AyuConfig.dynamicIsland ? R.string.AyuEnabled : R.string.AyuDisabled)));
+        items.add(UItem.asShadow(getString(R.string.AyuDynamicIslandInfo)));
+
         // ------------- sync -------------
         items.add(UItem.asHeader(getString(R.string.AyuSyncScreenTitle)));
         items.add(UItem.asSettingsCell(SYNC, 0, getString(R.string.AyuSyncScreenTitle),
@@ -380,6 +387,9 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
 
             case SYNC:
                 presentFragment(new org.telegram.ui.ayu.AyuSyncPreferencesActivity());
+                break;
+            case DYNAMIC_ISLAND:
+                presentFragment(new DynamicIslandPreferencesActivity());
                 break;
 
             case DEBUG_WAL:

@@ -4330,8 +4330,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         if (AyuConfig.useScheduledMessages && scheduleDate == 0 && encryptedChat == null && retryMessageObject == null
                 && quick_reply_shortcut == null && quick_reply_shortcut_id == 0 && peer != myId && !DialogObject.isEncryptedDialog(peer)) {
             // ghost mode: send everything as a scheduled message so that no "online" status leaks
-            scheduleDate = getConnectionsManager().getCurrentTime() + AyuGhostHelper.getScheduledDelay(document, photo, videoEditedInfo, path);
-            AyuState.markAutomaticallyScheduled();
+            final int ayuDelay = AyuGhostHelper.getScheduledDelay(document, photo, videoEditedInfo, path);
+            scheduleDate = getConnectionsManager().getCurrentTime() + ayuDelay;
+            AyuState.markAutomaticallyScheduled(peer, ayuDelay);
         }
 
         try {
@@ -7457,6 +7458,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
 
         if (AyuGhostHelper.isSendMessageRequest(request) && !msgObjs.isEmpty()) {
             AyuGhostHelper.onMessageSent(currentAccount, msgObjs.get(0).getDialogId(), scheduled);
+            if (scheduled) {
+                AyuGhostHelper.fixScheduleDate(request, getConnectionsManager().getCurrentTime());
+            }
         }
 
         getConnectionsManager().sendRequest(request, (response, error) -> {
@@ -7852,6 +7856,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             AyuGhostHelper.onMessageSent(currentAccount, msgObj.getDialogId(), scheduled);
             if (!scheduled && msgObj.getReplyMsgId() != 0) {
                 AyuGhostHelper.onUserInteraction(currentAccount, msgObj.getDialogId());
+            }
+            if (scheduled) {
+                AyuGhostHelper.fixScheduleDate(req, getConnectionsManager().getCurrentTime());
             }
         }
 

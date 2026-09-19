@@ -43,10 +43,13 @@ public class FileUploadOperation {
     private static final int initialRequestsSlowNetworkCount = 1;
     private static final int maxUploadingKBytes = 1024 * 2;
     private static final int maxUploadingSlowNetworkKBytes = 32;
+    private static final int maxUploadChunkKBytes = 512; // largest part size upload.saveFilePart / saveBigFilePart accept
+    private static final long uploadBoostMinFileSize = 2 * 1024 * 1024;
 
     private int maxRequestsCount;
     private int uploadChunkSize = 64 * 1024;
     private boolean slowNetwork;
+    private int uploadConnectionsCount = 4;
     private ArrayList<byte[]> freeRequestIvs;
     private int requestNum;
     private String uploadingFilePath;
@@ -121,7 +124,7 @@ public class FileUploadOperation {
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("start upload on slow network = " + slowNetwork);
             }
-            for (int a = 0, count = (slowNetwork ? initialRequestsSlowNetworkCount : initialRequestsCount); a < count; a++) {
+            for (int a = 0, count = getInitialRequestsCount(); a < count; a++) {
                 startUploadRequest();
             }
         });
@@ -158,7 +161,7 @@ public class FileUploadOperation {
                 cachedResults.clear();
 
                 operationGuid++;
-                for (int a = 0, count = (slowNetwork ? initialRequestsSlowNetworkCount : initialRequestsCount); a < count; a++) {
+                for (int a = 0, count = getInitialRequestsCount(); a < count; a++) {
                     startUploadRequest();
                 }
             }
@@ -235,9 +238,20 @@ public class FileUploadOperation {
         });
     }
 
+    private int getInitialRequestsCount() {
+        if (slowNetwork) {
+            return initialRequestsSlowNetworkCount;
+        }
+        if (SharedConfig.enableUploadAccelerator) {
+            return Math.max(initialRequestsCount, Math.min(16, SharedConfig.uploadThreadsCount));
+        }
+        return initialRequestsCount;
+    }
+
     private void storeFileUploadInfo() {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt(fileKey + "_time", uploadStartTime);
+        editor.putInt(fileKey + "_chunk", uploadChunkSize);
         editor.putLong(fileKey + "_size", totalFileSize);
         editor.putLong(fileKey + "_id", currentFileId);
         editor.remove(fileKey + "_uploaded");
@@ -317,7 +331,19 @@ public class FileUploadOperation {
                     }
                     uploadChunkSize = chunkSize;
                 }
-                maxRequestsCount = Math.max(1, (slowNetwork ? maxUploadingSlowNetworkKBytes : maxUploadingKBytes) / uploadChunkSize);
+                boolean uploadBoost = SharedConfig.enableUploadAccelerator && !slowNetwork && !forceSmallFile && totalFileSize >= uploadBoostMinFileSize;
+                if (uploadBoost) {
+                    int threads = Math.max(4, Math.min(16, SharedConfig.uploadThreadsCount));
+                    uploadChunkSize = Math.max(uploadChunkSize, maxUploadChunkKBytes);
+                    maxRequestsCount = threads;
+                    uploadConnectionsCount = Math.min(ConnectionsManager.UploadConnectionsCount, threads);
+                } else {
+                    maxRequestsCount = Math.max(1, (slowNetwork ? maxUploadingSlowNetworkKBytes : maxUploadingKBytes) / uploadChunkSize);
+                    uploadConnectionsCount = 4;
+                }
+                if (BuildVars.LOGS_ENABLED) {
+                    FileLog.d("debug_uploading: boost=" + uploadBoost + " chunk=" + uploadChunkSize + "KB requests=" + maxRequestsCount + " connections=" + uploadConnectionsCount);
+                }
 
                 if (isEncrypted) {
                     freeRequestIvs = new ArrayList<>(maxRequestsCount);
@@ -334,7 +360,7 @@ public class FileUploadOperation {
                 long fileSize = preferences.getLong(fileKey + "_size", 0);
                 uploadStartTime = (int)(System.currentTimeMillis() / 1000);
                 boolean rewrite = false;
-                if (!uploadFirstPartLater && !nextPartFirst && estimatedSize == 0 && fileSize == totalFileSize) {
+                if (!uploadFirstPartLater && !nextPartFirst && estimatedSize == 0 && fileSize == totalFileSize && preferences.getInt(fileKey + "_chunk", -1) == uploadChunkSize) {
                     currentFileId = preferences.getLong(fileKey + "_id", 0);
                     int date = preferences.getInt(fileKey + "_time", 0);
                     long uploadedSize = preferences.getLong(fileKey + "_uploaded", 0);
@@ -543,7 +569,7 @@ public class FileUploadOperation {
         if (slowNetwork) {
             connectionType = ConnectionsManager.ConnectionTypeUpload;
         } else {
-            connectionType = ConnectionsManager.ConnectionTypeUpload | ((requestNumFinal % 4) << 16);
+            connectionType = ConnectionsManager.ConnectionTypeUpload | ((requestNumFinal % uploadConnectionsCount) << 16);
         }
         long time = System.currentTimeMillis();
         int[] requestToken = new int[1];
