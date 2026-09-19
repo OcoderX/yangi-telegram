@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: диагностика сети -->
+    <string name="AyuNetDiagTitle">Диагностика сети</string>
+    <string name="AyuNetDiagSubtitle">Дата-центр, пинг, потери пакетов и скорость в реальном времени</string>
+    <string name="AyuNetDiagIslandTitle">Сеть</string>
+
+    <!-- Dynamic Island -->
+    <string name="AyuNetDiagIslandToggle">Сеть в островке</string>
+    <string name="AyuNetDiagIslandToggleInfo">Показывать текущую скорость загрузки и отдачи и пинг до дата-центра в Dynamic Island. Нажмите на островок, чтобы увидеть потери пакетов, пинг прокси и причину замедления.</string>
+    <string name="AyuNetDiagIslandWithDownloads">Скорость рядом с загрузками</string>
+    <string name="AyuNetDiagIslandWithDownloadsInfo">Также добавлять текущую скорость в строку загрузок островка.</string>
+    <string name="AyuNetDiagOpen">Открыть диагностику</string>
+    <string name="AyuNetDiagProxySettings">Настройки прокси</string>
+
+    <!-- Метрики -->
+    <string name="AyuNetDiagLive">Сейчас</string>
+    <string name="AyuNetDiagDatacenter">Дата-центр</string>
+    <string name="AyuNetDiagDc">DC%1$d</string>
+    <string name="AyuNetDiagState">Соединение</string>
+    <string name="AyuNetDiagPing">Пинг</string>
+    <string name="AyuNetDiagProxy">Прокси</string>
+    <string name="AyuNetDiagProxyPing">Пинг прокси</string>
+    <string name="AyuNetDiagLoss">Потери пакетов</string>
+    <string name="AyuNetDiagDownload">Загрузка</string>
+    <string name="AyuNetDiagUpload">Отдача</string>
+    <string name="AyuNetDiagActiveTransfers">Активные передачи</string>
+    <string name="AyuNetDiagTransfersValue">%1$d загружается, %2$d отправляется</string>
+    <string name="AyuNetDiagMs">%1$d мс</string>
+    <string name="AyuNetDiagDbm">%1$d дБм</string>
+    <string name="AyuNetDiagUnreachable">недоступен</string>
+    <string name="AyuNetDiagNoProxy">не используется</string>
+    <string name="AyuNetDiagYes">Да</string>
+    <string name="AyuNetDiagNo">Нет</string>
+
+    <!-- Состояния соединения -->
+    <string name="AyuNetDiagStateConnected">Подключено</string>
+    <string name="AyuNetDiagStateConnecting">Подключение…</string>
+    <string name="AyuNetDiagStateNoNetwork">Ожидание сети</string>
+    <string name="AyuNetDiagStateProxy">Подключение к прокси…</string>
+    <string name="AyuNetDiagStateUpdating">Обновление…</string>
+
+    <!-- Причины замедления -->
+    <string name="AyuNetDiagSlowdown">Почему медленно</string>
+    <string name="AyuNetDiagReasonOk">Всё в порядке</string>
+    <string name="AyuNetDiagReasonNoNetwork">Нет сети</string>
+    <string name="AyuNetDiagReasonConnecting">Подключение</string>
+    <string name="AyuNetDiagReasonUpdating">Получение обновлений</string>
+    <string name="AyuNetDiagReasonProxyConnecting">Подключение к прокси</string>
+    <string name="AyuNetDiagReasonProxySlow">Медленный прокси</string>
+    <string name="AyuNetDiagReasonHighPing">Высокий пинг</string>
+    <string name="AyuNetDiagReasonPacketLoss">Потери пакетов</string>
+    <string name="AyuNetDiagReasonDataSaver">Включена экономия трафика</string>
+    <string name="AyuNetDiagReasonMetered">Лимитное подключение</string>
+    <string name="AyuNetDiagReasonBatterySaver">Включён режим энергосбережения</string>
+    <string name="AyuNetDiagReasonWeakWifi">Слабый сигнал Wi-Fi</string>
+
+    <!-- Подсказки -->
+    <string name="AyuNetDiagHintOk">Пинг, потери пакетов и скорость в пределах нормы.</string>
+    <string name="AyuNetDiagHintNoNetwork">Устройство сообщает, что рабочего подключения нет. Проверьте Wi-Fi или мобильный интернет.</string>
+    <string name="AyuNetDiagHintConnecting">Telegram ещё устанавливает соединение с дата-центром. Обычно это занимает секунду.</string>
+    <string name="AyuNetDiagHintUpdating">Telegram догружает пропущенную историю сообщений. После этого скорость вернётся к обычной.</string>
+    <string name="AyuNetDiagHintProxySlow">Все пакеты идут через ваш прокси, а сам прокси медленный или недоступен. Попробуйте другой или отключите прокси.</string>
+    <string name="AyuNetDiagHintHighPing">Обмен с дата-центром занимает много времени. Обычно виноват далёкий дата-центр, загруженная сеть или прокси.</string>
+    <string name="AyuNetDiagHintPacketLoss">Запросы не доходят вовремя. Чаще всего это слабый сигнал или перегруженная сеть.</string>
+    <string name="AyuNetDiagHintDataSaver">Экономия трафика Android ограничивает фоновый трафик в этой сети. Разрешите Telegram неограниченный доступ к данным.</string>
+    <string name="AyuNetDiagHintMetered">Android считает эту сеть лимитной, поэтому автозагрузка и фоновый трафик ограничены.</string>
+    <string name="AyuNetDiagHintBatterySaver">Режим энергосбережения ограничивает фоновую сетевую активность. Отключите его для полной скорости.</string>
+    <string name="AyuNetDiagHintWeakWifi">Сигнал Wi-Fi слабый, из-за чего пакеты передаются повторно, а передача идёт медленно. Подойдите ближе к роутеру.</string>
+
+    <!-- Графики -->
+    <string name="AyuNetDiagGraphs">Последние 60 секунд</string>
+    <string name="AyuNetDiagGraphPing">Пинг</string>
+    <string name="AyuNetDiagGraphLoss">Потери пакетов</string>
+    <string name="AyuNetDiagGraphThroughput">Скорость</string>
+    <string name="AyuNetDiagGraphEmpty">Сбор данных…</string>
+
+    <!-- Тест -->
+    <string name="AyuNetDiagRunTest">Запустить тест</string>
+    <string name="AyuNetDiagRunning">Тестирование…</string>
+    <string name="AyuNetDiagTestResults">Результаты теста</string>
+    <string name="AyuNetDiagTestPing">Пинг мин / сред / макс</string>
+    <string name="AyuNetDiagTestPingValue">%1$d / %2$d / %3$d мс</string>
+    <string name="AyuNetDiagTestJitter">Джиттер</string>
+    <string name="AyuNetDiagTestLoss">Потеряно проб</string>
+    <string name="AyuNetDiagTestLossValue">%1$d из %2$d</string>
+    <string name="AyuNetDiagTestBurst">Скорость в пакете запросов</string>
+    <string name="AyuNetDiagTestBurstValue">%1$s · %2$d ответов за %3$d мс</string>
+    <string name="AyuNetDiagTestFailed">Тест не смог связаться с дата-центром.</string>
+
+    <!-- Устройство -->
+    <string name="AyuNetDiagDevice">Устройство и сеть</string>
+    <string name="AyuNetDiagMetered">Лимитное подключение</string>
+    <string name="AyuNetDiagDataSaver">Экономия трафика</string>
+    <string name="AyuNetDiagBatterySaver">Энергосбережение</string>
+    <string name="AyuNetDiagWifiSignal">Сигнал Wi-Fi</string>
+
+    <!-- Отчёт -->
+    <string name="AyuNetDiagCopyReport">Скопировать отчёт</string>
+    <string name="AyuNetDiagCopied">Отчёт диагностики скопирован</string>
+    <string name="AyuNetDiagFooter">Пинг и номер дата-центра берутся из самого соединения MTProto. Скорости загрузки и отдачи — это весь трафик приложения по данным Android; значения в скобках показывают, что прямо сейчас передаёт загрузчик файлов.</string>
+</resources>

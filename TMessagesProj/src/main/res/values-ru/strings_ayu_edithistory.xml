@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: история изменений сообщений -->
+    <string name="AyuEditedCountFormat">%1$s (%2$d)</string>
+    <string name="AyuEditHistoryLoading">Загрузка…</string>
+    <string name="AyuEditHistoryCopyVersion">Копировать</string>
+    <string name="AyuEditHistoryShowFullText">Показать весь текст</string>
+    <string name="AyuEditHistoryShowChangesOnly">Только изменения</string>
+    <string name="AyuEditHistoryMediaReplaced">Медиа заменено</string>
+    <string name="AyuEditHistoryOldMedia">Предыдущее медиа</string>
+
+    <!-- настройки -->
+    <string name="AyuEditHistorySettings">История изменений</string>
+    <string name="AyuEditHistoryCapture">Сохранять прошлые версии</string>
+    <string name="AyuEditHistoryCaptureInfo">Сохраняет каждую версию изменённого сообщения на этом устройстве, чтобы вы могли увидеть, что поменялось.</string>
+    <string name="AyuEditHistoryOnLoad">Находить изменения при загрузке истории</string>
+    <string name="AyuEditHistoryOnLoadInfo">Сравнивает сообщения с сервера с локальной копией и сохраняет правки, сделанные, пока вы были офлайн.</string>
+    <string name="AyuEditHistoryKeepOldMedia">Сохранять заменённое медиа</string>
+    <string name="AyuEditHistoryShowCount">Показывать количество правок</string>
+    <string name="AyuEditHistoryTapToOpen">Открывать историю по нажатию на метку</string>
+    <string name="AyuEditHistoryWordDiff">Подсвечивать изменённые слова</string>
+    <string name="AyuEditHistoryExpandByDefault">Всегда показывать весь текст</string>
+</resources>

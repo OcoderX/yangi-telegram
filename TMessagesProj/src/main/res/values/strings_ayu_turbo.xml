@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Turbo Download -->
+    <string name="AyuTurboDownload">Turbo Download</string>
+    <string name="AyuTurboDownloadEnable">Enable Turbo Download</string>
+    <string name="AyuTurboDownloadInfo">Gives the files you actually asked for — the ones you tapped, the video you are watching and the media in the chat you have open — the most connections and the first place in the download queue, while background auto-download gets whatever is left. Interrupted downloads continue from the last part that was fully written to disk.</string>
+    <string name="AyuTurboPriority">Priority for important files</string>
+    <string name="AyuTurboPriorityTitle">Download priority</string>
+    <string name="AyuTurboPriorityValue">%1$d / 32</string>
+    <string name="AyuTurboPriorityGentle">Gentle</string>
+    <string name="AyuTurboPriorityBalanced">Balanced</string>
+    <string name="AyuTurboPriorityFast">Fast</string>
+    <string name="AyuTurboPriorityMaximum">Maximum</string>
+    <string name="AyuTurboIslandBadge">Turbo</string>
+    <string name="AyuTurboKeepPartial">Keep partial files</string>
+    <string name="AyuTurboKeepPartialInfo">Keep what has already been downloaded when a transfer is cancelled or fails, so that starting it again resumes instead of downloading the file from the beginning.</string>
+</resources>

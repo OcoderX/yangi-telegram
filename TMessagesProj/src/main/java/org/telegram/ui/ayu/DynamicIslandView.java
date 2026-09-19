@@ -38,9 +38,12 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.NotchInfoUtils;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.ayu.AyuConfig;
+import org.telegram.messenger.ayu.netdiag.NetDiagConfig;
+import org.telegram.messenger.ayu.netdiag.NetworkDiagnostics;
 import org.telegram.messenger.voip.VoIPService;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -52,6 +55,8 @@ import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.GroupCallActivity;
 import org.telegram.ui.LaunchActivity;
+import org.telegram.ui.ProxyListActivity;
+import org.telegram.ui.ayu.netdiag.NetworkDiagnosticsActivity;
 
 import java.util.ArrayList;
 
@@ -66,7 +71,7 @@ import java.util.ArrayList;
  * The view is a single custom-drawn {@link View}: it only consumes touches that land
  * inside the pill, so everything else keeps working underneath it.
  */
-public class DynamicIslandView extends View implements NotificationCenter.NotificationCenterDelegate, VoIPService.StateListener {
+public class DynamicIslandView extends View implements NotificationCenter.NotificationCenterDelegate, VoIPService.StateListener, NetworkDiagnostics.Listener {
 
     public static final int MODE_NONE = 0;
     public static final int MODE_CALL = 1;
@@ -74,12 +79,14 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     public static final int MODE_PLAYER = 3;
     public static final int MODE_DOWNLOAD = 4;
     public static final int MODE_GHOST = 5;
+    public static final int MODE_NETWORK = 6;
 
     private static final int COLOR_BG = 0xFF000000;
     private static final int COLOR_STROKE = 0x1FFFFFFF;
     private static final int COLOR_TEXT = 0xFFFFFFFF;
     private static final int COLOR_SUBTEXT = 0xFF9B9BA3;
     private static final int COLOR_GREEN = 0xFF30D158;
+    private static final int COLOR_AMBER = 0xFFFF9F0A;
     private static final int COLOR_RED = 0xFFFF453A;
     private static final int COLOR_BLUE = 0xFF0A84FF;
     private static final int COLOR_BUTTON = 0x2EFFFFFF;
@@ -94,6 +101,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private static final int BTN_CLOSE = 7;
     private static final int BTN_CANCEL_ALL = 8;
     private static final int BTN_GHOST_OFF = 9;
+    private static final int BTN_NETDIAG = 10;
+    private static final int BTN_PROXY = 11;
 
     private static final long AUTO_COLLAPSE_MS = 5000;
     private static final int MAX_DOWNLOAD_ROWS = 3;
@@ -170,6 +179,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private final ArrayList<Float> downloadProgresses = new ArrayList<>();
     private float downloadProgress;
     private long lastDownloadRefresh;
+
+    /** last sample delivered by the network sampler; null until the first tick */
+    private NetworkDiagnostics.Sample netSample;
+    /** true while this view holds a reference on {@link NetworkDiagnostics} */
+    private boolean netSamplingActive;
+    private final float[] netPingBuf = new float[NetworkDiagnostics.HISTORY_SIZE];
 
     private float micAmplitude;
     private float speakerAmplitude;
@@ -286,6 +301,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         global.addObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
         global.addObserver(this, NotificationCenter.ayuGhostModeChanged);
         global.addObserver(this, NotificationCenter.ayuConfigChanged);
+        NetDiagConfig.load();
+        NetworkDiagnostics.getInstance().addListener(this);
         update();
     }
 
@@ -318,12 +335,21 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         global.removeObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
         global.removeObserver(this, NotificationCenter.ayuGhostModeChanged);
         global.removeObserver(this, NotificationCenter.ayuConfigChanged);
+        NetworkDiagnostics.getInstance().removeListener(this);
+        setNetSampling(false);
         unregisterCallListener();
         removeCallbacks(tickRunnable);
         removeCallbacks(collapseRunnable);
         if (instance == this) {
             instance = null;
         }
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        // pauses / resumes the network sampler together with the window
+        update();
     }
 
     @Override
@@ -373,6 +399,30 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             }
         } else {
             update();
+        }
+    }
+
+    // NetworkDiagnostics.Listener
+
+    @Override
+    public void onNetworkSample(NetworkDiagnostics.Sample sample) {
+        netSample = sample;
+        if (targetMode == MODE_NETWORK || targetMode == MODE_DOWNLOAD) {
+            update();
+        }
+    }
+
+    /** Keeps the sampler's reference count balanced with what the island is actually showing. */
+    private void setNetSampling(boolean value) {
+        if (netSamplingActive == value) {
+            return;
+        }
+        netSamplingActive = value;
+        if (value) {
+            NetworkDiagnostics.getInstance().start();
+        } else {
+            netSample = null;
+            NetworkDiagnostics.getInstance().stop();
         }
     }
 
@@ -447,6 +497,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (AyuConfig.islandDownloads && collectDownloads() > 0) {
             return MODE_DOWNLOAD;
         }
+        if (NetDiagConfig.islandNetwork) {
+            return MODE_NETWORK;
+        }
         if (AyuConfig.islandGhost && AyuConfig.isGhostModeActive()) {
             return MODE_GHOST;
         }
@@ -488,6 +541,10 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (newMode != MODE_CALL) {
             unregisterCallListener();
         }
+        // The sampler only runs while the island is on screen and actually shows network data.
+        setNetSampling(isAttachedToWindow() && getWindowVisibility() == VISIBLE
+                && AyuConfig.dynamicIsland && NetDiagConfig.islandNetwork
+                && (newMode == MODE_NETWORK || (newMode == MODE_DOWNLOAD && NetDiagConfig.islandNetworkWithDownloads)));
         switch (newMode) {
             case MODE_CALL:
                 fillCall();
@@ -503,6 +560,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 break;
             case MODE_GHOST:
                 fillGhost();
+                break;
+            case MODE_NETWORK:
+                fillNetwork();
                 break;
             default:
                 hasImage = false;
@@ -618,6 +678,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             title = LocaleController.formatPluralString("Files", count);
         }
         subtitle = LocaleController.formatPluralString("AyuIslandDownloadingFiles", count);
+        if (SharedConfig.turboDownloadEnabled) {
+            subtitle = subtitle + " · " + getString(R.string.AyuTurboIslandBadge);
+        }
+        if (NetDiagConfig.islandNetwork && NetDiagConfig.islandNetworkWithDownloads && netSample != null) {
+            subtitle = subtitle + " · ▼ " + NetworkDiagnostics.formatSpeed(netSample.downSpeed);
+        }
         rightText = (int) (downloadProgress * 100) + "%";
         rightTextColor = COLOR_BLUE;
         hasImage = false;
@@ -629,6 +695,38 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         rightText = "";
         rightTextColor = COLOR_TEXT;
         hasImage = false;
+    }
+
+    private void fillNetwork() {
+        NetworkDiagnostics.Sample s = netSample;
+        hasImage = false;
+        if (s == null) {
+            title = getString(R.string.AyuNetDiagIslandTitle);
+            subtitle = getString(R.string.AyuNetDiagGraphEmpty);
+            rightText = "";
+            rightTextColor = COLOR_SUBTEXT;
+            return;
+        }
+        title = "▼ " + NetworkDiagnostics.formatSpeed(s.downSpeed) + "  ▲ " + NetworkDiagnostics.formatSpeed(s.upSpeed);
+        subtitle = LocaleController.formatString(R.string.AyuNetDiagDc, s.datacenterId)
+                + " · " + NetworkDiagnostics.getStateText(s.connectionState);
+        rightText = NetworkDiagnostics.formatPing(s.ping);
+        rightTextColor = netColor(s);
+    }
+
+    /** green / amber / red by the sample's severity */
+    private static int netColor(NetworkDiagnostics.Sample s) {
+        if (s == null) {
+            return COLOR_SUBTEXT;
+        }
+        switch (s.severity()) {
+            case NetworkDiagnostics.SEVERITY_BAD:
+                return COLOR_RED;
+            case NetworkDiagnostics.SEVERITY_WARN:
+                return COLOR_AMBER;
+            default:
+                return COLOR_GREEN;
+        }
     }
 
     private static String safe(String s) {
@@ -652,7 +750,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     private boolean isExpandable(int m) {
-        return m == MODE_CALL || m == MODE_PLAYER || m == MODE_DOWNLOAD || m == MODE_GHOST;
+        return m == MODE_CALL || m == MODE_PLAYER || m == MODE_DOWNLOAD || m == MODE_GHOST || m == MODE_NETWORK;
     }
 
     private void setExpanded(boolean value) {
@@ -699,6 +797,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 return dp(22) + rightPaint.measureText(rightText);
             case MODE_RECORDING:
             case MODE_DOWNLOAD:
+            case MODE_NETWORK:
                 return rightPaint.measureText(rightText);
             case MODE_PLAYER:
                 return dp(18);
@@ -712,7 +811,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (m == MODE_NONE) {
             return idleRectWidth();
         }
-        float textMax = dp(150);
+        float textMax = m == MODE_NETWORK ? dp(200) : dp(150);
         String text = compactText(m);
         float textW = Math.min(textMax, compactPaint.measureText(text));
         float rightW = measureRightWidth(m);
@@ -740,6 +839,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             }
             case MODE_GHOST:
                 return dp(16 + 44 + 16);
+            case MODE_NETWORK:
+                return dp(16 + 40 + 20 + 20 + 4 + 26 + 8 + 18 + 8 + 38 + 16);
             default:
                 return compactHeight();
         }
@@ -918,6 +1019,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             case MODE_GHOST:
                 drawDrawable(canvas, ghostDrawable, x + iconSize / 2f, cy, dp(18), a, COLOR_TEXT);
                 break;
+            case MODE_NETWORK:
+                drawStatusDot(canvas, x + iconSize / 2f, cy, dp(5), netColor(netSample), a);
+                break;
         }
         x += iconSize + dp(8);
 
@@ -935,6 +1039,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             }
             case MODE_RECORDING:
             case MODE_DOWNLOAD:
+            case MODE_NETWORK:
                 rightPaint.setColor(rightTextColor);
                 rightPaint.setAlpha(a);
                 canvas.drawText(rightText, rightX, cy + rightPaint.getTextSize() * 0.35f, rightPaint);
@@ -974,6 +1079,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 break;
             case MODE_GHOST:
                 drawExpandedGhost(canvas, l, t, r, a);
+                break;
+            case MODE_NETWORK:
+                drawExpandedNetwork(canvas, l, t, r, a);
                 break;
         }
     }
@@ -1122,6 +1230,112 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         float maxW = r - bw - dp(12) - tx;
         drawEllipsized(canvas, title, titlePaint, tx, t + dp(18), maxW, a, COLOR_TEXT);
         drawEllipsized(canvas, subtitle, subPaint, tx, t + dp(37), maxW, a, COLOR_SUBTEXT);
+    }
+
+    private void drawExpandedNetwork(Canvas canvas, float l, float t, float r, int a) {
+        final NetworkDiagnostics.Sample s = netSample;
+        final int accent = netColor(s);
+
+        // --- header: dot + "Network" + ping ---
+        drawStatusDot(canvas, l + dp(6), t + dp(13), dp(5), accent, a);
+        String ping = s == null ? "—" : NetworkDiagnostics.formatPing(s.ping);
+        rightPaint.setColor(accent);
+        rightPaint.setAlpha(a);
+        float pw = rightPaint.measureText(ping);
+        canvas.drawText(ping, r - pw, t + dp(18), rightPaint);
+        drawEllipsized(canvas, getString(R.string.AyuNetDiagIslandTitle), titlePaint,
+                l + dp(18), t + dp(18), r - pw - dp(8) - l - dp(18), a, COLOR_TEXT);
+        String state = s == null
+                ? getString(R.string.AyuNetDiagGraphEmpty)
+                : LocaleController.formatString(R.string.AyuNetDiagDc, s.datacenterId) + " · " + NetworkDiagnostics.getStateText(s.connectionState);
+        drawEllipsized(canvas, state, subPaint, l, t + dp(36), r - l, a, COLOR_SUBTEXT);
+
+        // --- two rows of stats ---
+        float mid = (l + r) / 2f;
+        float y = t + dp(40);
+        subPaint.setTextSize(dp(12));
+        drawStat(canvas, l, mid - dp(8), y + dp(12), getString(R.string.AyuNetDiagDownload),
+                s == null ? "—" : NetworkDiagnostics.formatSpeed(s.downSpeed), COLOR_TEXT, a);
+        drawStat(canvas, mid, r, y + dp(12), getString(R.string.AyuNetDiagUpload),
+                s == null ? "—" : NetworkDiagnostics.formatSpeed(s.upSpeed), COLOR_TEXT, a);
+        y += dp(20);
+        drawStat(canvas, l, mid - dp(8), y + dp(12), getString(R.string.AyuNetDiagLoss),
+                s == null ? "—" : NetworkDiagnostics.formatLoss(s.loss),
+                s != null && s.loss > NetworkDiagnostics.LOSS_WARN ? COLOR_RED : COLOR_TEXT, a);
+        drawStat(canvas, mid, r, y + dp(12), getString(R.string.AyuNetDiagProxy),
+                s == null || !s.proxyActive ? getString(R.string.AyuNetDiagNoProxy) : NetworkDiagnostics.formatProxyPing(s.proxyPing),
+                s != null && s.proxyActive && s.proxyPing < 0 ? COLOR_RED : COLOR_TEXT, a);
+        y += dp(20 + 4);
+
+        // --- 30 s ping sparkline ---
+        drawPingSparkline(canvas, l, y, r, y + dp(26), accent, a);
+        y += dp(26 + 8);
+
+        // --- slowdown reason ---
+        drawEllipsized(canvas, s == null ? "" : NetworkDiagnostics.getReasonText(s.reason), subPaint,
+                l, y + dp(12), r - l, a, accent);
+        subPaint.setTextSize(dp(13));
+        y += dp(18 + 8);
+
+        // --- quick actions ---
+        float half = (r - l - dp(8)) / 2f;
+        float oldSize = buttonTextPaint.getTextSize();
+        buttonTextPaint.setTextSize(dp(13));
+        drawPillButton(canvas, BTN_NETDIAG, l, y, l + half, y + dp(38), COLOR_TEXT, getString(R.string.AyuNetDiagOpen), COLOR_BG, a);
+        drawPillButton(canvas, BTN_PROXY, l + half + dp(8), y, r, y + dp(38), COLOR_BUTTON, getString(R.string.AyuNetDiagProxySettings), COLOR_TEXT, a);
+        buttonTextPaint.setTextSize(oldSize);
+    }
+
+    /** Label on the left, value right-aligned at {@code right}. */
+    private void drawStat(Canvas canvas, float x, float right, float baseline, String label, String value, int valueColor, int a) {
+        subPaint.setColor(valueColor);
+        subPaint.setAlpha(a);
+        float vw = subPaint.measureText(value);
+        canvas.drawText(value, right - vw, baseline, subPaint);
+        drawEllipsized(canvas, label, subPaint, x, baseline, right - vw - dp(6) - x, a, COLOR_SUBTEXT);
+    }
+
+    private void drawStatusDot(Canvas canvas, float cx, float cy, float r, int color, int a) {
+        fillPaint.setColor(color);
+        fillPaint.setAlpha((int) (a * 0.28f));
+        canvas.drawCircle(cx, cy, r * 1.9f, fillPaint);
+        fillPaint.setColor(color);
+        fillPaint.setAlpha(a);
+        canvas.drawCircle(cx, cy, r, fillPaint);
+    }
+
+    /** Last 30 samples of the ping history, drawn as a thin polyline. */
+    private void drawPingSparkline(Canvas canvas, float l, float t, float r, float b, int color, int a) {
+        fillPaint.setColor(COLOR_BUTTON);
+        fillPaint.setAlpha((int) (0x2E * (a / 255f)));
+        tmpRect.set(l, t, r, b);
+        canvas.drawRoundRect(tmpRect, dp(6), dp(6), fillPaint);
+
+        int n = NetworkDiagnostics.getInstance().pingHistory.copyTo(netPingBuf);
+        int from = Math.max(0, n - 30);
+        int count = n - from;
+        if (count < 2) {
+            return;
+        }
+        float max = 100f;
+        for (int i = from; i < n; i++) {
+            max = Math.max(max, netPingBuf[i]);
+        }
+        float top = t + dp(4);
+        float bottom = b - dp(4);
+        barPaint.setColor(color);
+        barPaint.setAlpha(a);
+        barPaint.setStrokeWidth(dp(1.6f));
+        float px = 0, py = 0;
+        for (int i = 0; i < count; i++) {
+            float x = l + dp(6) + (r - l - dp(12)) * i / (count - 1f);
+            float y = bottom - (bottom - top) * Math.min(1f, netPingBuf[from + i] / max);
+            if (i > 0) {
+                canvas.drawLine(px, py, x, y, barPaint);
+            }
+            px = x;
+            py = y;
+        }
     }
 
     // ------------------------------------------------------------------ primitives
@@ -1406,7 +1620,23 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 setExpanded(false);
                 update();
                 break;
+            case BTN_NETDIAG:
+                setExpanded(false);
+                presentFragment(new NetworkDiagnosticsActivity());
+                break;
+            case BTN_PROXY:
+                setExpanded(false);
+                presentFragment(new ProxyListActivity());
+                break;
         }
+    }
+
+    private void presentFragment(BaseFragment fragment) {
+        BaseFragment last = LaunchActivity.getSafeLastFragment();
+        if (last == null || LaunchActivity.instance == null) {
+            return;
+        }
+        last.presentFragment(fragment);
     }
 
     private void openSource() {
@@ -1440,6 +1670,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 }
                 break;
             }
+            case MODE_NETWORK:
+                presentFragment(new NetworkDiagnosticsActivity());
+                break;
             default:
                 break;
         }

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: tarmoq diagnostikasi -->
+    <string name="AyuNetDiagTitle">Tarmoq diagnostikasi</string>
+    <string name="AyuNetDiagSubtitle">Real vaqtda data-markaz, ping, paket yo\'qotishi va tezlik</string>
+    <string name="AyuNetDiagIslandTitle">Tarmoq</string>
+
+    <!-- Dynamic Island -->
+    <string name="AyuNetDiagIslandToggle">Orolchada tarmoq</string>
+    <string name="AyuNetDiagIslandToggleInfo">Dynamic Island\'da joriy yuklab olish va yuklash tezligini hamda data-markazgacha ping\'ni ko\'rsatish. Paket yo\'qotishi, proksi ping\'i va sekinlashuv sababini ko\'rish uchun orolchani bosing.</string>
+    <string name="AyuNetDiagIslandWithDownloads">Yuklamalar yonida tezlik</string>
+    <string name="AyuNetDiagIslandWithDownloadsInfo">Joriy tezlikni orolchaning yuklamalar qatoriga ham qo\'shish.</string>
+    <string name="AyuNetDiagOpen">Diagnostikani ochish</string>
+    <string name="AyuNetDiagProxySettings">Proksi sozlamalari</string>
+
+    <!-- Ko\'rsatkichlar -->
+    <string name="AyuNetDiagLive">Hozir</string>
+    <string name="AyuNetDiagDatacenter">Data-markaz</string>
+    <string name="AyuNetDiagDc">DC%1$d</string>
+    <string name="AyuNetDiagState">Ulanish</string>
+    <string name="AyuNetDiagPing">Ping</string>
+    <string name="AyuNetDiagProxy">Proksi</string>
+    <string name="AyuNetDiagProxyPing">Proksi ping</string>
+    <string name="AyuNetDiagLoss">Paket yo\'qotishi</string>
+    <string name="AyuNetDiagDownload">Yuklab olish</string>
+    <string name="AyuNetDiagUpload">Yuklash</string>
+    <string name="AyuNetDiagActiveTransfers">Faol uzatmalar</string>
+    <string name="AyuNetDiagTransfersValue">%1$d yuklanmoqda, %2$d jo\'natilmoqda</string>
+    <string name="AyuNetDiagMs">%1$d ms</string>
+    <string name="AyuNetDiagDbm">%1$d dBm</string>
+    <string name="AyuNetDiagUnreachable">mavjud emas</string>
+    <string name="AyuNetDiagNoProxy">ishlatilmayapti</string>
+    <string name="AyuNetDiagYes">Ha</string>
+    <string name="AyuNetDiagNo">Yo\'q</string>
+
+    <!-- Ulanish holatlari -->
+    <string name="AyuNetDiagStateConnected">Ulangan</string>
+    <string name="AyuNetDiagStateConnecting">Ulanmoqda…</string>
+    <string name="AyuNetDiagStateNoNetwork">Tarmoq kutilmoqda</string>
+    <string name="AyuNetDiagStateProxy">Proksiga ulanmoqda…</string>
+    <string name="AyuNetDiagStateUpdating">Yangilanmoqda…</string>
+
+    <!-- Sekinlashuv sabablari -->
+    <string name="AyuNetDiagSlowdown">Nega sekin</string>
+    <string name="AyuNetDiagReasonOk">Hammasi joyida</string>
+    <string name="AyuNetDiagReasonNoNetwork">Tarmoq yo\'q</string>
+    <string name="AyuNetDiagReasonConnecting">Ulanmoqda</string>
+    <string name="AyuNetDiagReasonUpdating">Yangilanishlar olinmoqda</string>
+    <string name="AyuNetDiagReasonProxyConnecting">Proksiga ulanmoqda</string>
+    <string name="AyuNetDiagReasonProxySlow">Sekin proksi</string>
+    <string name="AyuNetDiagReasonHighPing">Yuqori ping</string>
+    <string name="AyuNetDiagReasonPacketLoss">Paket yo\'qotishi</string>
+    <string name="AyuNetDiagReasonDataSaver">Trafik tejash yoqilgan</string>
+    <string name="AyuNetDiagReasonMetered">Limitli tarmoq</string>
+    <string name="AyuNetDiagReasonBatterySaver">Quvvat tejash yoqilgan</string>
+    <string name="AyuNetDiagReasonWeakWifi">Wi-Fi signali kuchsiz</string>
+
+    <!-- Maslahatlar -->
+    <string name="AyuNetDiagHintOk">Ping, paket yo\'qotishi va tezlik odatdagi darajada.</string>
+    <string name="AyuNetDiagHintNoNetwork">Qurilma ishlaydigan ulanish yo\'qligini bildiryapti. Wi-Fi yoki mobil internetni tekshiring.</string>
+    <string name="AyuNetDiagHintConnecting">Telegram hali data-markaz bilan ulanishni o\'rnatmoqda. Odatda bu bir soniya oladi.</string>
+    <string name="AyuNetDiagHintUpdating">Telegram o\'tkazib yuborilgan xabarlar tarixini yuklab olmoqda. Tugagach tezlik odatdagiday bo\'ladi.</string>
+    <string name="AyuNetDiagHintProxySlow">Barcha paketlar proksi orqali o\'tadi, proksining o\'zi esa sekin yoki mavjud emas. Boshqasini sinab ko\'ring yoki proksini o\'chiring.</string>
+    <string name="AyuNetDiagHintHighPing">Data-markazga borib-kelish ko\'p vaqt olmoqda. Odatda sabab uzoq data-markaz, band tarmoq yoki proksi.</string>
+    <string name="AyuNetDiagHintPacketLoss">So\'rovlar vaqtida yetib bormayapti. Ko\'pincha bu kuchsiz signal yoki band tarmoq.</string>
+    <string name="AyuNetDiagHintDataSaver">Android trafik tejash rejimi bu tarmoqda fon trafigini cheklaydi. Telegram uchun cheksiz ma\'lumotga ruxsat bering.</string>
+    <string name="AyuNetDiagHintMetered">Android bu tarmoqni limitli deb hisoblaydi, shuning uchun avtoyuklash va fon trafigi cheklangan.</string>
+    <string name="AyuNetDiagHintBatterySaver">Quvvat tejash rejimi fon tarmoq faoliyatini cheklaydi. To\'liq tezlik uchun uni o\'chiring.</string>
+    <string name="AyuNetDiagHintWeakWifi">Wi-Fi signali kuchsiz, shuning uchun paketlar qayta yuboriladi va uzatish sekinlashadi. Routerga yaqinroq boring.</string>
+
+    <!-- Grafiklar -->
+    <string name="AyuNetDiagGraphs">Oxirgi 60 soniya</string>
+    <string name="AyuNetDiagGraphPing">Ping</string>
+    <string name="AyuNetDiagGraphLoss">Paket yo\'qotishi</string>
+    <string name="AyuNetDiagGraphThroughput">Tezlik</string>
+    <string name="AyuNetDiagGraphEmpty">Ma\'lumot yig\'ilmoqda…</string>
+
+    <!-- Test -->
+    <string name="AyuNetDiagRunTest">Testni ishga tushirish</string>
+    <string name="AyuNetDiagRunning">Tekshirilmoqda…</string>
+    <string name="AyuNetDiagTestResults">Test natijalari</string>
+    <string name="AyuNetDiagTestPing">Ping min / o\'rt / maks</string>
+    <string name="AyuNetDiagTestPingValue">%1$d / %2$d / %3$d ms</string>
+    <string name="AyuNetDiagTestJitter">Jitter</string>
+    <string name="AyuNetDiagTestLoss">Yo\'qolgan sinovlar</string>
+    <string name="AyuNetDiagTestLossValue">%2$d dan %1$d</string>
+    <string name="AyuNetDiagTestBurst">Paket so\'rovlar tezligi</string>
+    <string name="AyuNetDiagTestBurstValue">%1$s · %3$d ms ichida %2$d javob</string>
+    <string name="AyuNetDiagTestFailed">Test data-markazga ulana olmadi.</string>
+
+    <!-- Qurilma -->
+    <string name="AyuNetDiagDevice">Qurilma va tarmoq</string>
+    <string name="AyuNetDiagMetered">Limitli tarmoq</string>
+    <string name="AyuNetDiagDataSaver">Trafik tejash</string>
+    <string name="AyuNetDiagBatterySaver">Quvvat tejash</string>
+    <string name="AyuNetDiagWifiSignal">Wi-Fi signali</string>
+
+    <!-- Hisobot -->
+    <string name="AyuNetDiagCopyReport">Hisobotni nusxalash</string>
+    <string name="AyuNetDiagCopied">Diagnostika hisoboti nusxalandi</string>
+    <string name="AyuNetDiagFooter">Ping va data-markaz raqami MTProto ulanishining o\'zidan olinadi. Yuklab olish va yuklash tezliklari — Android o\'lchagan butun ilova trafigi; qavs ichidagi qiymatlar ayni damda fayl yuklovchi nimani uzatayotganini ko\'rsatadi.</string>
+</resources>

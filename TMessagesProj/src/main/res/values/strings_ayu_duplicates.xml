@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Duplicate Cleaner -->
+    <string name="AyuDuplicates">Duplicate cleaner</string>
+    <string name="AyuDuplicatesInfo">Find videos and files that were downloaded more than once in different chats and keep only one copy of each.</string>
+
+    <!-- scan -->
+    <string name="AyuDuplicatesScan">Scan for duplicates</string>
+    <string name="AyuDuplicatesScanAgain">Scan again</string>
+    <string name="AyuDuplicatesCancelScan">Tap to cancel</string>
+    <string name="AyuDuplicatesStageFiles">Collecting local files…</string>
+    <string name="AyuDuplicatesStageCompare">Comparing file contents…</string>
+    <string name="AyuDuplicatesStageChats">Matching files to chats…</string>
+    <string name="AyuDuplicatesProgressFiles">%1$d of %2$d files · %3$s</string>
+    <string name="AyuDuplicatesProgressFilesUnknown">%1$d files · %2$s</string>
+    <string name="AyuDuplicatesScanInfo">Files are compared by a SHA-256 of their contents, so only byte-identical copies are grouped together. Nothing is deleted until you ask for it.</string>
+    <string name="AyuDuplicatesScanCancelled">Scan cancelled</string>
+
+    <!-- summary -->
+    <string name="AyuDuplicatesSummary">Summary</string>
+    <string name="AyuDuplicatesSets">Duplicate sets</string>
+    <string name="AyuDuplicatesExtraCopies">Extra copies</string>
+    <string name="AyuDuplicatesReclaimable">Can be freed</string>
+    <string name="AyuDuplicatesChecked">Files checked</string>
+    <string name="AyuDuplicatesLastScan">Last scan</string>
+    <string name="AyuDuplicatesNever">never</string>
+    <string name="AyuDuplicatesFreedTotal">Freed by this tool</string>
+
+    <!-- groups -->
+    <string name="AyuDuplicatesFound">Duplicates</string>
+    <string name="AyuDuplicatesFoundInfo">Tap a set to choose which copy to keep. The copies you delete can be downloaded again at any time.</string>
+    <string name="AyuDuplicatesCopiesCount">%1$d copies</string>
+    <string name="AyuDuplicatesUnknownChat">Unknown chat</string>
+    <string name="AyuDuplicatesMoreChats">+%1$d more</string>
+
+    <!-- cleaning -->
+    <string name="AyuDuplicatesCleanAll">Clean up all duplicates</string>
+    <string name="AyuDuplicatesCleanAllTitle">Delete duplicates</string>
+    <string name="AyuDuplicatesCleanAllMessage">%1$d extra copies will be deleted and %2$s will be freed. The oldest copy of every file stays on this device.</string>
+    <string name="AyuDuplicatesCleanGroupMessage">%1$d copies will be deleted and %2$s will be freed. One copy stays on this device.</string>
+    <string name="AyuDuplicatesDelete">Delete</string>
+    <string name="AyuDuplicatesKeepOldest">Keep the oldest copy</string>
+    <string name="AyuDuplicatesKeepNewest">Keep the newest copy</string>
+    <string name="AyuDuplicatesKeepInChat">Keep the copy from %1$s</string>
+    <string name="AyuDuplicatesOpenMessage">Open the message</string>
+    <string name="AyuDuplicatesDeletedBulletin">%1$d files deleted, %2$s freed</string>
+    <string name="AyuDuplicatesOpenKept">Open</string>
+    <string name="AyuDuplicatesNothingToDelete">Nothing to delete</string>
+
+    <!-- empty states -->
+    <string name="AyuDuplicatesNothingFound">No duplicates found — every downloaded file on this device is unique.</string>
+    <string name="AyuDuplicatesNotScannedYet">Nothing scanned yet. Start a scan to find files that were downloaded more than once in different chats.</string>
+
+    <!-- options -->
+    <string name="AyuDuplicatesOptions">Options</string>
+    <string name="AyuDuplicatesIncludeStickerCache">Include sticker and emoji cache</string>
+    <string name="AyuDuplicatesIncludeStickerCacheInfo">Sticker and emoji files are small and shared between chats, so they are skipped by default.</string>
+</resources>

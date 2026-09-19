@@ -20,6 +20,8 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.ayu.sync.AyuSyncController;
+import org.telegram.messenger.ayu.upload.AyuUploadConfig;
+import org.telegram.messenger.ayu.upload.AyuUploadManager;
 import org.telegram.ui.LaunchActivity;
 
 /**
@@ -39,6 +41,55 @@ public class AyuKeepAliveService extends Service {
     private static final int NOTIFICATION_ID = 3117;
 
     private static volatile boolean running;
+    private static volatile AyuKeepAliveService instance;
+    private static volatile long lastNotificationUpdate;
+
+    /**
+     * The service is needed either because the user wants the process kept alive, or because the
+     * AyuGram upload queue still has files to send (a foreground service is the only way Android
+     * lets an upload continue while the app is in the background).
+     */
+    private static boolean shouldRun() {
+        if (AyuConfig.keepAliveService) {
+            return true;
+        }
+        try {
+            return AyuUploadManager.hasActiveUploads();
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    private static boolean isUploading() {
+        try {
+            return AyuUploadConfig.keepAliveWhileUploading && AyuUploadManager.getPendingCount() > 0;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /**
+     * Called by the AyuGram upload queue whenever it changed: starts the service when the queue is
+     * no longer empty, refreshes the progress notification while it runs and stops it again once
+     * nothing is left to upload (unless the keep-alive option itself is on).
+     */
+    public static void onUploadStatusChanged(Context context) {
+        if (context == null) {
+            context = ApplicationLoader.applicationContext;
+        }
+        final AyuKeepAliveService local = instance;
+        if (local != null && running && shouldRun()) {
+            final long now = System.currentTimeMillis();
+            // throttle progress refreshes, but never skip the one that clears the progress bar
+            if (isUploading() && now - lastNotificationUpdate < 1000) {
+                return;
+            }
+            lastNotificationUpdate = now;
+            local.updateNotification();
+            return;
+        }
+        checkState(context);
+    }
 
     /**
      * Starts the service when {@link AyuConfig#keepAliveService} is enabled and stops it otherwise.
@@ -53,7 +104,7 @@ public class AyuKeepAliveService extends Service {
         }
         final Intent intent = new Intent(context, AyuKeepAliveService.class);
         try {
-            if (AyuConfig.keepAliveService) {
+            if (shouldRun()) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent);
                 } else {
@@ -109,6 +160,19 @@ public class AyuKeepAliveService extends Service {
     public void onCreate() {
         super.onCreate();
         running = true;
+        instance = this;
+    }
+
+    /** refreshes the ongoing notification in place (upload progress) */
+    private void updateNotification() {
+        try {
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager != null) {
+                manager.notify(NOTIFICATION_ID, buildNotification());
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
     }
 
     @Override
@@ -121,7 +185,7 @@ public class AyuKeepAliveService extends Service {
             stopSelfSafely();
             return START_NOT_STICKY;
         }
-        if (!AyuConfig.keepAliveService) {
+        if (!shouldRun()) {
             stopSelfSafely();
             return START_NOT_STICKY;
         }
@@ -181,6 +245,17 @@ public class AyuKeepAliveService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setVisibility(NotificationCompat.VISIBILITY_SECRET);
+        if (isUploading()) {
+            // AyuGram upload queue: show what is still being uploaded instead of the idle text
+            final int pending = AyuUploadManager.getPendingCount();
+            final int progress = AyuUploadManager.getOverallProgress();
+            builder.setContentTitle(LocaleController.getString(R.string.AyuUploadNotificationTitle));
+            builder.setContentText(LocaleController.formatString(R.string.AyuUploadNotificationText, pending));
+            builder.setProgress(100, Math.max(0, progress), progress < 0);
+            builder.setPriority(NotificationCompat.PRIORITY_LOW);
+            builder.setCategory(NotificationCompat.CATEGORY_PROGRESS);
+            builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE);
+        }
         return builder.build();
     }
 
@@ -211,6 +286,9 @@ public class AyuKeepAliveService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        if (instance == this) {
+            instance = null;
+        }
         super.onDestroy();
     }
 

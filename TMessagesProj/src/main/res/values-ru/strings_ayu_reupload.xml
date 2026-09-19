@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="AyuZeroReupload">Без повторной загрузки</string>
+    <string name="AyuZeroReuploadEnable">Включить Zero-Reupload</string>
+    <string name="AyuZeroReuploadInfo">Перед отправкой файла AyuGram вычисляет его отпечаток и проверяет, отправлялся ли точно такой же файл с этого аккаунта. Если да, отправляется копия, уже лежащая на серверах Telegram, и ничего не загружается заново. В секретных чатах не используется.</string>
+    <string name="AyuZeroReuploadOptions">Параметры</string>
+    <string name="AyuZeroReuploadIndexReceived">Индексировать полученные файлы</string>
+    <string name="AyuZeroReuploadShowBulletin">Уведомлять о пропущенной загрузке</string>
+    <string name="AyuZeroReuploadOptionsInfo">Индексация полученных файлов позволяет отправлять скачанный файл от своего имени без повторной загрузки. Уведомление показывает короткое сообщение каждый раз, когда загрузка пропущена.</string>
+    <string name="AyuZeroReuploadStats">Индекс</string>
+    <string name="AyuZeroReuploadIndexedFiles">Файлов в индексе</string>
+    <string name="AyuZeroReuploadIndexedValue">%1$d (%2$s)</string>
+    <string name="AyuZeroReuploadSaved">Загрузок пропущено</string>
+    <string name="AyuZeroReuploadSavedValue">%1$d (%2$s)</string>
+    <string name="AyuZeroReuploadClearIndex">Очистить индекс</string>
+    <string name="AyuZeroReuploadClearIndexMessage">Индекс Zero-Reupload и его статистика будут удалены. Уже отправленные файлы это не затронет.</string>
+    <string name="AyuZeroReuploadStatsInfo">Индекс хранится отдельно для каждого аккаунта, так как идентификаторы файлов действительны только для того аккаунта, который их получил.</string>
+    <string name="AyuZeroReuploadSentInstantly">Отправлено мгновенно (Zero-Reupload)</string>
+</resources>

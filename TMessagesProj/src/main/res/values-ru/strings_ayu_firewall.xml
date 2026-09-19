@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Личный файрвол -->
+
+    <!-- screen -->
+    <string name="AyuFirewallTitle">Личный файрвол</string>
+    <string name="AyuFirewallEnable">Включить личный файрвол</string>
+    <string name="AyuFirewallEnableInfo">Проверяет файлы и ссылки до того, как что-то будет открыто или скачано. Опасное от незнакомых аккаунтов не попадёт на телефон.</string>
+    <string name="AyuFirewallRulesHeader">Правила</string>
+    <string name="AyuFirewallBlockExecutables">Блокировать программные файлы</string>
+    <string name="AyuFirewallBlockLinks">Блокировать подозрительные ссылки</string>
+    <string name="AyuFirewallBlockArchives">Блокировать опасные архивы</string>
+    <string name="AyuFirewallUnknownOnly">Только для незнакомых отправителей</string>
+    <string name="AyuFirewallRulesInfo">Незнакомый отправитель — это любой, кого нет в ваших контактах, любой бот и любой неверифицированный канал. Если эта опция выключена, правила действуют и для контактов, но там вместо блокировки показывается предупреждение с возможностью открыть.</string>
+    <string name="AyuFirewallHardRuleInfo">Всегда включено: любой файл .exe и .apk размером меньше 5 МБ запрещён полностью — в том числе от контактов. При нажатии показывается только красное предупреждение; пока файрвол включён, открыть такой файл нельзя. Файлы такого размера почти всегда оказываются шпионским ПО или воровством аккаунтов.</string>
+
+    <!-- whitelist -->
+    <string name="AyuFirewallWhitelistHeader">Доверенные отправители</string>
+    <string name="AyuFirewallWhitelistEmpty">Доверенных отправителей пока нет. Отметить отправителя доверенным можно прямо в окне блокировки — тогда его файлы и ссылки больше не проверяются.</string>
+    <string name="AyuFirewallWhitelistInfo">Файлы и ссылки этих аккаунтов не проверяются, кроме правила о 5 МБ для .exe / .apk — оно действует для всех.</string>
+    <string name="AyuFirewallWhitelistRemove">Убрать из доверенных</string>
+    <string name="AyuFirewallWhitelistRemoved">Убран из доверенных отправителей</string>
+    <string name="AyuFirewallWhitelistClear">Очистить доверенных отправителей</string>
+    <string name="AyuFirewallWhitelistClearInfo">Убрать всех доверенных отправителей? Файрвол снова начнёт проверять их файлы и ссылки.</string>
+
+    <!-- blocked events log -->
+    <string name="AyuFirewallLogHeader">Заблокировано</string>
+    <string name="AyuFirewallLogEmpty">Пока ничего не заблокировано.</string>
+    <string name="AyuFirewallLogClear">Очистить журнал</string>
+    <string name="AyuFirewallLogClearInfo">Удалить список заблокированных файлов и ссылок?</string>
+    <string name="AyuFirewallLogInfo">Последние 100 заблокированных файлов и ссылок. Нажмите на запись, чтобы увидеть причину.</string>
+    <string name="AyuFirewallUnknownChat">Неизвестный чат</string>
+
+    <!-- alerts -->
+    <string name="AyuFirewallVirusTitle">Это вирус, не открывайте!</string>
+    <string name="AyuFirewallBlockedTitle">Заблокировано файрволом</string>
+    <string name="AyuFirewallWarnTitle">Осторожно</string>
+    <string name="AyuFirewallBlockedGeneric">Личный файрвол остановил это, потому что выглядит опасно.</string>
+    <string name="AyuFirewallOpenAnyway">Всё равно открыть</string>
+    <string name="AyuFirewallTrustSender">Доверять отправителю</string>
+
+    <!-- short labels -->
+    <string name="AyuFirewallShortVirus">Вирус: .exe / .apk меньше 5 МБ</string>
+    <string name="AyuFirewallShortExecutable">Программный файл</string>
+    <string name="AyuFirewallShortArchive">Опасный архив</string>
+    <string name="AyuFirewallShortArchiveExec">Архив с программой внутри</string>
+    <string name="AyuFirewallShortLink">Подозрительная ссылка</string>
+
+    <!-- reasons -->
+    <string name="AyuFirewallReasonVirus">%1$s — программный файл размером %2$s.\n\nФайлы такого размера почти всегда оказываются шпионским ПО, воровством аккаунтов или поддельными «модами». Пока личный файрвол включён, открыть этот файл нельзя.</string>
+    <string name="AyuFirewallReasonExecutable">%1$s — программный файл (.%2$s), который может выполнить код на вашем устройстве.</string>
+    <string name="AyuFirewallReasonDoubleExtension">%1$s прячет настоящую программу .%2$s за безобидным расширением. Это классическая маскировка вредоносного ПО.</string>
+    <string name="AyuFirewallReasonArchive">%1$s — архив .%2$s. В архивах от незнакомых людей часто лежат программы.</string>
+    <string name="AyuFirewallReasonArchiveExecutable">В архиве %1$s есть программный файл: %2$s.\n\nАрхивы с исполняемыми файлами — распространённый способ доставки вредоносного ПО.</string>
+    <string name="AyuFirewallReasonLinkLookalike">Этот адрес лишь похож на официальный адрес Telegram. Это поддельный домен для кражи аккаунтов.</string>
+    <string name="AyuFirewallReasonLinkPunycode">В этом адресе используется закодированное (punycode) доменное имя — такие имена применяют, чтобы подделывать настоящие сайты.</string>
+    <string name="AyuFirewallReasonLinkMixedScript">В этом адресе смешаны буквы из разных алфавитов, чтобы он выглядел как настоящий сайт.</string>
+    <string name="AyuFirewallReasonLinkMismatch">В ссылке показан один адрес, а ведёт она на другой.</string>
+    <string name="AyuFirewallReasonLinkRawIp">Эта ссылка ведёт на голый IP-адрес вместо настоящего имени сайта.</string>
+    <string name="AyuFirewallReasonLinkInsecure">Это незашифрованная (http) ссылка на страницу входа, кошелька или подарка — типичная фишинговая страница.</string>
+    <string name="AyuFirewallReasonLinkShortener">Это сокращённая ссылка, поэтому настоящий адрес скрыт.</string>
+
+    <!-- detail lines -->
+    <string name="AyuFirewallFileSize">Размер: %1$s</string>
+    <string name="AyuFirewallLinkLine">Ссылка: %1$s</string>
+    <string name="AyuFirewallLinkVisibleLine">Показано как: %1$s</string>
+    <string name="AyuFirewallSenderUnknown">Отправителя нет в ваших контактах.</string>
+    <string name="AyuFirewallSenderKnown">Отправитель есть в ваших контактах.</string>
+    <string name="AyuFirewallUnnamedFile">Этот файл</string>
+</resources>

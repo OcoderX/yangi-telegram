@@ -15,6 +15,8 @@ import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
+import org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig;
+import org.telegram.messenger.ayu.antidelete.AyuMediaVault;
 import org.telegram.messenger.ayu.entities.AyuMessageBase;
 import org.telegram.messenger.ayu.entities.DeletedMessage;
 import org.telegram.messenger.ayu.entities.EditedMessage;
@@ -70,6 +72,11 @@ public class AyuMessagesController {
 
     /** opens (and creates on first run) the database off the main thread */
     public void warmUp() {
+        // plain static fields of the anti-delete prefs are read from ChatMessageCell and from the
+        // storage queue, so they have to be materialized before the first chat is drawn
+        AyuAntiDeleteConfig.load();
+        // same for the edit-history prefs (read from ChatMessageCell while drawing a bubble)
+        org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.load();
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             try {
                 AyuHistoryStorage.getInstance().getDatabaseSize();
@@ -101,7 +108,7 @@ public class AyuMessagesController {
         storage.getStorageQueue().postRunnable(() -> {
             ArrayList<TLRPC.Message> messages = loadMessagesFromStorage(currentAccount, did, ids);
             if (!messages.isEmpty()) {
-                saveDeletedInternal(currentAccount, messages);
+                saveDeletedInternal(currentAccount, messages, preserveMediaNow(currentAccount, messages));
             }
         });
     }
@@ -115,10 +122,47 @@ public class AyuMessagesController {
             return;
         }
         final ArrayList<TLRPC.Message> copy = new ArrayList<>(oldMessages);
-        saveDeletedInternal(currentAccount, copy);
+        // anti-delete: the caller (MessagesStorage) hands the very same files to
+        // FileLoader.deleteFiles() a few statements after this method returns, so the copies have to
+        // be taken *now*, on the calling thread - an asynchronous copy loses that race.
+        saveDeletedInternal(currentAccount, copy, preserveMediaNow(currentAccount, copy));
     }
 
-    private void saveDeletedInternal(int currentAccount, ArrayList<TLRPC.Message> oldMessages) {
+    /**
+     * Copies every already-downloaded media file of {@code oldMessages} into the AyuGram media
+     * folder, synchronously. Returns messageId -&gt; {mediaPath, thumbPath}.
+     */
+    private HashMap<Integer, String[]> preserveMediaNow(int currentAccount, ArrayList<TLRPC.Message> oldMessages) {
+        final HashMap<Integer, String[]> preserved = new HashMap<>();
+        try {
+            if (!AyuConfig.saveMedia) {
+                return preserved;
+            }
+            for (int a = 0; a < oldMessages.size(); a++) {
+                TLRPC.Message message = oldMessages.get(a);
+                if (!shouldSave(currentAccount, message)) {
+                    continue;
+                }
+                final long dialogId = message.dialog_id != 0 ? message.dialog_id : MessageObject.getDialogId(message);
+                if (!isMediaSaveAllowed(currentAccount, dialogId)) {
+                    continue;
+                }
+                final int documentType = classify(message, MessageObject.getMedia(message));
+                if (documentType == AyuConstants.DOCUMENT_TYPE_NONE) {
+                    continue;
+                }
+                String[] paths = AyuMediaVault.preserve(currentAccount, message, dialogId, documentType);
+                if (paths != null && (paths[0] != null || paths[1] != null)) {
+                    preserved.put(message.id, paths);
+                }
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        return preserved;
+    }
+
+    private void saveDeletedInternal(int currentAccount, ArrayList<TLRPC.Message> oldMessages, HashMap<Integer, String[]> preserved) {
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             try {
                 final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
@@ -134,7 +178,11 @@ public class AyuMessagesController {
                     }
                     DeletedMessage row = new DeletedMessage();
                     fillRow(currentAccount, row, message, selfId);
-                    if (isMediaSaveAllowed(currentAccount, row.dialogId)) {
+                    final String[] alreadyPreserved = preserved != null ? preserved.get(message.id) : null;
+                    if (alreadyPreserved != null) {
+                        row.mediaPath = alreadyPreserved[0];
+                        row.hqThumbPath = alreadyPreserved[1];
+                    } else if (isMediaSaveAllowed(currentAccount, row.dialogId)) {
                         saveMediaFor(currentAccount, message, row);
                     }
                     rows.add(row);
@@ -179,7 +227,7 @@ public class AyuMessagesController {
 
     /** Called when an edit update arrives; oldMessage is the previous version, newMessage the edited one. */
     public void onMessageEdited(int currentAccount, TLRPC.Message oldMessage, TLRPC.Message newMessage) {
-        if (!AyuConfig.saveMessagesHistory || oldMessage == null || newMessage == null) {
+        if (!org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.isCaptureEnabled() || oldMessage == null || newMessage == null) {
             return;
         }
         if (!shouldSave(currentAccount, oldMessage)) {
@@ -200,12 +248,18 @@ public class AyuMessagesController {
                 if (row.dialogId == 0) {
                     row.dialogId = dialogId;
                 }
+                //ayu-edithistory: the replaced media is unreachable once the edit lands, so copy what is on disk
                 if (isMediaSaveAllowed(currentAccount, row.dialogId)) {
-                    saveMediaFor(currentAccount, oldMessage, row);
+                    org.telegram.messenger.ayu.edithistory.AyuSavedMedia.saveForRevision(currentAccount, oldMessage, row);
                 }
-                AyuHistoryStorage.getInstance().insertEdited(row);
+                final long inserted = AyuHistoryStorage.getInstance().insertEdited(row);
+                if (inserted <= 0) {
+                    // the very same version is already stored (CONFLICT_IGNORE): do not notify twice
+                    return;
+                }
                 final int count = AyuHistoryStorage.getInstance().getRevisionsCount(selfId, row.dialogId, row.messageId);
                 newMessage.ayuEditedCount = count;
+                org.telegram.messenger.ayu.edithistory.AyuEditHistoryCache.put(currentAccount, row.dialogId, row.messageId, count);
                 final ArrayList<Integer> ids = new ArrayList<>();
                 ids.add(row.messageId);
                 AndroidUtilities.runOnUIThread(() -> NotificationCenter.getInstance(currentAccount)
@@ -222,7 +276,7 @@ public class AyuMessagesController {
      * putMessages() that will overwrite it later in the same processUpdateArray pass).
      */
     public void onMessageEditedFromUpdate(int currentAccount, TLRPC.Message newMessage) {
-        if (!AyuConfig.saveMessagesHistory || newMessage == null || newMessage.id <= 0) {
+        if (!org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.isCaptureEnabled() || newMessage == null || newMessage.id <= 0) {
             return;
         }
         final long dialogId = newMessage.dialog_id != 0 ? newMessage.dialog_id : MessageObject.getDialogId(newMessage);
@@ -321,7 +375,7 @@ public class AyuMessagesController {
             if (row == null) {
                 return null;
             }
-            return restoreMessage(row);
+            return restoreMessage(currentAccount, row);
         } catch (Throwable e) {
             FileLog.e(e);
             return null;
@@ -339,6 +393,45 @@ public class AyuMessagesController {
             FileLog.e(e);
         }
         return null;
+    }
+
+    /**
+     * Re-points a message that is <i>already on screen</i> at the copy the media vault kept for it.
+     * Needed because the bubble that stays after a deletion still holds the (now unlinked) cache path.
+     * The row lookup runs on the AyuGram queue, the fields are updated back on the UI thread.
+     *
+     * @param onApplied invoked on the UI thread only when a saved copy was actually found
+     */
+    public void applySavedMediaAsync(int currentAccount, long dialogId, TLRPC.Message message, Runnable onApplied) {
+        if (message == null || message.id <= 0 || dialogId == 0) {
+            return;
+        }
+        if (MessageObject.getMedia(message) == null) {
+            return;
+        }
+        final int messageId = message.id;
+        AyuHistoryStorage.getQueue().postRunnable(() -> {
+            try {
+                final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
+                if (selfId == 0) {
+                    return;
+                }
+                DeletedMessage row = AyuHistoryStorage.getInstance().getDeletedMessage(selfId, dialogId, messageId);
+                if (row == null || TextUtils.isEmpty(row.mediaPath)) {
+                    return;
+                }
+                final String mediaPath = row.mediaPath;
+                final String thumbPath = row.hqThumbPath;
+                AndroidUtilities.runOnUIThread(() -> {
+                    AyuMediaVault.applySavedPaths(currentAccount, message, mediaPath, thumbPath);
+                    if (onApplied != null) {
+                        onApplied.run();
+                    }
+                });
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
     }
 
     /**
@@ -415,7 +508,7 @@ public class AyuMessagesController {
         ArrayList<TLRPC.Message> result = new ArrayList<>();
         List<DeletedMessage> rows = getDeletedMessages(currentAccount, dialogId, topicId, minId, maxId, limit);
         for (int a = 0; a < rows.size(); a++) {
-            TLRPC.Message message = toTLMessage(rows.get(a));
+            TLRPC.Message message = toTLMessage(currentAccount, rows.get(a));
             if (message != null) {
                 result.add(message);
             }
@@ -467,7 +560,12 @@ public class AyuMessagesController {
 
     /** Builds a TLRPC.Message (with ayuDeleted=true) from a stored row so it can be inserted into ChatActivity. */
     public TLRPC.Message toTLMessage(DeletedMessage row) {
-        TLRPC.Message message = restoreMessage(row);
+        return toTLMessage(UserConfig.selectedAccount, row);
+    }
+
+    /** same as {@link #toTLMessage(DeletedMessage)} but resolves the saved media for the given account */
+    public TLRPC.Message toTLMessage(int currentAccount, DeletedMessage row) {
+        TLRPC.Message message = restoreMessage(currentAccount, row);
         if (message != null) {
             message.ayuDeleted = true;
         }
@@ -475,10 +573,14 @@ public class AyuMessagesController {
     }
 
     public TLRPC.Message toTLMessage(EditedMessage row) {
-        return restoreMessage(row);
+        return restoreMessage(UserConfig.selectedAccount, row);
     }
 
     private TLRPC.Message restoreMessage(AyuMessageBase row) {
+        return restoreMessage(UserConfig.selectedAccount, row);
+    }
+
+    private TLRPC.Message restoreMessage(int currentAccount, AyuMessageBase row) {
         if (row == null) {
             return null;
         }
@@ -516,13 +618,10 @@ public class AyuMessagesController {
         if (!AyuConfig.saveReactions) {
             message.reactions = null;
         }
-        // make the locally saved copy win over the (now gone) server file
-        if (!TextUtils.isEmpty(row.mediaPath)) {
-            File file = new File(row.mediaPath);
-            if (file.exists() && file.length() > 0) {
-                message.attachPath = row.mediaPath;
-            }
-        }
+        // make the locally saved copy win over the (now gone) server file:
+        // attachPath for documents that honour it, TLRPC.Document.localPath for every FileLoader
+        // lookup, and a copy back into the cache path for photos (which have neither).
+        AyuMediaVault.applySavedPaths(currentAccount, message, row.mediaPath, row.hqThumbPath);
         return message;
     }
 
@@ -704,6 +803,10 @@ public class AyuMessagesController {
         if (DialogObject.isEncryptedDialog(dialogId)) {
             return false;
         }
+        if (AyuAntiDeleteConfig.isExcluded(dialogId)) {
+            // the user asked not to keep anything from this chat
+            return false;
+        }
         if (message.id < 0) {
             // local / not yet sent
             return false;
@@ -746,20 +849,48 @@ public class AyuMessagesController {
         if (!oldText.equals(newText)) {
             return true;
         }
+        //ayu-edithistory: a formatting-only edit (bold/link/spoiler/custom emoji) keeps the plain text
+        if (AyuConfig.saveFormatting && !entitiesEqual(oldMessage.entities, newMessage.entities)) {
+            return true;
+        }
         TLRPC.MessageMedia oldMedia = MessageObject.getMedia(oldMessage);
         TLRPC.MessageMedia newMedia = MessageObject.getMedia(newMessage);
-        long oldId = mediaId(oldMedia);
-        long newId = mediaId(newMedia);
-        if (oldId != newId) {
+        //ayu-edithistory: a link preview appearing/disappearing is not a user edit, ignore it
+        boolean oldEmpty = isEmptyMedia(oldMedia);
+        boolean newEmpty = isEmptyMedia(newMedia);
+        if (oldEmpty != newEmpty) {
             return true;
         }
-        if (oldMedia == null != (newMedia == null)) {
-            return true;
-        }
-        if (oldMedia != null && newMedia != null && oldMedia.getClass() != newMedia.getClass()) {
-            return true;
+        if (!oldEmpty) {
+            if (mediaId(oldMedia) != mediaId(newMedia)) {
+                return true;
+            }
+            if (oldMedia.getClass() != newMedia.getClass()) {
+                return true;
+            }
         }
         return false;
+    }
+
+    /** null / empty / "only a link preview" all count as "this version had no attachment" */
+    private static boolean isEmptyMedia(TLRPC.MessageMedia media) {
+        return media == null
+                || media instanceof TLRPC.TL_messageMediaEmpty
+                || media instanceof TLRPC.TL_messageMediaWebPage;
+    }
+
+    private static boolean entitiesEqual(ArrayList<TLRPC.MessageEntity> a, ArrayList<TLRPC.MessageEntity> b) {
+        int sizeA = a == null ? 0 : a.size();
+        int sizeB = b == null ? 0 : b.size();
+        if (sizeA != sizeB) {
+            return false;
+        }
+        if (sizeA == 0) {
+            return true;
+        }
+        byte[] bytesA = serializeEntities(a);
+        byte[] bytesB = serializeEntities(b);
+        return java.util.Arrays.equals(bytesA, bytesB);
     }
 
     private static long mediaId(TLRPC.MessageMedia media) {
@@ -1086,7 +1217,7 @@ public class AyuMessagesController {
             }
             if (source != null && source.exists() && source.length() > 0) {
                 File destination = new File(dir, row.messageId + "_" + sanitize(source.getName()));
-                if (copyFile(source, destination)) {
+                if (AyuMediaVault.linkOrCopy(source, destination)) {
                     row.mediaPath = destination.getAbsolutePath();
                 }
             }
@@ -1104,7 +1235,7 @@ public class AyuMessagesController {
                 }
                 if (thumbSource != null && thumbSource.exists() && thumbSource.length() > 0) {
                     File destination = new File(dir, row.messageId + "_thumb_" + sanitize(thumbSource.getName()));
-                    if (copyFile(thumbSource, destination)) {
+                    if (AyuMediaVault.linkOrCopy(thumbSource, destination)) {
                         row.hqThumbPath = destination.getAbsolutePath();
                     }
                 }

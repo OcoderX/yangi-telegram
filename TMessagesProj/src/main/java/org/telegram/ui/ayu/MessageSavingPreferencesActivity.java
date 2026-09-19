@@ -14,10 +14,13 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.ayu.AyuConfig;
+import org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig;
+import org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.CheckBoxCell;
 import org.telegram.ui.Cells.TextCheckCell;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -36,9 +39,27 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
     private static final int SAVE_FOR_BOTS = 4;
     private static final int SAVE_SELF_DESTRUCTING = 5;
 
+    // ---- anti delete ----
+    private static final int SHOW_DELETED_LABEL = 10;
+    private static final int KEEP_ON_CLEAR_HISTORY = 11;
+    private static final int KEEP_ON_DELETE_DIALOG = 12;
+    private static final int RESTORE_MEDIA_TO_CACHE = 13;
+    private static final int CLEAR_EXCLUSIONS = 14;
+
+    // ---------------- edit history ----------------
+    private static final int EH_CAPTURE = 20;
+    private static final int EH_ON_LOAD = 21;
+    private static final int EH_KEEP_MEDIA = 22;
+    private static final int EH_SHOW_COUNT = 23;
+    private static final int EH_TAP_TO_OPEN = 24;
+    private static final int EH_WORD_DIFF = 25;
+    private static final int EH_EXPAND_FULL = 26;
+
     public MessageSavingPreferencesActivity() {
         super();
         AyuConfig.load();
+        AyuAntiDeleteConfig.load();
+        AyuEditHistoryConfig.load();
     }
 
     @Override
@@ -86,6 +107,40 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
 
         items.add(UItem.asCheck(SAVE_SELF_DESTRUCTING, getString(R.string.AyuSaveSelfDestructingMedia)).setChecked(AyuConfig.saveSelfDestructingMedia));
         items.add(UItem.asShadow(getString(R.string.AyuSaveSelfDestructingMediaInfo)));
+
+        // ---------------- anti delete ----------------
+        items.add(UItem.asHeader(getString(R.string.AyuAntiDelete)));
+        items.add(UItem.asCheck(SHOW_DELETED_LABEL, getString(R.string.AyuShowDeletedLabel)).setChecked(AyuAntiDeleteConfig.showDeletedLabel));
+        items.add(UItem.asCheck(RESTORE_MEDIA_TO_CACHE, getString(R.string.AyuRestoreMediaToCache)).setChecked(AyuAntiDeleteConfig.restoreMediaToCache));
+        items.add(UItem.asShadow(getString(R.string.AyuAntiDeleteInfo)));
+
+        items.add(UItem.asCheck(KEEP_ON_CLEAR_HISTORY, getString(R.string.AyuKeepOnClearHistory)).setChecked(AyuAntiDeleteConfig.keepOnClearHistory));
+        items.add(UItem.asCheck(KEEP_ON_DELETE_DIALOG, getString(R.string.AyuKeepOnDeleteDialog)).setChecked(AyuAntiDeleteConfig.keepOnDeleteDialog));
+        items.add(UItem.asShadow(getString(R.string.AyuKeepOnDeleteInfo)));
+
+        // ---------------- edit history ----------------
+        items.add(UItem.asHeader(getString(R.string.AyuEditHistorySettings)));
+        items.add(UItem.asCheck(EH_CAPTURE, getString(R.string.AyuEditHistoryCapture)).setChecked(AyuEditHistoryConfig.captureEdits));
+        items.add(UItem.asCheck(EH_ON_LOAD, getString(R.string.AyuEditHistoryOnLoad)).setChecked(AyuEditHistoryConfig.captureOnHistoryLoad));
+        items.add(UItem.asCheck(EH_KEEP_MEDIA, getString(R.string.AyuEditHistoryKeepOldMedia)).setChecked(AyuEditHistoryConfig.keepOldMedia));
+        items.add(UItem.asShadow(getString(R.string.AyuEditHistoryCaptureInfo)));
+        items.add(UItem.asCheck(EH_SHOW_COUNT, getString(R.string.AyuEditHistoryShowCount)).setChecked(AyuEditHistoryConfig.showEditedCount));
+        items.add(UItem.asCheck(EH_TAP_TO_OPEN, getString(R.string.AyuEditHistoryTapToOpen)).setChecked(AyuEditHistoryConfig.tapEditedOpensHistory));
+        items.add(UItem.asCheck(EH_WORD_DIFF, getString(R.string.AyuEditHistoryWordDiff)).setChecked(AyuEditHistoryConfig.wordDiff));
+        items.add(UItem.asCheck(EH_EXPAND_FULL, getString(R.string.AyuEditHistoryExpandByDefault)).setChecked(AyuEditHistoryConfig.expandFullTextByDefault));
+        items.add(UItem.asShadow(getString(R.string.AyuEditHistoryOnLoadInfo)));
+
+        items.add(UItem.asHeader(getString(R.string.AyuExcludedChats)));
+        final long[] excluded = AyuAntiDeleteConfig.getExcludedDialogs();
+        if (excluded.length == 0) {
+            items.add(UItem.asShadow(getString(R.string.AyuExcludedChatsEmpty) + "\n\n" + getString(R.string.AyuExcludedChatsInfo)));
+        } else {
+            for (int a = 0; a < excluded.length; a++) {
+                items.add(UItem.asFilterChat(false, excluded[a]));
+            }
+            items.add(UItem.asButton(CLEAR_EXCLUSIONS, getString(R.string.AyuExcludedChatsClear)).red());
+            items.add(UItem.asShadow(getString(R.string.AyuExcludedChatsInfo)));
+        }
     }
 
     @Override
@@ -116,6 +171,66 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
             case SAVE_SELF_DESTRUCTING:
                 AyuConfig.setSaveSelfDestructingMedia(!AyuConfig.saveSelfDestructingMedia);
                 toggleSwitch(view, AyuConfig.saveSelfDestructingMedia);
+                break;
+            case SHOW_DELETED_LABEL:
+                AyuAntiDeleteConfig.setShowDeletedLabel(!AyuAntiDeleteConfig.showDeletedLabel);
+                toggleSwitch(view, AyuAntiDeleteConfig.showDeletedLabel);
+                break;
+            case RESTORE_MEDIA_TO_CACHE:
+                AyuAntiDeleteConfig.setRestoreMediaToCache(!AyuAntiDeleteConfig.restoreMediaToCache);
+                toggleSwitch(view, AyuAntiDeleteConfig.restoreMediaToCache);
+                break;
+            case KEEP_ON_CLEAR_HISTORY:
+                AyuAntiDeleteConfig.setKeepOnClearHistory(!AyuAntiDeleteConfig.keepOnClearHistory);
+                toggleSwitch(view, AyuAntiDeleteConfig.keepOnClearHistory);
+                break;
+            case KEEP_ON_DELETE_DIALOG:
+                AyuAntiDeleteConfig.setKeepOnDeleteDialog(!AyuAntiDeleteConfig.keepOnDeleteDialog);
+                toggleSwitch(view, AyuAntiDeleteConfig.keepOnDeleteDialog);
+                break;
+            case EH_CAPTURE:
+                AyuEditHistoryConfig.setCaptureEdits(!AyuEditHistoryConfig.captureEdits);
+                toggleSwitch(view, AyuEditHistoryConfig.captureEdits);
+                break;
+            case EH_ON_LOAD:
+                AyuEditHistoryConfig.setCaptureOnHistoryLoad(!AyuEditHistoryConfig.captureOnHistoryLoad);
+                toggleSwitch(view, AyuEditHistoryConfig.captureOnHistoryLoad);
+                break;
+            case EH_KEEP_MEDIA:
+                AyuEditHistoryConfig.setKeepOldMedia(!AyuEditHistoryConfig.keepOldMedia);
+                toggleSwitch(view, AyuEditHistoryConfig.keepOldMedia);
+                break;
+            case EH_SHOW_COUNT:
+                AyuEditHistoryConfig.setShowEditedCount(!AyuEditHistoryConfig.showEditedCount);
+                toggleSwitch(view, AyuEditHistoryConfig.showEditedCount);
+                break;
+            case EH_TAP_TO_OPEN:
+                AyuEditHistoryConfig.setTapEditedOpensHistory(!AyuEditHistoryConfig.tapEditedOpensHistory);
+                toggleSwitch(view, AyuEditHistoryConfig.tapEditedOpensHistory);
+                break;
+            case EH_WORD_DIFF:
+                AyuEditHistoryConfig.setWordDiff(!AyuEditHistoryConfig.wordDiff);
+                toggleSwitch(view, AyuEditHistoryConfig.wordDiff);
+                break;
+            case EH_EXPAND_FULL:
+                AyuEditHistoryConfig.setExpandFullTextByDefault(!AyuEditHistoryConfig.expandFullTextByDefault);
+                toggleSwitch(view, AyuEditHistoryConfig.expandFullTextByDefault);
+                break;
+            case CLEAR_EXCLUSIONS:
+                AyuAntiDeleteConfig.clearExcluded();
+                if (listView != null && listView.adapter != null) {
+                    listView.adapter.update(true);
+                }
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip, getString(R.string.AyuExcludedChatsCleared)).show();
+                break;
+            default:
+                if (item.viewType == UniversalAdapter.VIEW_TYPE_FILTER_CHAT && item.dialogId != 0) {
+                    // tapping an excluded chat puts it back under "save deleted messages"
+                    AyuAntiDeleteConfig.setExcluded(item.dialogId, false);
+                    if (listView != null && listView.adapter != null) {
+                        listView.adapter.update(true);
+                    }
+                }
                 break;
         }
     }

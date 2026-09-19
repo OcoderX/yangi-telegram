@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: o\'chirishga qarshi (o\'chirilgan xabarlar va media saqlanadi) -->
+    <string name="AyuDeletedByAuthor">muallif tomonidan o\'chirildi</string>
+
+    <string name="AyuAntiDelete">O\'chirishga qarshi</string>
+    <string name="AyuAntiDeleteInfo">Serverda o\'chirilgan xabarlar suhbatda qoladi va o\'chirilgan deb belgilanadi. Allaqachon yuklab olingan media maxfiy papkaga nusxalanadi, shuning uchun Telegram keshni tozalaganidan keyin ham ochiladi.</string>
+
+    <string name="AyuShowDeletedLabel">\"muallif tomonidan o\'chirildi\" yozuvini ko\'rsatish</string>
+    <string name="AyuShowDeletedLabelInfo">O\'chirilganda vaqt yonida faqat belgi ko\'rsatiladi.</string>
+
+    <string name="AyuKeepOnClearHistory">\"Tarixni tozalash\"da xabarlarni saqlash</string>
+    <string name="AyuKeepOnDeleteDialog">Suhbat o\'chirilganda xabarlarni saqlash</string>
+    <string name="AyuKeepOnDeleteInfo">Suhbatning eng so\'nggi 300 tagacha xabari mahalliy arxivga olinadi.</string>
+
+    <string name="AyuRestoreMediaToCache">Saqlangan mediani tiklash</string>
+    <string name="AyuRestoreMediaToCacheInfo">Saqlangan rasmlarni Telegram qidiradigan joyga qaytaradi, shunda o\'chirilgan rasm to\'liq hajmda ochiladi.</string>
+
+    <string name="AyuExcludedChats">Saqlashdan chiqarilgan suhbatlar</string>
+    <string name="AyuExcludedChatsInfo">Bu suhbatlar uchun hech nima saqlanmaydi. Qo\'shish uchun suhbat menyusidagi \"Bu yerda saqlanmasin\" tugmasidan foydalaning.</string>
+    <string name="AyuExcludedChatsEmpty">Chiqarilgan suhbatlar yo\'q</string>
+    <string name="AyuExcludedChatsClear">Barcha istisnolarni olib tashlash</string>
+    <string name="AyuExcludedChatsCleared">Barcha istisnolar olib tashlandi</string>
+
+    <string name="AyuDontSaveHere">Bu yerda saqlanmasin</string>
+    <string name="AyuSaveHere">O\'chirilgan xabarlar bu yerda saqlansin</string>
+    <string name="AyuDontSaveHereEnabled">Bu suhbatdagi o\'chirilgan xabarlar endi saqlanmaydi</string>
+    <string name="AyuDontSaveHereDisabled">Bu suhbatdagi o\'chirilgan xabarlar yana saqlanadi</string>
+</resources>

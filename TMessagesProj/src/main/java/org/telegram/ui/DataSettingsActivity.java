@@ -122,7 +122,33 @@ public class DataSettingsActivity extends BaseFragment {
     private int uploadAcceleratorRow;
     @Keep
     private int uploadThreadsRow;
+    private int uploadQueueRow;
     private int downloadAcceleratorInfoRow;
+
+    private int turboSectionRow;
+    @Keep
+    private int turboDownloadRow;
+    @Keep
+    private int turboPriorityRow;
+    @Keep
+    private int turboKeepPartialRow;
+    private int turboInfoRow;
+
+    private static final int[] TURBO_PRIORITY_LEVELS = new int[]{8, 16, 24, 32};
+
+    private static CharSequence formatTurboPriority(int value) {
+        final int label;
+        if (value <= 8) {
+            label = R.string.AyuTurboPriorityGentle;
+        } else if (value <= 16) {
+            label = R.string.AyuTurboPriorityBalanced;
+        } else if (value <= 24) {
+            label = R.string.AyuTurboPriorityFast;
+        } else {
+            label = R.string.AyuTurboPriorityMaximum;
+        }
+        return LocaleController.formatString(R.string.AyuTurboPriorityValue, value) + " · " + LocaleController.getString(label);
+    }
 
     private int rowCount;
 
@@ -198,7 +224,19 @@ public class DataSettingsActivity extends BaseFragment {
         } else {
             uploadThreadsRow = -1;
         }
+        uploadQueueRow = rowCount++;
         downloadAcceleratorInfoRow = rowCount++;
+
+        turboSectionRow = rowCount++;
+        turboDownloadRow = rowCount++;
+        if (SharedConfig.turboDownloadEnabled) {
+            turboPriorityRow = rowCount++;
+            turboKeepPartialRow = rowCount++;
+        } else {
+            turboPriorityRow = -1;
+            turboKeepPartialRow = -1;
+        }
+        turboInfoRow = rowCount++;
 
 //        autoplayHeaderRow = rowCount++;
 //        autoplayGifsRow = rowCount++;
@@ -609,6 +647,42 @@ public class DataSettingsActivity extends BaseFragment {
                 });
                 builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
                 showDialog(builder.create());
+            } else if (position == uploadQueueRow) {
+                presentFragment(new org.telegram.ui.ayu.upload.UploadQueueActivity());
+            } else if (position == turboDownloadRow) {
+                SharedConfig.toggleTurboDownload();
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(SharedConfig.turboDownloadEnabled);
+                }
+                updateRows(false);
+                if (listAdapter != null) {
+                    listAdapter.notifyDataSetChanged();
+                }
+            } else if (position == turboKeepPartialRow) {
+                SharedConfig.toggleTurboDownloadKeepPartial();
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(SharedConfig.turboDownloadKeepPartial);
+                }
+            } else if (position == turboPriorityRow) {
+                if (getParentActivity() == null) {
+                    return;
+                }
+                AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+                builder.setTitle(LocaleController.getString(R.string.AyuTurboPriorityTitle));
+                CharSequence[] items = new CharSequence[TURBO_PRIORITY_LEVELS.length];
+                for (int a = 0; a < TURBO_PRIORITY_LEVELS.length; a++) {
+                    items[a] = formatTurboPriority(TURBO_PRIORITY_LEVELS[a]);
+                }
+                builder.setItems(items, (dialog, which) -> {
+                    if (which >= 0 && which < TURBO_PRIORITY_LEVELS.length) {
+                        SharedConfig.setTurboDownloadPriority(TURBO_PRIORITY_LEVELS[which]);
+                    }
+                    if (listAdapter != null) {
+                        listAdapter.notifyItemChanged(position);
+                    }
+                });
+                builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+                showDialog(builder.create());
             } else if (position == downloadAcceleratorRow) {
                 SharedConfig.toggleDownloadAccelerator();
                 if (view instanceof TextCheckCell) {
@@ -831,7 +905,13 @@ public class DataSettingsActivity extends BaseFragment {
                         else if (SharedConfig.uploadThreadsCount == 8) threadsStr += " (Fast)";
                         else if (SharedConfig.uploadThreadsCount == 12) threadsStr += " (Turbo)";
                         else if (SharedConfig.uploadThreadsCount == 16) threadsStr += " (Max)";
-                        textCell.setTextAndValue("Upload Connections", threadsStr, false);
+                        textCell.setTextAndValue("Upload Connections", threadsStr, true);
+                    } else if (position == uploadQueueRow) {
+                        textCell.setIcon(0);
+                        textCell.setTextAndValue(LocaleController.getString(R.string.AyuUploadQueueTitle),
+                                String.valueOf(org.telegram.messenger.ayu.upload.AyuUploadManager.getPendingCount()), false);
+                    } else if (position == turboPriorityRow) {
+                        textCell.setTextAndValue(LocaleController.getString(R.string.AyuTurboPriority), formatTurboPriority(SharedConfig.turboDownloadPriority), true);
                     }
                     break;
                 }
@@ -853,6 +933,8 @@ public class DataSettingsActivity extends BaseFragment {
                         headerCell.setText(LocaleController.getString(R.string.SaveToGallerySettings));
                     } else if (position == downloadAcceleratorSectionRow) {
                         headerCell.setText("Download & Upload Accelerator");
+                    } else if (position == turboSectionRow) {
+                        headerCell.setText(LocaleController.getString(R.string.AyuTurboDownload));
                     }
                     break;
                 }
@@ -874,6 +956,10 @@ public class DataSettingsActivity extends BaseFragment {
                         checkCell.setTextAndCheck("Download Accelerator", SharedConfig.enableDownloadAccelerator, true);
                     } else if (position == uploadAcceleratorRow) {
                         checkCell.setTextAndCheck("Upload Accelerator", SharedConfig.enableUploadAccelerator, uploadThreadsRow != -1);
+                    } else if (position == turboDownloadRow) {
+                        checkCell.setTextAndCheck(LocaleController.getString(R.string.AyuTurboDownloadEnable), SharedConfig.turboDownloadEnabled, turboPriorityRow != -1);
+                    } else if (position == turboKeepPartialRow) {
+                        checkCell.setTextAndCheck(LocaleController.getString(R.string.AyuTurboKeepPartial), SharedConfig.turboDownloadKeepPartial, false);
                     }
                     break;
                 }
@@ -883,6 +969,12 @@ public class DataSettingsActivity extends BaseFragment {
                         cell.setText(LocaleController.getString(R.string.EnableAllStreamingInfo));
                     } else if (position == downloadAcceleratorInfoRow) {
                         cell.setText("Transfers files over multiple parallel MTProto connections with 512 KB parts to bypass per-connection speed limits. Disable if you are on a metered or unstable network.");
+                    } else if (position == turboInfoRow) {
+                        if (SharedConfig.turboDownloadEnabled) {
+                            cell.setText(LocaleController.getString(R.string.AyuTurboDownloadInfo) + "\n\n" + LocaleController.getString(R.string.AyuTurboKeepPartialInfo));
+                        } else {
+                            cell.setText(LocaleController.getString(R.string.AyuTurboDownloadInfo));
+                        }
                     }
                     break;
                 }
@@ -996,6 +1088,10 @@ public class DataSettingsActivity extends BaseFragment {
                     checkCell.setChecked(SharedConfig.enableDownloadAccelerator);
                 } else if (position == uploadAcceleratorRow) {
                     checkCell.setChecked(SharedConfig.enableUploadAccelerator);
+                } else if (position == turboDownloadRow) {
+                    checkCell.setChecked(SharedConfig.turboDownloadEnabled);
+                } else if (position == turboKeepPartialRow) {
+                    checkCell.setChecked(SharedConfig.turboDownloadKeepPartial);
                 }
             }
         }
@@ -1004,7 +1100,8 @@ public class DataSettingsActivity extends BaseFragment {
             return position == mobileRow || position == roamingRow || position == wifiRow || position == storageUsageRow || position == useLessDataForCallsRow || position == dataUsageRow || position == proxyRow || position == clearDraftsRow ||
                     position == enableCacheStreamRow || position == enableStreamRow || position == enableAllStreamRow || position == enableMkvRow || position == quickRepliesRow || position == autoplayVideoRow || position == autoplayGifsRow ||
                     position == storageNumRow || position == saveToGalleryGroupsRow || position == saveToGalleryPeerRow || position == saveToGalleryChannelsRow || position == resetDownloadRow ||
-                    position == downloadAcceleratorRow || position == downloadThreadsRow || position == uploadAcceleratorRow || position == uploadThreadsRow;
+                    position == downloadAcceleratorRow || position == downloadThreadsRow || position == uploadAcceleratorRow || position == uploadThreadsRow || position == uploadQueueRow ||
+                    position == turboDownloadRow || position == turboPriorityRow || position == turboKeepPartialRow;
         }
 
         @Override
@@ -1047,11 +1144,11 @@ public class DataSettingsActivity extends BaseFragment {
         public int getItemViewType(int position) {
             if (position == mediaDownloadSection2Row || position == usageSection2Row || position == callsSection2Row || position == proxySection2Row || position == autoplaySectionRow || position == clearDraftsSectionRow || position == saveToGalleryDividerRow) {
                 return 0;
-            } else if (position == mediaDownloadSectionRow || position == streamSectionRow || position == callsSectionRow || position == usageSectionRow || position == proxySectionRow || position == autoplayHeaderRow || position == saveToGallerySectionRow || position == downloadAcceleratorSectionRow) {
+            } else if (position == mediaDownloadSectionRow || position == streamSectionRow || position == callsSectionRow || position == usageSectionRow || position == proxySectionRow || position == autoplayHeaderRow || position == saveToGallerySectionRow || position == downloadAcceleratorSectionRow || position == turboSectionRow) {
                 return 2;
-            } else if (position == enableCacheStreamRow || position == enableStreamRow || position == enableAllStreamRow || position == enableMkvRow || position == autoplayGifsRow || position == autoplayVideoRow || position == downloadAcceleratorRow || position == uploadAcceleratorRow) {
+            } else if (position == enableCacheStreamRow || position == enableStreamRow || position == enableAllStreamRow || position == enableMkvRow || position == autoplayGifsRow || position == autoplayVideoRow || position == downloadAcceleratorRow || position == uploadAcceleratorRow || position == turboDownloadRow || position == turboKeepPartialRow) {
                 return 3;
-            } else if (position == enableAllStreamInfoRow || position == downloadAcceleratorInfoRow) {
+            } else if (position == enableAllStreamInfoRow || position == downloadAcceleratorInfoRow || position == turboInfoRow) {
                 return 4;
             } else if (position == mobileRow || position == wifiRow || position == roamingRow || position == saveToGalleryGroupsRow || position == saveToGalleryPeerRow || position == saveToGalleryChannelsRow) {
                 return 5;

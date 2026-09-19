@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: fayllar boshqaruvchisi -->
+    <string name="AyuFileExplorer">Fayllar boshqaruvchisi</string>
+    <string name="AyuFileExplorerInfo">Barcha chatlardagi barcha fayllar bir joyda — chat, tur, hajm yoki sana bo\'yicha.</string>
+
+    <!-- asosiy ekran -->
+    <string name="AyuFeStorageHeader">Xotira</string>
+    <string name="AyuFeOnThisDevice">Shu qurilmada</string>
+    <string name="AyuFeTotalIndexed">Indeksdagi fayllar</string>
+    <string name="AyuFeFreeSpace">Bo\'sh joy</string>
+    <string name="AyuFeStorageInfo">Indeks lokal xabarlar keshi va Telegram qurilmada saqlagan fayllar asosida tuziladi. Lokal nusxani o\'chirish xabarni o\'chirmaydi.</string>
+    <string name="AyuFeIndexing">Indekslanmoqda…</string>
+
+    <string name="AyuFeBrowseHeader">Ko\'rish</string>
+    <string name="AyuFeByChat">Chat bo\'yicha</string>
+    <string name="AyuFeByType">Tur bo\'yicha</string>
+    <string name="AyuFeBySize">Hajm bo\'yicha</string>
+    <string name="AyuFeByDate">Sana bo\'yicha</string>
+    <string name="AyuFeBySizeValue">Avval kattalari</string>
+    <string name="AyuFeByDateValue">Oylar bo\'yicha</string>
+    <string name="AyuFeBrowseInfo">Har bir ro\'yxatda fayl nomi bo\'yicha qidirish va nom, hajm yoki sana bo\'yicha saralash mumkin.</string>
+
+    <string name="AyuFeOptionsHeader">Sozlamalar</string>
+    <string name="AyuFeOnlyDownloaded">Faqat yuklanganlar</string>
+    <string name="AyuFeScanDownloads">Yuklab olish papkalarini skanerlash</string>
+    <string name="AyuFeRefresh">Indeksni qayta tuzish</string>
+    <string name="AyuFeOptionsInfo">Yuklab olish papkalarini skanerlash hech qaysi xabarga bog\'lanmagan fayllarni ham topadi. Katta keshda indeksni qayta tuzish biroz vaqt olishi mumkin.</string>
+
+    <!-- turkumlar -->
+    <string name="AyuFeCategoryPhotos">Rasmlar</string>
+    <string name="AyuFeCategoryVideos">Videolar</string>
+    <string name="AyuFeCategoryDocuments">Hujjatlar</string>
+    <string name="AyuFeCategoryMusic">Audio</string>
+    <string name="AyuFeCategoryVoice">Ovozli xabarlar</string>
+    <string name="AyuFeCategoryGifs">GIF</string>
+    <string name="AyuFeCategoryStickers">Stikerlar</string>
+    <string name="AyuFeCategoryOther">Boshqa</string>
+    <string name="AyuFeNoExtension">Kengaytmasiz</string>
+
+    <!-- ro'yxatlar -->
+    <string name="AyuFeEmpty">Bu yerda hali fayl yo\'q.</string>
+    <string name="AyuFeUnknownChat">Noma\'lum chat</string>
+    <string name="AyuFeUnknownDate">Sana noma\'lum</string>
+    <string name="AyuFeSelect">Tanlash</string>
+    <string name="AyuFeSortByDate">Sana bo\'yicha saralash</string>
+    <string name="AyuFeSortBySize">Hajm bo\'yicha saralash</string>
+    <string name="AyuFeSortByName">Nom bo\'yicha saralash</string>
+
+    <!-- amallar -->
+    <string name="AyuFeOpen">Ochish</string>
+    <string name="AyuFeDownload">Yuklab olish</string>
+    <string name="AyuFeGoToMessage">Xabarga o\'tish</string>
+    <string name="AyuFeDeleteLocal">Lokal nusxani o\'chirish</string>
+    <string name="AyuFeDeleteMessage">Xabarlar chatlarda qoladi, faqat shu qurilmada saqlangan nusxalar o\'chiriladi (%1$s).</string>
+    <string name="AyuFeDeleted">%1$s bo\'shatildi</string>
+    <string name="AyuFeDownloadStarted">Yuklab olish boshlandi</string>
+    <string name="AyuFeNotDownloaded">Bu fayl qurilmangizda yo\'q.</string>
+    <string name="AyuFeNoMessage">Bu fayl uchun xabar lokal keshda topilmadi.</string>
+    <string name="AyuFeCannotOpen">Bu faylni ocha oladigan ilova yo\'q.</string>
+
+    <!-- ko'plik shakllari -->
+    <string name="AyuFeFiles_one">%1$d fayl</string>
+    <string name="AyuFeFiles_few">%1$d fayl</string>
+    <string name="AyuFeFiles_many">%1$d fayl</string>
+    <string name="AyuFeFiles_other">%1$d fayl</string>
+    <string name="AyuFeChats_one">%1$d chat</string>
+    <string name="AyuFeChats_few">%1$d chat</string>
+    <string name="AyuFeChats_many">%1$d chat</string>
+    <string name="AyuFeChats_other">%1$d chat</string>
+    <string name="AyuFeTypes_one">%1$d tur</string>
+    <string name="AyuFeTypes_few">%1$d tur</string>
+    <string name="AyuFeTypes_many">%1$d tur</string>
+    <string name="AyuFeTypes_other">%1$d tur</string>
+    <string name="AyuFeDeleteTitle_one">%1$d faylni o\'chirish</string>
+    <string name="AyuFeDeleteTitle_few">%1$d faylni o\'chirish</string>
+    <string name="AyuFeDeleteTitle_many">%1$d faylni o\'chirish</string>
+    <string name="AyuFeDeleteTitle_other">%1$d faylni o\'chirish</string>
+</resources>

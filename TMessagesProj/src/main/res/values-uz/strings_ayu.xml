@@ -293,4 +293,19 @@
     <string name="AyuBotOpenChatHint">@username yoki ID</string>
     <string name="AyuBotOpenChatNotFound">Bunday chat topilmadi.</string>
     <string name="AyuBotHistoryUnavailable">Bot akkaunti uchun eski xabarlarni yuklab bo\'lmaydi.</string>
+
+    <!-- AyuGram: Turbo yuklab olish -->
+    <string name="AyuTurboDownload">Turbo yuklab olish</string>
+    <string name="AyuTurboDownloadEnable">Turbo yuklab olishni yoqish</string>
+    <string name="AyuTurboDownloadInfo">Siz o\'zingiz so\'ragan fayllarga — bosgan fayllaringiz, ko\'rayotgan videongiz va ochiq chatdagi media — eng ko\'p ulanish va navbatda birinchi o\'rin beriladi, fondagi avtomatik yuklab olish esa qolganidan foydalanadi. Uzilgan yuklab olish diskka to\'liq yozilgan oxirgi qismdan davom etadi.</string>
+    <string name="AyuTurboPriority">Muhim fayllar ustuvorligi</string>
+    <string name="AyuTurboPriorityTitle">Yuklab olish ustuvorligi</string>
+    <string name="AyuTurboPriorityValue">%1$d / 32</string>
+    <string name="AyuTurboPriorityGentle">Yumshoq</string>
+    <string name="AyuTurboPriorityBalanced">Muvozanatli</string>
+    <string name="AyuTurboPriorityFast">Tez</string>
+    <string name="AyuTurboPriorityMaximum">Maksimal</string>
+    <string name="AyuTurboIslandBadge">Turbo</string>
+    <string name="AyuTurboKeepPartial">Qisman fayllarni saqlash</string>
+    <string name="AyuTurboKeepPartialInfo">Yuklab olish bekor qilinganda yoki uzilganda allaqachon yuklangan qismni saqlab qolish; keyingi urinishda fayl boshidan emas, o\'sha joydan davom etadi.</string>
 </resources>

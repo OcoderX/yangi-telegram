@@ -19,6 +19,13 @@ public class FileLoaderPriorityQueue {
     public final static int PRIORITY_VALUE_NORMAL = (1 << 16);
     public final static int PRIORITY_VALUE_LOW = 0;
 
+    /**
+     * Turbo Download: every point of the user facing 1..32 priority scale is worth this much inside
+     * a priority bucket. 32 * (1 << 14) = 524288 which still fits between PRIORITY_VALUE_NORMAL and
+     * PRIORITY_VALUE_MAX, so the boost can never make an operation jump into another bucket.
+     */
+    public final static int PRIORITY_VALUE_TURBO_STEP = (1 << 14);
+
     final DispatchQueue workerQueue;
 
     boolean checkOperationsScheduled = false;

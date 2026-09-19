@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Mention Radar -->
+    <string name="RadarTitle">Mention Radar</string>
+    <string name="RadarHubInfo">One feed with every message that mentions you, replies to you, uses your name or matches your keywords.</string>
+    <string name="RadarStateOn">On</string>
+    <string name="RadarStateOff">Off</string>
+    <string name="RadarUnread">%1$d unread</string>
+    <string name="RadarEmpty">Nothing here yet. New mentions, replies and keyword hits will show up automatically.</string>
+    <string name="RadarNoText">(no text)</string>
+
+    <!-- filters -->
+    <string name="RadarFilterAll">All</string>
+    <string name="RadarFilterMentions">Mentions</string>
+    <string name="RadarFilterReplies">Replies</string>
+    <string name="RadarFilterName">Name</string>
+    <string name="RadarFilterKeywords">Keywords</string>
+
+    <!-- kinds -->
+    <string name="RadarKindMention">MENTION</string>
+    <string name="RadarKindReply">REPLY</string>
+    <string name="RadarKindName">NAME</string>
+    <string name="RadarKindKeyword">KEYWORD</string>
+
+    <!-- feed actions -->
+    <string name="RadarMarkAllRead">Mark all as read</string>
+    <string name="RadarMarkRead">Mark as read</string>
+    <string name="RadarOpenChat">Open chat</string>
+    <string name="RadarDelete">Delete</string>
+    <string name="RadarClearAll">Clear the feed</string>
+    <string name="RadarClearAllMessage">Delete every collected hit? The messages themselves are not touched.</string>
+
+    <!-- history scan -->
+    <string name="RadarScanHistory">Scan history</string>
+    <string name="RadarScanCancel">Cancel the scan</string>
+    <string name="RadarScanStarting">Starting the scan…</string>
+    <string name="RadarScanProgress">Scanning %1$d/%2$d, found %3$d</string>
+    <string name="RadarScanDone">Scan finished, %1$d new hit(s).</string>
+    <string name="RadarScanCancelled">Scan cancelled.</string>
+
+    <!-- settings / keywords screen -->
+    <string name="RadarKeywords">Radar Keywords</string>
+    <string name="RadarCollectHeader">Collect</string>
+    <string name="RadarEnable">Enable the radar</string>
+    <string name="RadarCollectMentions">Mentions of me</string>
+    <string name="RadarCollectReplies">Replies to my messages</string>
+    <string name="RadarCollectName">My first / last name</string>
+    <string name="RadarCollectKeywords">My keywords</string>
+    <string name="RadarCollectInfo">Incoming messages are matched in the background; nothing is sent anywhere.</string>
+
+    <string name="RadarScopeHeader">Where to look</string>
+    <string name="RadarScopeGroups">Groups and supergroups</string>
+    <string name="RadarScopeChannels">Channels</string>
+    <string name="RadarScopePrivate">Private chats</string>
+    <string name="RadarScopeSkipMuted">Skip muted chats</string>
+    <string name="RadarScopeInfo">Secret chats are never scanned.</string>
+
+    <string name="RadarKeywordsHeader">Keywords</string>
+    <string name="RadarKeywordAdd">Add keyword</string>
+    <string name="RadarKeywordEdit">Edit keyword</string>
+    <string name="RadarKeywordDelete">Delete keyword</string>
+    <string name="RadarKeywordEnable">Enable</string>
+    <string name="RadarKeywordDisable">Disable</string>
+    <string name="RadarKeywordDisabled">disabled</string>
+    <string name="RadarKeywordHint">Keyword</string>
+    <string name="RadarKeywordWholeWord">Whole word only</string>
+    <string name="RadarKeywordAnywhere">Anywhere in the text</string>
+    <string name="RadarKeywordRegex">Regular expression</string>
+    <string name="RadarKeywordInvalidRegex">Invalid regular expression</string>
+    <string name="RadarKeywordEmptyError">Please enter a keyword.</string>
+    <string name="RadarKeywordsEmpty">You have no keywords yet.</string>
+    <string name="RadarKeywordsInfo">Matching is case-insensitive. Tap a keyword to edit it, hold it for more options.</string>
+
+    <string name="RadarNotifyKeywords">Notify on keyword hits</string>
+    <string name="RadarNotifyKeywordsInfo">Shows a local notification when a keyword matches. Mentions and replies keep using Telegram\'s own notifications.</string>
+
+    <!-- notification -->
+    <string name="RadarNotificationTitle">Keyword: %1$s</string>
+    <string name="RadarNotificationTitleMany">%1$d new keyword hits</string>
+</resources>

@@ -217,6 +217,8 @@ public class FileLoadOperation {
     private byte[] iv;
     private int currentDownloadChunkSize;
     private int currentMaxDownloadRequests;
+    private int baseMaxDownloadRequests;
+    private volatile int turboPriority = FileLoader.getTurboPriorityScale(FileLoader.PRIORITY_NORMAL);
     private int requestsCount;
     private int renameRetryCount;
     private static int globalRequestPointer;
@@ -515,6 +517,60 @@ public class FileLoadOperation {
         return priority;
     }
 
+    /**
+     * Turbo Download: the user facing 1..32 priority of this operation. Set from the file loader
+     * queue thread, read from the stage queue, hence volatile.
+     */
+    public void setTurboPriority(int value) {
+        turboPriority = Utilities.clamp(value, FileLoader.TURBO_PRIORITY_MAX, FileLoader.TURBO_PRIORITY_MIN);
+    }
+
+    public int getTurboPriority() {
+        return turboPriority;
+    }
+
+    /**
+     * Turbo Download: how many chunk requests this operation may keep in flight. Scales with the
+     * 1..32 priority and with the file size, and never exceeds the native download connection pool.
+     * With Turbo off this returns exactly the value vanilla would have used.
+     */
+    private int computeMaxDownloadRequests() {
+        final int base = Math.max(1, baseMaxDownloadRequests);
+        if (!SharedConfig.turboDownloadEnabled || forceSmallChunk || isPreloadVideoOperation) {
+            return base;
+        }
+        final int pool;
+        if (SharedConfig.enableDownloadAccelerator) {
+            pool = Math.max(base, Math.max(2, ConnectionsManager.DownloadConnectionsCount));
+        } else {
+            pool = base;
+        }
+        final int scale = Utilities.clamp(turboPriority, FileLoader.TURBO_PRIORITY_MAX, FileLoader.TURBO_PRIORITY_MIN);
+        final int floor = Math.min(pool, Math.max(2, pool / 4));
+        // 1 point of the scale is worth (pool - floor) / 31 parallel requests
+        final int byPriority = floor + Math.round((pool - floor) * (scale - 1) / (float) (FileLoader.TURBO_PRIORITY_MAX - 1));
+        int result;
+        if (scale <= FileLoader.getTurboPriorityScale(FileLoader.PRIORITY_LOW)) {
+            // background / auto-download: throttle so that important files get the connections
+            result = Math.min(base, byPriority);
+        } else {
+            // user initiated, streamed or currently visible: never slower than vanilla
+            result = Math.max(base, byPriority);
+        }
+        result = Math.min(result, pool);
+        // there is no point in asking for more parallel chunks than the file actually has
+        if (totalBytesCount > 0 && currentDownloadChunkSize > 0) {
+            long chunks = (totalBytesCount + currentDownloadChunkSize - 1) / currentDownloadChunkSize;
+            result = (int) Math.min(result, Math.max(1, chunks));
+        }
+        return Math.max(1, result);
+    }
+
+    private void setBaseMaxDownloadRequests(int value) {
+        baseMaxDownloadRequests = value;
+        currentMaxDownloadRequests = computeMaxDownloadRequests();
+    }
+
     public void setPaths(int instance, String name, FileLoaderPriorityQueue priorityQueue, File store, File temp, String finalName) {
         this.storePath = store;
         this.tempPath = temp;
@@ -615,59 +671,7 @@ public class FileLoadOperation {
         }
         if (save) {
             if (modified) {
-                ArrayList<FileLoadOperation.Range> rangesFinal = new ArrayList<>(ranges);
-                if (fileWriteRunnable != null) {
-                    filesQueue.cancelRunnable(fileWriteRunnable);
-                }
-                synchronized (FileLoadOperation.this) {
-                    writingToFilePartsStream = true;
-                }
-                filesQueue.postRunnable(fileWriteRunnable = () -> {
-                    long time = System.currentTimeMillis();
-                    try {
-                        if (filePartsStream == null) {
-                            return;
-                        }
-                        int countFinal = rangesFinal.size();
-                        int bufferSize = 4 + 8 * 2 * countFinal;
-                        if (filesQueueByteBuffer == null) {
-                            filesQueueByteBuffer = new ImmutableByteArrayOutputStream(bufferSize);
-                        } else {
-                            filesQueueByteBuffer.reset();
-                        }
-                        filesQueueByteBuffer.writeInt(countFinal);
-                        for (int a = 0; a < countFinal; a++) {
-                            Range rangeFinal = rangesFinal.get(a);
-                            filesQueueByteBuffer.writeLong(rangeFinal.start);
-                            filesQueueByteBuffer.writeLong(rangeFinal.end);
-                        }
-                        synchronized (FileLoadOperation.this) {
-                            if (filePartsStream == null) {
-                                return;
-                            }
-                            filePartsStream.seek(0);
-                            filePartsStream.write(filesQueueByteBuffer.buf, 0, bufferSize);
-                            writingToFilePartsStream = false;
-                            if (closeFilePartsStreamOnWriteEnd) {
-                                try {
-                                    filePartsStream.getChannel().close();
-                                } catch (Exception e) {
-                                    FileLog.e(e);
-                                }
-                                filePartsStream.close();
-                                filePartsStream = null;
-                            }
-                        }
-                    } catch (Exception e) {
-                        FileLog.e(e, false);
-                        if (AndroidUtilities.isENOSPC(e)) {
-                            LaunchActivity.checkFreeDiscSpaceStatic(1);
-                        } else if (AndroidUtilities.isEROFS(e)) {
-                            SharedConfig.checkSdCard(cacheFileFinal);
-                        }
-                    }
-                    totalTime += System.currentTimeMillis() - time;
-                });
+                schedulePartsFileWrite(ranges);
                 notifyStreamListeners();
             } else {
                 if (BuildVars.LOGS_ENABLED) {
@@ -675,6 +679,126 @@ public class FileLoadOperation {
                 }
             }
         }
+    }
+
+    /**
+     * Persists the "not loaded yet" map into the .pt file. The write is coalesced on the file queue:
+     * a newer snapshot always replaces an older pending one, and the file is rewritten from scratch,
+     * so writing the same state twice is harmless.
+     */
+    private void schedulePartsFileWrite(ArrayList<Range> ranges) {
+        if (ranges == null) {
+            return;
+        }
+        final ArrayList<Range> rangesFinal = new ArrayList<>(ranges);
+        if (fileWriteRunnable != null) {
+            filesQueue.cancelRunnable(fileWriteRunnable);
+        }
+        synchronized (FileLoadOperation.this) {
+            writingToFilePartsStream = true;
+        }
+        filesQueue.postRunnable(fileWriteRunnable = () -> {
+            long time = System.currentTimeMillis();
+            try {
+                if (filePartsStream == null) {
+                    synchronized (FileLoadOperation.this) {
+                        writingToFilePartsStream = false;
+                    }
+                    return;
+                }
+                int countFinal = rangesFinal.size();
+                int bufferSize = 4 + 8 * 2 * countFinal;
+                if (filesQueueByteBuffer == null) {
+                    filesQueueByteBuffer = new ImmutableByteArrayOutputStream(bufferSize);
+                } else {
+                    filesQueueByteBuffer.reset();
+                }
+                filesQueueByteBuffer.writeInt(countFinal);
+                for (int a = 0; a < countFinal; a++) {
+                    Range rangeFinal = rangesFinal.get(a);
+                    filesQueueByteBuffer.writeLong(rangeFinal.start);
+                    filesQueueByteBuffer.writeLong(rangeFinal.end);
+                }
+                synchronized (FileLoadOperation.this) {
+                    if (filePartsStream == null) {
+                        writingToFilePartsStream = false;
+                        return;
+                    }
+                    filePartsStream.seek(0);
+                    filePartsStream.write(filesQueueByteBuffer.buf, 0, bufferSize);
+                    writingToFilePartsStream = false;
+                    if (closeFilePartsStreamOnWriteEnd) {
+                        try {
+                            filePartsStream.getChannel().close();
+                        } catch (Exception e) {
+                            FileLog.e(e);
+                        }
+                        filePartsStream.close();
+                        filePartsStream = null;
+                    }
+                }
+            } catch (Exception e) {
+                FileLog.e(e, false);
+                if (AndroidUtilities.isENOSPC(e)) {
+                    LaunchActivity.checkFreeDiscSpaceStatic(1);
+                } else if (AndroidUtilities.isEROFS(e)) {
+                    SharedConfig.checkSdCard(cacheFileFinal);
+                }
+            }
+            totalTime += System.currentTimeMillis() - time;
+        });
+    }
+
+    /**
+     * Turbo Download: flush the current part map right now. Every incoming part cancels the pending
+     * write, so when an operation is paused, cancelled or fails the last handful of parts used to be
+     * missing from the .pt file and had to be downloaded again on resume.
+     */
+    private void savePartsFileState() {
+        if (!SharedConfig.turboDownloadEnabled || !SharedConfig.turboDownloadKeepPartial) {
+            return;
+        }
+        if (notLoadedBytesRanges == null || filePartsStream == null || isPreloadVideoOperation) {
+            return;
+        }
+        try {
+            schedulePartsFileWrite(notLoadedBytesRanges);
+        } catch (Throwable e) {
+            FileLog.e(e, false);
+        }
+    }
+
+    /**
+     * Turbo Download: union of {@code ranges} with [start, end), used when resume has to give back
+     * a region that the part map claimed but that was never actually written to the temp file.
+     * Unlike {@link #removePart} this one merges overlapping ranges, so the map can never end up
+     * counting the same bytes twice.
+     */
+    private static void markNotLoaded(ArrayList<Range> ranges, long start, long end) {
+        if (ranges == null || end <= start) {
+            return;
+        }
+        long newStart = start;
+        long newEnd = end;
+        for (int a = 0; a < ranges.size(); a++) {
+            Range range = ranges.get(a);
+            if (range.end < newStart || range.start > newEnd) {
+                continue;
+            }
+            newStart = Math.min(newStart, range.start);
+            newEnd = Math.max(newEnd, range.end);
+            ranges.remove(a);
+            a--;
+        }
+        ranges.add(new Range(newStart, newEnd));
+        Collections.sort(ranges, (o1, o2) -> {
+            if (o1.start > o2.start) {
+                return 1;
+            } else if (o1.start < o2.start) {
+                return -1;
+            }
+            return 0;
+        });
     }
 
     private void notifyStreamListeners() {
@@ -835,6 +959,9 @@ public class FileLoadOperation {
                     ConnectionsManager.getInstance(currentAccount).failNotRunningRequest(requestInfos.get(i).requestToken);
                 }
             }
+            // Turbo Download: a paused operation can stay paused until the app dies, so make sure the
+            // part map on disk matches what we already received.
+            savePartsFileState();
         });
     }
 
@@ -851,17 +978,17 @@ public class FileLoadOperation {
                     FileLog.d("debug_loading: restart with small chunk");
                 }
                 currentDownloadChunkSize =  1024 * 32;
-                currentMaxDownloadRequests = 4;
+                setBaseMaxDownloadRequests(4);
             } else if (isStory) {
                 currentDownloadChunkSize = downloadChunkSizeBig;
-                currentMaxDownloadRequests = maxDownloadRequestsBig;
+                setBaseMaxDownloadRequests(maxDownloadRequestsBig);
             } else if (isStream) {
                 currentDownloadChunkSize = downloadChunkSizeAnimation;
-                currentMaxDownloadRequests = maxDownloadRequestsAnimation;
+                setBaseMaxDownloadRequests(maxDownloadRequestsAnimation);
             } else {
                 boolean bigChunk = totalBytesCount >= bigFileSizeFrom;
                 currentDownloadChunkSize = bigChunk ? downloadChunkSizeBig : downloadChunkSize;
-                currentMaxDownloadRequests = bigChunk ? maxDownloadRequestsBig : maxDownloadRequests;
+                setBaseMaxDownloadRequests(bigChunk ? maxDownloadRequestsBig : maxDownloadRequests);
             }
         }
         final boolean alreadyStarted = state != stateIdle;
@@ -1153,6 +1280,7 @@ public class FileLoadOperation {
                 }
             }
 
+            boolean partsMapRestored = false;
             if (fileNameParts != null) {
                 cacheFileParts = new File(tempPath, fileNameParts);
                 if (!cacheFileTemp.exists()) {
@@ -1165,6 +1293,7 @@ public class FileLoadOperation {
                         len -= 4;
                         int count = filePartsStream.readInt();
                         if (count <= len / 2) {
+                            partsMapRestored = true;
                             for (int a = 0; a < count; a++) {
                                 long start = filePartsStream.readLong();
                                 long end = filePartsStream.readLong();
@@ -1202,6 +1331,27 @@ public class FileLoadOperation {
             } else if (notLoadedBytesRanges != null && notLoadedBytesRanges.isEmpty()) {
                 notLoadedBytesRanges.add(new Range(0, totalBytesCount));
                 notRequestedBytesRanges.add(new Range(0, totalBytesCount));
+            }
+            if (SharedConfig.turboDownloadEnabled && notLoadedBytesRanges != null && !isPreloadVideoOperation && totalBytesCount > 0) {
+                // Turbo Download: re-validate what we are about to resume from. Only ranges that were
+                // really written to the temp file may be trusted, everything else is downloaded again.
+                final long physicalLength = cacheFileTemp.exists() ? cacheFileTemp.length() : 0;
+                final boolean partMapLost = !partsMapRestored && physicalLength > 0 && totalBytesCount > 512 * 1024;
+                if (physicalLength <= 0 || partMapLost) {
+                    // either nothing survived, or the temp file survived without its part map, in which
+                    // case we cannot tell which parts of it are real - re-request the whole file, the
+                    // existing bytes will simply be overwritten
+                    if (BuildVars.LOGS_ENABLED && partMapLost) {
+                        FileLog.d("turbo: part map lost for " + fileName + ", restarting download from scratch");
+                    }
+                    notLoadedBytesRanges.clear();
+                    notRequestedBytesRanges.clear();
+                    notLoadedBytesRanges.add(new Range(0, totalBytesCount));
+                    notRequestedBytesRanges.add(new Range(0, totalBytesCount));
+                } else if (physicalLength < totalBytesCount) {
+                    markNotLoaded(notLoadedBytesRanges, physicalLength, totalBytesCount);
+                    markNotLoaded(notRequestedBytesRanges, physicalLength, totalBytesCount);
+                }
             }
             if (notLoadedBytesRanges != null) {
                 downloadedBytes = totalBytesCount;
@@ -1468,6 +1618,12 @@ public class FileLoadOperation {
     }
 
     private void cleanup() {
+        if (state != stateFinished) {
+            // Turbo Download: the operation is going away without having finished (paused for good,
+            // cancelled, failed, account switched). Persist what we already have so that the next
+            // attempt resumes instead of starting over. The close below then happens after this write.
+            savePartsFileState();
+        }
         try {
             if (fileOutputStream != null) {
                 try {
@@ -2076,7 +2232,7 @@ public class FileLoadOperation {
                 if (!forceSmallChunk) {
                     forceSmallChunk = true;
                     currentDownloadChunkSize =  1024 * 32;
-                    currentMaxDownloadRequests = 4;
+                    setBaseMaxDownloadRequests(4);
                 }
                 startDownloadRequest(requestInfo.connectionType);
             } else if (error.text.contains("FILE_MIGRATE_")) {
@@ -2261,6 +2417,12 @@ public class FileLoadOperation {
         }
         if (state == stateCancelling) {
             state = stateDownloading;
+        }
+        if (baseMaxDownloadRequests > 0) {
+            // Turbo Download: the priority of an operation can change while it is running (the user
+            // taps it, it starts streaming, the chat is closed), so re-evaluate the parallelism here,
+            // on the stage queue, where currentMaxDownloadRequests is actually consumed.
+            currentMaxDownloadRequests = computeMaxDownloadRequests();
         }
         if (paused || reuploadingCdn || state != stateDownloading || requestingReference ||
                 (!isStory && streamPriorityStartOffset == 0 && (!nextPartWasPreloaded && (requestInfos.size() + delayedRequestInfos.size() >= currentMaxDownloadRequests))) ||

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: eslatmalar radari -->
+    <string name="RadarTitle">Eslatmalar radari</string>
+    <string name="RadarHubInfo">Sizni eslatgan, sizga javob bergan, ismingizni yozgan yoki kalit so\'zingizga mos kelgan barcha xabarlar bitta lentada.</string>
+    <string name="RadarStateOn">Yoqilgan</string>
+    <string name="RadarStateOff">O\'chirilgan</string>
+    <string name="RadarUnread">%1$d o\'qilmagan</string>
+    <string name="RadarEmpty">Hozircha bo\'sh. Yangi eslatmalar, javoblar va kalit so\'z mosliklari bu yerda avtomatik paydo bo\'ladi.</string>
+    <string name="RadarNoText">(matn yo\'q)</string>
+
+    <!-- filtrlar -->
+    <string name="RadarFilterAll">Hammasi</string>
+    <string name="RadarFilterMentions">Eslatmalar</string>
+    <string name="RadarFilterReplies">Javoblar</string>
+    <string name="RadarFilterName">Ism</string>
+    <string name="RadarFilterKeywords">Kalit so\'zlar</string>
+
+    <!-- turlari -->
+    <string name="RadarKindMention">ESLATMA</string>
+    <string name="RadarKindReply">JAVOB</string>
+    <string name="RadarKindName">ISM</string>
+    <string name="RadarKindKeyword">KALIT SO\'Z</string>
+
+    <!-- amallar -->
+    <string name="RadarMarkAllRead">Hammasini o\'qilgan deb belgilash</string>
+    <string name="RadarMarkRead">O\'qilgan deb belgilash</string>
+    <string name="RadarOpenChat">Chatni ochish</string>
+    <string name="RadarDelete">O\'chirish</string>
+    <string name="RadarClearAll">Lentani tozalash</string>
+    <string name="RadarClearAllMessage">Yig\'ilgan barcha mosliklar o\'chirilsinmi? Xabarlarning o\'ziga tegilmaydi.</string>
+
+    <!-- tarixni skanerlash -->
+    <string name="RadarScanHistory">Tarixni skanerlash</string>
+    <string name="RadarScanCancel">Skanerlashni bekor qilish</string>
+    <string name="RadarScanStarting">Skanerlash boshlanmoqda…</string>
+    <string name="RadarScanProgress">Skanerlanmoqda %1$d/%2$d, topildi %3$d</string>
+    <string name="RadarScanDone">Skanerlash tugadi, %1$d ta yangi moslik.</string>
+    <string name="RadarScanCancelled">Skanerlash bekor qilindi.</string>
+
+    <!-- sozlamalar / kalit so'zlar -->
+    <string name="RadarKeywords">Radar kalit so\'zlari</string>
+    <string name="RadarCollectHeader">Nimalarni yig\'ish</string>
+    <string name="RadarEnable">Radarni yoqish</string>
+    <string name="RadarCollectMentions">Meni eslatishlar</string>
+    <string name="RadarCollectReplies">Xabarlarimga javoblar</string>
+    <string name="RadarCollectName">Ismim yoki familiyam</string>
+    <string name="RadarCollectKeywords">Kalit so\'zlarim</string>
+    <string name="RadarCollectInfo">Kiruvchi xabarlar fonda tekshiriladi; hech qayerga hech narsa yuborilmaydi.</string>
+
+    <string name="RadarScopeHeader">Qayerda qidirilsin</string>
+    <string name="RadarScopeGroups">Guruhlar va superguruhlar</string>
+    <string name="RadarScopeChannels">Kanallar</string>
+    <string name="RadarScopePrivate">Shaxsiy chatlar</string>
+    <string name="RadarScopeSkipMuted">Ovozsiz chatlarni o\'tkazib yuborish</string>
+    <string name="RadarScopeInfo">Maxfiy chatlar hech qachon skanerlanmaydi.</string>
+
+    <string name="RadarKeywordsHeader">Kalit so\'zlar</string>
+    <string name="RadarKeywordAdd">Kalit so\'z qo\'shish</string>
+    <string name="RadarKeywordEdit">Kalit so\'zni tahrirlash</string>
+    <string name="RadarKeywordDelete">Kalit so\'zni o\'chirish</string>
+    <string name="RadarKeywordEnable">Yoqish</string>
+    <string name="RadarKeywordDisable">O\'chirish</string>
+    <string name="RadarKeywordDisabled">o\'chirilgan</string>
+    <string name="RadarKeywordHint">Kalit so\'z</string>
+    <string name="RadarKeywordWholeWord">Faqat butun so\'z</string>
+    <string name="RadarKeywordAnywhere">Matnning istalgan joyida</string>
+    <string name="RadarKeywordRegex">Muntazam ifoda</string>
+    <string name="RadarKeywordInvalidRegex">Noto\'g\'ri muntazam ifoda</string>
+    <string name="RadarKeywordEmptyError">Iltimos, kalit so\'z kiriting.</string>
+    <string name="RadarKeywordsEmpty">Sizda hali kalit so\'zlar yo\'q.</string>
+    <string name="RadarKeywordsInfo">Katta-kichik harf farqlanmaydi. Tahrirlash uchun bosing, qo\'shimcha amallar uchun bosib turing.</string>
+
+    <string name="RadarNotifyKeywords">Kalit so\'z mosligida bildirishnoma</string>
+    <string name="RadarNotifyKeywordsInfo">Kalit so\'z mos kelganda mahalliy bildirishnoma ko\'rsatadi. Eslatmalar va javoblar uchun Telegram\'ning o\'z bildirishnomalari qoladi.</string>
+
+    <!-- bildirishnoma -->
+    <string name="RadarNotificationTitle">Kalit so\'z: %1$s</string>
+    <string name="RadarNotificationTitleMany">%1$d ta yangi kalit so\'z mosligi</string>
+</resources>

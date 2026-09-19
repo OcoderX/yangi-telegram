@@ -8,6 +8,7 @@ import android.view.View;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.ayu.AyuConfig;
+import org.telegram.messenger.ayu.netdiag.NetDiagConfig;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -26,11 +27,14 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
     private static final int RECORDING = 12;
     private static final int DOWNLOADS = 13;
     private static final int GHOST = 14;
+    private static final int NETWORK = 15;
+    private static final int NETWORK_WITH_DOWNLOADS = 16;
     private static final int IDLE = 20;
 
     public DynamicIslandPreferencesActivity() {
         super();
         AyuConfig.load();
+        NetDiagConfig.load();
     }
 
     @Override
@@ -58,6 +62,15 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
         items.add(UItem.asCheck(DOWNLOADS, getString(R.string.AyuIslandDownloads)).setChecked(AyuConfig.islandDownloads));
         items.add(UItem.asCheck(GHOST, getString(R.string.AyuIslandGhost)).setChecked(AyuConfig.islandGhost));
         items.add(UItem.asShadow(getString(R.string.AyuIslandSourcesInfo)));
+
+        items.add(UItem.asCheck(NETWORK, getString(R.string.AyuNetDiagIslandToggle)).setChecked(NetDiagConfig.islandNetwork));
+        if (NetDiagConfig.islandNetwork) {
+            items.add(UItem.asCheck(NETWORK_WITH_DOWNLOADS, getString(R.string.AyuNetDiagIslandWithDownloads))
+                    .setChecked(NetDiagConfig.islandNetworkWithDownloads));
+        }
+        items.add(UItem.asShadow(NetDiagConfig.islandNetwork
+                ? getString(R.string.AyuNetDiagIslandToggleInfo) + "\n\n" + getString(R.string.AyuNetDiagIslandWithDownloadsInfo)
+                : getString(R.string.AyuNetDiagIslandToggleInfo)));
 
         items.add(UItem.asCheck(IDLE, getString(R.string.AyuIslandIdle)).setChecked(AyuConfig.islandIdle));
         items.add(UItem.asShadow(getString(R.string.AyuIslandIdleInfo)));
@@ -89,6 +102,14 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
             case GHOST:
                 AyuConfig.setIslandGhost(!AyuConfig.islandGhost);
                 toggleSwitch(view, AyuConfig.islandGhost);
+                break;
+            case NETWORK:
+                NetDiagConfig.setIslandNetwork(!NetDiagConfig.islandNetwork);
+                toggleSwitch(view, NetDiagConfig.islandNetwork);
+                break;
+            case NETWORK_WITH_DOWNLOADS:
+                NetDiagConfig.setIslandNetworkWithDownloads(!NetDiagConfig.islandNetworkWithDownloads);
+                toggleSwitch(view, NetDiagConfig.islandNetworkWithDownloads);
                 break;
             case IDLE:
                 AyuConfig.setIslandIdle(!AyuConfig.islandIdle);

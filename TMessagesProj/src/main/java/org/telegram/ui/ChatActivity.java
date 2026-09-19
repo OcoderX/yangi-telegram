@@ -451,6 +451,7 @@ public class ChatActivity extends BaseFragment implements
     private RadialProgressView progressBar;
     private ActionBarMenuItem.Item addContactItem;
     private ActionBarMenuItem.Item clearHistoryItem;
+    private ActionBarMenuItem.Item ayuDontSaveHereItem;
     private ActionBarMenuItem.Item viewAsTopics;
     private ActionBarMenuItem.Item closeTopicItem;
     private ActionBarMenuItem.Item openForumItem;
@@ -1251,6 +1252,7 @@ public class ChatActivity extends BaseFragment implements
     public final static int OPTION_AYU_EDIT_HISTORY = 200;
     public final static int OPTION_AYU_MESSAGE_DETAILS = 201;
     public final static int OPTION_AYU_DELETE_LOCALLY = 202;
+    public final static int OPTION_AYU_LONG_SCREENSHOT = 203;
 
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
             NotificationCenter.messagesRead,
@@ -1677,6 +1679,12 @@ public class ChatActivity extends BaseFragment implements
     private final static int charge_fee = 72;
 
     private final static int chat_menu_topic_create = 73;
+
+    /** ayu: "Long screenshot" action mode item */
+    private final static int ayu_long_screenshot = 75;
+
+    /** ayu: per-chat opt-out of the AyuGram deleted-message archive */
+    private final static int ayu_dont_save_here = 76;
 
     private final static int id_chat_compose_panel = 1000;
 
@@ -3744,6 +3752,16 @@ public class ChatActivity extends BaseFragment implements
                     createDeleteMessagesAlert(null, null);
                 } else if (id == forward) {
                     openForward(true);
+                } else if (id == ayu_long_screenshot) {
+                    //ayu: build a long screenshot out of the current multi-selection
+                    final ArrayList<MessageObject> ayuSelected = new ArrayList<>();
+                    for (int a = 1; a >= 0; a--) {
+                        for (int b = 0; b < selectedMessagesIds[a].size(); b++) {
+                            ayuSelected.add(selectedMessagesIds[a].valueAt(b));
+                        }
+                    }
+                    clearSelectionMode();
+                    org.telegram.ui.ayu.screenshot.LongScreenshotBuilder.start(ChatActivity.this, ayuSelected);
                 } else if (id == share) {
                     share();
                 } else if (id == open_direct) {
@@ -3811,6 +3829,13 @@ public class ChatActivity extends BaseFragment implements
                         return;
                     }
                     showDialog(AlertsCreator.createTTLAlert(getParentActivity(), currentEncryptedChat, themeDelegate).create());
+                } else if (id == ayu_dont_save_here) {
+                    final boolean excluded = org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.toggleExcluded(dialog_id);
+                    if (ayuDontSaveHereItem != null) {
+                        ayuDontSaveHereItem.setText(LocaleController.getString(excluded ? R.string.AyuSaveHere : R.string.AyuDontSaveHere));
+                    }
+                    BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.chats_infotip,
+                        LocaleController.getString(excluded ? R.string.AyuDontSaveHereEnabled : R.string.AyuDontSaveHereDisabled)).show();
                 } else if (id == clear_history || id == delete_chat || id == auto_delete_timer) {
                     if (getParentActivity() == null) {
                         return;
@@ -4419,6 +4444,12 @@ public class ChatActivity extends BaseFragment implements
             if (!isTopic && !ChatObject.isMonoForum(currentChat)) {
                 clearHistoryItem = headerItem.lazilyAddSubItem(clear_history, R.drawable.msg_clear,
                     LocaleController.getString(UserObject.isBotForum(currentUser) ? R.string.ClearAllHistory : R.string.ClearHistory));
+            }
+            //ayu: per-chat opt-out of the AyuGram deleted-message archive
+            if (!isTopic && currentEncryptedChat == null && dialog_id != 0) {
+                ayuDontSaveHereItem = headerItem.lazilyAddSubItem(ayu_dont_save_here, R.drawable.msg_clearcache,
+                    LocaleController.getString(org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.isExcluded(dialog_id)
+                        ? R.string.AyuSaveHere : R.string.AyuDontSaveHere));
             }
             boolean addedSettings = false;
             if (!isTopic) {
@@ -10251,6 +10282,8 @@ public class ChatActivity extends BaseFragment implements
                 actionModeViews.add(actionMode.addItemWithWidth(forward, R.drawable.msg_forward, dp(48), LocaleController.getString(R.string.Forward)));
             }
             actionModeViews.add(actionMode.addItemWithWidth(share, R.drawable.msg_shareout, dp(48), LocaleController.getString(R.string.ShareFile)));
+            //ayu: long screenshot of the selected range
+            actionModeViews.add(actionMode.addItemWithWidth(ayu_long_screenshot, R.drawable.msg_photos, dp(48), LocaleController.getString(R.string.AyuLongScreenshot)));
             actionModeViews.add(actionMode.addItemWithWidth(delete, R.drawable.msg_delete, dp(48), LocaleController.getString(R.string.Delete)));
         } else {
             actionModeViews.add(actionMode.addItemWithWidth(edit, R.drawable.msg_edit, dp(48), LocaleController.getString(R.string.Edit)));
@@ -22298,9 +22331,25 @@ public class ChatActivity extends BaseFragment implements
                         obj.messageOwner.ayuDeleted = true;
                         changed = true;
                     }
+                    //ayu: the bubble stays but its cache file was just unlinked - point it at our copy
+                    AyuMessagesController.getInstance().applySavedMediaAsync(currentAccount, dialog_id, obj.messageOwner, () -> {
+                        obj.forceUpdate = true;
+                        obj.mediaExists = false;
+                        obj.attachPathExists = false;
+                        obj.checkMediaExistance();
+                        if (chatAdapter != null) {
+                            chatAdapter.updateRowWithMessageObject(obj, true, false);
+                        }
+                    });
                 } else if (ayuType == 1) {
-                    obj.messageOwner.ayuEditedCount++;
-                    changed = true;
+                    //ayu-edithistory: the stored revision count is the source of truth. Blindly
+                    //incrementing over-counts when the same edit arrives twice (push + history load).
+                    final int revisions = org.telegram.messenger.ayu.edithistory.AyuEditHistoryCache.getCount(currentAccount, did, mid);
+                    final int newCount = revisions > 0 ? revisions : obj.messageOwner.ayuEditedCount + 1;
+                    if (newCount != obj.messageOwner.ayuEditedCount) {
+                        obj.messageOwner.ayuEditedCount = newCount;
+                        changed = true;
+                    }
                 }
                 if (changed) {
                     obj.forceUpdate = true;
@@ -33417,6 +33466,14 @@ public class ChatActivity extends BaseFragment implements
                 selectedObjectGroup = null;
                 break;
             }
+            case OPTION_AYU_LONG_SCREENSHOT: {
+                //ayu: capture this message and everything loaded after it
+                org.telegram.ui.ayu.screenshot.LongScreenshotBuilder.startFromMessage(this, selectedObject);
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
             case OPTION_FORWARD: {
                 if (getMessagesController().isFrozen()) {
                     AccountFrozenAlert.show(currentAccount);
@@ -36569,6 +36626,10 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void processExternalUrl(int type, String url, CharacterStyle span, ChatMessageCell cell, boolean forceAlert, boolean forceNoIV) {
+        // AyuGram: Personal Firewall - phishing / look-alike links are never handed to the browser
+        if (org.telegram.ui.ayu.firewall.FirewallAlerts.guardUrlOpen(ChatActivity.this, cell == null ? null : cell.getMessageObject(), url, span, () -> processExternalUrl(type, url, span, cell, forceAlert, forceNoIV))) {
+            return;
+        }
         try {
             String host = AndroidUtilities.getHostAuthority(url);
             if ((currentEncryptedChat == null || getMessagesController().secretWebpagePreview == 1) && getMessagesController().authDomains.contains(host)) {
@@ -41350,6 +41411,10 @@ public class ChatActivity extends BaseFragment implements
         @Override
         public void didPressImage(ChatMessageCell cell, float x, float y, boolean fullPreview) {
             MessageObject message = cell.getMessageObject();
+            // AyuGram: Personal Firewall - never open a document the firewall blocked
+            if (org.telegram.ui.ayu.firewall.FirewallAlerts.guardDocumentTap(ChatActivity.this, message, () -> didPressImage(cell, x, y, fullPreview))) {
+                return;
+            }
             if (message.type == MessageObject.TYPE_STORY) {
                 if (message.messageOwner.media.storyItem != null && !(message.messageOwner.media.storyItem instanceof TL_stories.TL_storyItemDeleted)) {
                     TL_stories.StoryItem storyItem = message.messageOwner.media.storyItem;
@@ -46252,6 +46317,11 @@ public class ChatActivity extends BaseFragment implements
             items.add(LocaleController.getString(R.string.AyuDeleteLocally));
             options.add(OPTION_AYU_DELETE_LOCALLY);
             icons.add(R.drawable.msg_delete);
+        }
+        if (currentEncryptedChat == null && !messages.isEmpty()) {
+            items.add(LocaleController.getString(R.string.AyuLongScreenshotFromHere));
+            options.add(OPTION_AYU_LONG_SCREENSHOT);
+            icons.add(R.drawable.msg_photos);
         }
     }
 

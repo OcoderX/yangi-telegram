@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Upload Accelerator -->
+    <string name="AyuUploadQueueTitle">Upload queue</string>
+    <string name="AyuUploadQueueSection">Uploading</string>
+    <string name="AyuUploadQueueEmpty">Nothing is being uploaded right now.</string>
+    <string name="AyuUploadQueueInfo">Files are uploaded one after another instead of all at once, so each one gets the full bandwidth. An upload that is interrupted continues from the last part the server confirmed.</string>
+    <string name="AyuUploadSettingsSection">Upload accelerator</string>
+    <string name="AyuUploadSettingsInfo">Only the parts the server did not confirm are sent again, so a lost connection never restarts a file from the beginning. Keeping the queue alive shows an ongoing notification while files are still being uploaded.</string>
+    <string name="AyuUploadQueueEnable">Background upload queue</string>
+    <string name="AyuUploadConcurrency">Files at a time</string>
+    <string name="AyuUploadConcurrencyValue">%1$d at a time</string>
+    <string name="AyuUploadRetries">Retries per part</string>
+    <string name="AyuUploadRetriesValue">%1$d retries</string>
+    <string name="AyuUploadRetriesOff">Off</string>
+    <string name="AyuUploadResumeOnNetworkLoss">Resume after network loss</string>
+    <string name="AyuUploadReuseParts">Never send a part twice</string>
+    <string name="AyuUploadKeepAlive">Keep uploading in background</string>
+    <string name="AyuUploadPause">Pause</string>
+    <string name="AyuUploadResume">Resume</string>
+    <string name="AyuUploadCancel">Cancel upload</string>
+    <string name="AyuUploadMoveToTop">Move to top</string>
+    <string name="AyuUploadStateQueued">Queued</string>
+    <string name="AyuUploadStatePaused">Paused</string>
+    <string name="AyuUploadStateWaitingNetwork">Waiting for network</string>
+    <string name="AyuUploadStateFailed">Failed</string>
+    <string name="AyuUploadStateDone">Uploaded</string>
+    <string name="AyuUploadSpeed">%1$s/s</string>
+    <string name="AyuUploadNotificationTitle">Uploading files</string>
+    <string name="AyuUploadNotificationText">%1$d file(s) left</string>
+</resources>

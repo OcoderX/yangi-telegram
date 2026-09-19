@@ -11,6 +11,8 @@ package org.telegram.messenger;
 import android.text.TextUtils;
 import android.util.SparseArray;
 
+import org.telegram.messenger.ayu.upload.AyuUploadConfig;
+import org.telegram.messenger.ayu.upload.AyuUploadManager;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -37,6 +39,58 @@ public class FileLoader extends BaseController {
     public static final int PRIORITY_NORMAL_UP = 2;
     public static final int PRIORITY_NORMAL = 1;
     public static final int PRIORITY_LOW = 0;
+
+    /**
+     * Turbo Download: user facing 1..32 priority scale (same range TDLib exposes for downloads).
+     * It is a pure presentation layer on top of the PRIORITY_* buckets above: the bucket still picks
+     * the queue, the 1..32 value decides the position inside the bucket and how many chunk requests
+     * the operation is allowed to keep in flight.
+     */
+    public static final int TURBO_PRIORITY_MIN = 1;
+    public static final int TURBO_PRIORITY_MAX = 32;
+
+    private static final int TURBO_SCALE_STREAM = 32;
+    private static final int TURBO_SCALE_HIGH = 28;
+    private static final int TURBO_SCALE_NORMAL_UP = 20;
+    private static final int TURBO_SCALE_NORMAL = 12;
+    private static final int TURBO_SCALE_LOW = 4;
+
+    /**
+     * Maps an internal PRIORITY_* bucket onto the user facing 1..32 scale, scaled down by the value
+     * the user picked in Data & Storage. Returns TURBO_PRIORITY_MIN..TURBO_PRIORITY_MAX.
+     */
+    public static int getTurboPriorityScale(int priorityType) {
+        final int base;
+        if (priorityType >= PRIORITY_STREAM) {
+            base = TURBO_SCALE_STREAM;
+        } else if (priorityType == PRIORITY_HIGH) {
+            base = TURBO_SCALE_HIGH;
+        } else if (priorityType == PRIORITY_NORMAL_UP) {
+            base = TURBO_SCALE_NORMAL_UP;
+        } else if (priorityType == PRIORITY_NORMAL) {
+            base = TURBO_SCALE_NORMAL;
+        } else {
+            base = TURBO_SCALE_LOW;
+        }
+        if (!SharedConfig.turboDownloadEnabled) {
+            return base;
+        }
+        int userMax = Utilities.clamp(SharedConfig.turboDownloadPriority, TURBO_PRIORITY_MAX, TURBO_PRIORITY_MIN);
+        int scaled = Math.round(base * userMax / (float) TURBO_PRIORITY_MAX);
+        return Utilities.clamp(scaled, TURBO_PRIORITY_MAX, TURBO_PRIORITY_MIN);
+    }
+
+    /**
+     * Extra weight inside a priority bucket so that a more important file also wins the queue race.
+     * Never applied to PRIORITY_LOW, whose value must stay exactly PRIORITY_VALUE_LOW because
+     * {@link FileLoaderPriorityQueue} uses that exact value to decide when to stall the tail.
+     */
+    private static int getTurboPriorityBonus(int priorityType) {
+        if (!SharedConfig.turboDownloadEnabled || priorityType <= PRIORITY_LOW) {
+            return 0;
+        }
+        return getTurboPriorityScale(priorityType) * FileLoaderPriorityQueue.PRIORITY_VALUE_TURBO_STEP;
+    }
 
     private int priorityIncreasePointer;
 
@@ -108,12 +162,12 @@ public class FileLoader extends BaseController {
             return Integer.MAX_VALUE;
         } else if (priorityType == PRIORITY_HIGH) {
             priorityIncreasePointer++;
-            return FileLoaderPriorityQueue.PRIORITY_VALUE_MAX + priorityIncreasePointer;
+            return FileLoaderPriorityQueue.PRIORITY_VALUE_MAX + getTurboPriorityBonus(priorityType) + priorityIncreasePointer;
         } else if (priorityType == PRIORITY_NORMAL_UP) {
             priorityIncreasePointer++;
-            return FileLoaderPriorityQueue.PRIORITY_VALUE_NORMAL + priorityIncreasePointer;
+            return FileLoaderPriorityQueue.PRIORITY_VALUE_NORMAL + getTurboPriorityBonus(priorityType) + priorityIncreasePointer;
         } else if (priorityType == PRIORITY_NORMAL) {
-            return FileLoaderPriorityQueue.PRIORITY_VALUE_NORMAL;
+            return FileLoaderPriorityQueue.PRIORITY_VALUE_NORMAL + getTurboPriorityBonus(priorityType);
         } else {
             return 0;
         }
@@ -357,12 +411,97 @@ public class FileLoader extends BaseController {
             }
             uploadSizes.remove(location);
             if (operation != null) {
+                // AyuGram: the non-encrypted map was never cleared here, which made a later
+                // uploadFile() for the same path return early and never re-upload it
+                uploadOperationPaths.remove(location);
                 uploadOperationPathsEnc.remove(location);
                 uploadOperationQueue.remove(operation);
                 uploadSmallOperationQueue.remove(operation);
                 operation.cancel();
             }
         });
+    }
+
+    /** AyuGram upload queue: the running / queued operation for a path, or null */
+    public FileUploadOperation getUploadOperation(final String location, final boolean encrypted) {
+        if (location == null) {
+            return null;
+        }
+        return encrypted ? uploadOperationPathsEnc.get(location) : uploadOperationPaths.get(location);
+    }
+
+    /** AyuGram upload queue: "move to top" — the operation becomes the next one to be started */
+    public void moveUploadOperationToTop(final String location, final boolean encrypted) {
+        if (location == null) {
+            return;
+        }
+        fileLoaderQueue.postRunnable(() -> {
+            final FileUploadOperation operation = encrypted ? uploadOperationPathsEnc.get(location) : uploadOperationPaths.get(location);
+            if (operation == null) {
+                return;
+            }
+            if (uploadOperationQueue.remove(operation)) {
+                uploadOperationQueue.add(0, operation);
+            } else if (uploadSmallOperationQueue.remove(operation)) {
+                uploadSmallOperationQueue.add(0, operation);
+            }
+        });
+    }
+
+    /**
+     * AyuGram upload queue: fills every free upload slot. Called after the concurrency setting
+     * changed and after an item was paused or resumed.
+     */
+    public void checkUploadQueue() {
+        fileLoaderQueue.postRunnable(() -> {
+            while (currentUploadOperationsCount < getMaxUploadOperations()) {
+                final FileUploadOperation operation = pollNextUploadOperation(uploadOperationQueue);
+                if (operation == null) {
+                    break;
+                }
+                currentUploadOperationsCount++;
+                operation.start();
+            }
+            while (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
+                final FileUploadOperation operation = pollNextUploadOperation(uploadSmallOperationQueue);
+                if (operation == null) {
+                    break;
+                }
+                currentUploadSmallOperationsCount++;
+                operation.start();
+            }
+        });
+    }
+
+    /** AyuGram upload queue: configurable upload concurrency, widened by every paused operation */
+    private int getMaxUploadOperations() {
+        if (!AyuUploadConfig.queueEnabled) {
+            return 1;
+        }
+        return Math.max(1, AyuUploadManager.getInstance(currentAccount).getBigUploadSlots());
+    }
+
+    private int getMaxSmallUploadOperations() {
+        if (!AyuUploadConfig.queueEnabled) {
+            return 1;
+        }
+        return Math.max(1, AyuUploadManager.getInstance(currentAccount).getSmallUploadSlots());
+    }
+
+    /** AyuGram upload queue: like {@code queue.poll()} but skips operations the user has paused */
+    private FileUploadOperation pollNextUploadOperation(LinkedList<FileUploadOperation> queue) {
+        for (int a = 0, N = queue.size(); a < N; a++) {
+            final FileUploadOperation operation = queue.get(a);
+            if (operation == null) {
+                continue;
+            }
+            if (operation.isPausedByUser()) {
+                continue;
+            }
+            queue.remove(a);
+            return operation;
+        }
+        return null;
     }
 
     public void checkUploadNewDataAvailable(final String location, final boolean encrypted, final long newAvailableSize, final long finalSize) {
@@ -423,6 +562,8 @@ public class FileLoader extends BaseController {
                 }
             }
             FileUploadOperation operation = new FileUploadOperation(currentAccount, location, encrypted, esimated, type);
+            // AyuGram upload queue: report every enqueued upload, started or not
+            AyuUploadManager.onUploadEnqueued(currentAccount, location, encrypted, small, type, esimated);
             if (delegate != null && estimatedSize != 0) {
                 delegate.fileUploadProgressChanged(operation, location, 0, estimatedSize, encrypted);
             }
@@ -445,8 +586,8 @@ public class FileLoader extends BaseController {
                         }
                         if (small) {
                             currentUploadSmallOperationsCount--;
-                            if (currentUploadSmallOperationsCount < 1) {
-                                FileUploadOperation operation12 = uploadSmallOperationQueue.poll();
+                            if (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
+                                FileUploadOperation operation12 = pollNextUploadOperation(uploadSmallOperationQueue);
                                 if (operation12 != null) {
                                     currentUploadSmallOperationsCount++;
                                     operation12.start();
@@ -454,8 +595,8 @@ public class FileLoader extends BaseController {
                             }
                         } else {
                             currentUploadOperationsCount--;
-                            if (currentUploadOperationsCount < 1) {
-                                FileUploadOperation operation12 = uploadOperationQueue.poll();
+                            if (currentUploadOperationsCount < getMaxUploadOperations()) {
+                                FileUploadOperation operation12 = pollNextUploadOperation(uploadOperationQueue);
                                 if (operation12 != null) {
                                     currentUploadOperationsCount++;
                                     operation12.start();
@@ -481,8 +622,8 @@ public class FileLoader extends BaseController {
                         }
                         if (small) {
                             currentUploadSmallOperationsCount--;
-                            if (currentUploadSmallOperationsCount < 1) {
-                                FileUploadOperation operation1 = uploadSmallOperationQueue.poll();
+                            if (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
+                                FileUploadOperation operation1 = pollNextUploadOperation(uploadSmallOperationQueue);
                                 if (operation1 != null) {
                                     currentUploadSmallOperationsCount++;
                                     operation1.start();
@@ -490,8 +631,8 @@ public class FileLoader extends BaseController {
                             }
                         } else {
                             currentUploadOperationsCount--;
-                            if (currentUploadOperationsCount < 1) {
-                                FileUploadOperation operation1 = uploadOperationQueue.poll();
+                            if (currentUploadOperationsCount < getMaxUploadOperations()) {
+                                FileUploadOperation operation1 = pollNextUploadOperation(uploadOperationQueue);
                                 if (operation1 != null) {
                                     currentUploadOperationsCount++;
                                     operation1.start();
@@ -509,14 +650,14 @@ public class FileLoader extends BaseController {
                 }
             });
             if (small) {
-                if (currentUploadSmallOperationsCount < 1) {
+                if (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
                     currentUploadSmallOperationsCount++;
                     operation.start();
                 } else {
                     uploadSmallOperationQueue.add(operation);
                 }
             } else {
-                if (currentUploadOperationsCount < 1) {
+                if (currentUploadOperationsCount < getMaxUploadOperations()) {
                     currentUploadOperationsCount++;
                     operation.start();
                 } else {
@@ -538,6 +679,7 @@ public class FileLoader extends BaseController {
                     operation.setIsPreloadVideoOperation(false);
                 }
                 operation.setForceRequest(true);
+                operation.setTurboPriority(getTurboPriorityScale(PRIORITY_STREAM));
                 operation.setPriority(getPriorityValue(PRIORITY_STREAM));
                 operation.getQueue().remove(operation);
                 operation.getQueue().add(operation);
@@ -666,6 +808,7 @@ public class FileLoader extends BaseController {
             FileLoadOperation operation = loadOperationPaths.get(fileName);
             if (operation != null) {
                 int newPriority = getPriorityValue(priority);
+                operation.setTurboPriority(getTurboPriorityScale(priority));
                 if (operation.getPriority() == newPriority) {
                     return;
                 }
@@ -850,12 +993,14 @@ public class FileLoader extends BaseController {
         final String finalFileName = fileName;
         FileLoadOperation operation = loadOperationPaths.get(finalFileName);
 
+        final int turboPriorityScale = getTurboPriorityScale(priority);
         priority = getPriorityValue(priority);
 
         if (operation != null) {
             if (cacheType != 10 && operation.isPreloadVideoOperation()) {
                 operation.setIsPreloadVideoOperation(false);
             }
+            operation.setTurboPriority(turboPriorityScale);
             operation.setForceRequest(priority > 0);
             operation.setStream(stream, streamPriority, streamOffset);
             boolean priorityChanged = false;
@@ -1067,6 +1212,7 @@ public class FileLoader extends BaseController {
         operation.setDelegate(fileLoadOperationDelegate);
 
         loadOperationPaths.put(finalFileName, operation);
+        operation.setTurboPriority(turboPriorityScale);
         operation.setPriority(priority);
         if (stream == null) {
             stream = FileStreamLoadOperation.allStreams.get(documentId);

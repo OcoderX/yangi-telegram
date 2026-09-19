@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="AyuZeroReupload">Qayta yuklashsiz</string>
+    <string name="AyuZeroReuploadEnable">Zero-Reupload yoqilsin</string>
+    <string name="AyuZeroReuploadInfo">Faylni yuborishdan oldin AyuGram uning barmoq izini hisoblaydi va aynan shu fayl ushbu akkauntdan avval yuborilgan yoki yuborilmaganini tekshiradi. Agar yuborilgan bolsa, Telegram serverlaridagi nusxa yuboriladi va hech narsa qaytadan yuklanmaydi. Maxfiy chatlarda ishlatilmaydi.</string>
+    <string name="AyuZeroReuploadOptions">Sozlamalar</string>
+    <string name="AyuZeroReuploadIndexReceived">Qabul qilingan fayllar ham indekslansin</string>
+    <string name="AyuZeroReuploadShowBulletin">Yuklash otkazib yuborilganda xabar berilsin</string>
+    <string name="AyuZeroReuploadOptionsInfo">Qabul qilingan fayllarni indekslash yuklab olingan faylni qayta yuklamasdan oz nomingizdan yuborish imkonini beradi. Xabar har safar yuklash otkazib yuborilganda qisqa matn korsatadi.</string>
+    <string name="AyuZeroReuploadStats">Indeks</string>
+    <string name="AyuZeroReuploadIndexedFiles">Indeksdagi fayllar</string>
+    <string name="AyuZeroReuploadIndexedValue">%1$d (%2$s)</string>
+    <string name="AyuZeroReuploadSaved">Otkazib yuborilgan yuklashlar</string>
+    <string name="AyuZeroReuploadSavedValue">%1$d (%2$s)</string>
+    <string name="AyuZeroReuploadClearIndex">Indeksni tozalash</string>
+    <string name="AyuZeroReuploadClearIndexMessage">Zero-Reupload indeksi va uning statistikasi ochiriladi. Allaqachon yuborilgan fayllarga tasir qilmaydi.</string>
+    <string name="AyuZeroReuploadStatsInfo">Indeks har bir akkaunt uchun alohida saqlanadi, chunki fayl identifikatorlari faqat ularni olgan akkaunt uchun amal qiladi.</string>
+    <string name="AyuZeroReuploadSentInstantly">Darhol yuborildi (Zero-Reupload)</string>
+</resources>

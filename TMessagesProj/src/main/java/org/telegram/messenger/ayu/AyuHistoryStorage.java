@@ -464,7 +464,11 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
             ArrayList<String> args = new ArrayList<>();
             args.add(Long.toString(userId));
             args.add(Long.toString(dialogId));
-            if (topicId != 0) {
+            if (topicId == 1) {
+                // forum "General" topic: messages posted there carry no reply_to.forum_topic at all,
+                // so they were stored with topicId = 0 - accept both.
+                where.append(" AND topicId IN (0, 1)");
+            } else if (topicId != 0) {
                 where.append(" AND topicId = ?");
                 args.add(Long.toString(topicId));
             }
@@ -633,6 +637,39 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
         return getRevisionsCount(userId, dialogId, messageId) > 0;
     }
 
+    /** ayu edit history: messageId -&gt; number of stored revisions for a whole dialog (one query) */
+    public java.util.HashMap<Integer, Integer> getRevisionCounts(long userId, long dialogId) {
+        java.util.HashMap<Integer, Integer> result = new java.util.HashMap<>();
+        Cursor c = null;
+        try {
+            c = db().rawQuery("SELECT messageId, COUNT(*) FROM " + TABLE_EDITED + " WHERE userId = ? AND dialogId = ? GROUP BY messageId",
+                    new String[]{Long.toString(userId), Long.toString(dialogId)});
+            while (c.moveToNext()) {
+                result.put(c.getInt(0), c.getInt(1));
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        } finally {
+            if (c != null) {
+                try {
+                    c.close();
+                } catch (Throwable ignore) {
+                }
+            }
+        }
+        return result;
+    }
+
+    /** ayu edit history: drops every stored revision of one message */
+    public void deleteRevisions(long userId, long dialogId, int messageId) {
+        try {
+            db().delete(TABLE_EDITED, "userId = ? AND dialogId = ? AND messageId = ?",
+                    new String[]{Long.toString(userId), Long.toString(dialogId), Integer.toString(messageId)});
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
     // ------------------------------------------------------------------ maintenance
 
     private static long dirSize(File file) {
@@ -661,6 +698,7 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
             size += new File(file.getAbsolutePath() + "-wal").length();
             size += new File(file.getAbsolutePath() + "-shm").length();
             size += new File(file.getAbsolutePath() + "-journal").length();
+            //ayu: covers anti-delete AND edit-history media - AyuSavedMedia.getRootDir() == getMediaDir()
             size += dirSize(getMediaDir());
         } catch (Throwable e) {
             FileLog.e(e);
@@ -709,5 +747,7 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
         } catch (Throwable e) {
             FileLog.e(e);
         }
+        //ayu-edithistory: the pre-edit media lives under getMediaDir() too, already wiped above
+        org.telegram.messenger.ayu.edithistory.AyuEditHistoryCache.invalidateAll();
     }
 }

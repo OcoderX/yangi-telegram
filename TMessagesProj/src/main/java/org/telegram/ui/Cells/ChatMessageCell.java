@@ -105,6 +105,9 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AppGlobalConfig;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ayu.AyuConfig;
+import org.telegram.messenger.ayu.edithistory.AyuEditHistoryCache; //ayu
+import org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig; //ayu
+import org.telegram.ui.ayu.EditHistorySheet; //ayu
 import org.telegram.messenger.BotForumHelper;
 import org.telegram.messenger.BotInlineKeyboard;
 import org.telegram.messenger.ChatMessageSharedResources;
@@ -1818,6 +1821,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     public final TransitionParams transitionParams = new TransitionParams();
     private boolean edited;
+    //ayu: number of locally stored previous versions of this message (0 = none / unknown)
+    private int ayuEditedRevisions;
+    //ayu: the edited mark is being pressed, releasing it opens the edit history sheet
+    private boolean ayuEditedPressed;
     private boolean imageDrawn;
     private boolean photoImageOutOfBounds;
 
@@ -4185,6 +4192,45 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return result;
     }
 
+    /**
+     * ayu: tapping the "edited (N)" mark opens the stored edit history of this message. Only active
+     * when we actually kept previous versions, so normal edited messages keep their usual behaviour.
+     */
+    private boolean checkAyuEditedMotionEvent(MotionEvent event) {
+        if (currentMessageObject == null || !edited || timeLayout == null || currentMessageObject.notime) {
+            return false;
+        }
+        if (!AyuEditHistoryConfig.tapEditedOpensHistory || currentMessageObject.getId() <= 0 || currentMessageObject.scheduled) {
+            return false;
+        }
+        // read the count live: a recycled cell may still carry the previous message's value
+        if (AyuEditHistoryCache.getCount(currentAccount, currentMessageObject.getDialogId(), currentMessageObject.getId()) <= 0
+                && currentMessageObject.messageOwner.ayuEditedCount <= 0) {
+            return false;
+        }
+        final int action = event.getAction();
+        if (action == MotionEvent.ACTION_CANCEL) {
+            ayuEditedPressed = false;
+            return false;
+        }
+        final int x = (int) getEventX(event);
+        final int y = (int) getEventY(event);
+        if (action == MotionEvent.ACTION_DOWN) {
+            if (x >= drawTimeX - dp(4) && x <= drawTimeX + timeWidth + dp(4) && y >= drawTimeY - dp(4) && y <= drawTimeY + dp(20)) {
+                ayuEditedPressed = true;
+                return true;
+            }
+            return false;
+        }
+        if (action == MotionEvent.ACTION_UP && ayuEditedPressed) {
+            ayuEditedPressed = false;
+            playSoundEffect(SoundEffectConstants.CLICK);
+            EditHistorySheet.showFor(currentAccount, currentMessageObject);
+            return true;
+        }
+        return false;
+    }
+
     private boolean checkRoundSeekbar(MotionEvent event) {
         if (!MediaController.getInstance().isPlayingMessage(currentMessageObject) || !MediaController.getInstance().isMessagePaused()) {
             return false;
@@ -4967,6 +5013,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         if (!result) {
             result = checkDateMotionEvent(event);
+        }
+        if (!result) {
+            result = checkAyuEditedMotionEvent(event); //ayu: "edited (N)" opens the edit history
         }
         if (!result) {
             result = checkTextSelection(event);
@@ -17806,6 +17855,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (currentMessageObject != null && !currentMessageObject.isAnyKindOfSticker()) {
             currentMessageObject.putInDownloadsStore = true;
         }
+        // AyuGram: Personal Firewall - do not even start downloading a blocked document
+        if (org.telegram.ui.ayu.firewall.FirewallAlerts.guardDocumentTap(getContext(), resourcesProvider, currentAccount, currentMessageObject, () -> didPressButton(animated, video))) {
+            return;
+        }
         if (buttonState == 0 && (!drawVideoImageButton || video)) {
             if (documentAttachType == DOCUMENT_ATTACH_TYPE_AUDIO || documentAttachType == DOCUMENT_ATTACH_TYPE_MUSIC || documentAttachType == DOCUMENT_ATTACH_TYPE_ROUND && currentMessageObject != null && currentMessageObject.isVoiceTranscriptionOpen() && currentMessageObject.mediaExists) {
                 if (miniButtonState == 0) {
@@ -18387,10 +18440,18 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             author = MessagesController.getInstance(currentAccount).getUser(fromId);
         }
         boolean hasReplies = messageObject.hasReplies();
+        //ayu: stored edit revisions of this message (survives restarts, unlike messageOwner.ayuEditedCount)
+        ayuEditedRevisions = 0;
+        if (!messageObject.scheduled && messageObject.getId() > 0) {
+            // the cache is authoritative (it comes straight from the AyuGram database); the in-memory
+            // counter on the message is only a fallback for the very first edit of this session
+            final int ayuStored = AyuEditHistoryCache.getCount(currentAccount, messageObject.getDialogId(), messageObject.getId());
+            ayuEditedRevisions = ayuStored > 0 ? ayuStored : messageObject.messageOwner.ayuEditedCount;
+        }
         if (messageObject.scheduled || messageObject.messageOwner.edit_hide) {
             edited = false;
         } else if (currentPosition == null || currentMessagesGroup == null || currentMessagesGroup.messages.isEmpty()) {
-            edited = (messageObject.messageOwner.flags & TLRPC.MESSAGE_FLAG_EDITED) != 0 || messageObject.isEditing() || messageObject.messageOwner.ayuEditedCount > 0;
+            edited = (messageObject.messageOwner.flags & TLRPC.MESSAGE_FLAG_EDITED) != 0 || messageObject.isEditing() || ayuEditedRevisions > 0;
         } else {
             edited = false;
             hasReplies = currentMessagesGroup.messages.get(0).hasReplies();
@@ -18413,9 +18474,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         } else if (currentMessageObject.isRepostPreview) {
             timeString = LocaleController.formatSmallDateChat(messageObject.messageOwner.date) + ", " + ayuFormatTime(messageObject.messageOwner.date);
         } else if (edited) {
+            //ayu: "edited (N)" when we keep N previous versions of this message
+            final boolean ayuShowCount = ayuEditedRevisions > 0 && AyuEditHistoryConfig.showEditedCount;
             timeString = AppGlobalConfig.getInstance(currentAccount).messagePrimaryEditedDate.get() ?
-                LocaleController.formatPmEditedDate(currentMessagesGroup != null ? currentMessagesGroup.getMaxEditDate() : messageObject.messageOwner.edit_date) :
-                (AyuConfig.getEditedMark() + " " + ayuFormatTime(messageObject.messageOwner.date));
+                (ayuShowCount
+                    ? LocaleController.formatPmEditedDate(currentMessagesGroup != null ? currentMessagesGroup.getMaxEditDate() : messageObject.messageOwner.edit_date) + " (" + ayuEditedRevisions + ")"
+                    : LocaleController.formatPmEditedDate(currentMessagesGroup != null ? currentMessagesGroup.getMaxEditDate() : messageObject.messageOwner.edit_date)) :
+                ((ayuShowCount
+                    ? LocaleController.formatString(R.string.AyuEditedCountFormat, AyuConfig.getEditedMark(), ayuEditedRevisions)
+                    : AyuConfig.getEditedMark()) + " " + ayuFormatTime(messageObject.messageOwner.date));
         } else if (currentMessageObject.isSaved && currentMessageObject.messageOwner.fwd_from != null && (currentMessageObject.messageOwner.fwd_from.date != 0 || currentMessageObject.messageOwner.fwd_from.saved_date != 0)) {
             int date = currentMessageObject.messageOwner.fwd_from.saved_date;
             if (date == 0) {
@@ -18428,10 +18495,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (currentMessageObject.messageOwner.video_processing_pending) {
             timeString = formatString(R.string.ScheduledTimeApprox, timeString);
         }
-        //ayu: deleted mark in front of the time string
+        //ayu: "deleted by author" badge in front of the time string
         final String ayuDeletedMark;
         if (currentMessageObject.messageOwner.ayuDeleted && !TextUtils.isEmpty(timeString)) {
-            ayuDeletedMark = AyuConfig.getDeletedMark();
+            if (org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.showDeletedLabel) {
+                ayuDeletedMark = AyuConfig.getDeletedMark() + " " + getString(R.string.AyuDeletedByAuthor);
+            } else {
+                ayuDeletedMark = AyuConfig.getDeletedMark();
+            }
             timeString = ayuDeletedMark + " " + timeString;
         } else {
             ayuDeletedMark = null;

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Shaxsiy Xavfsizlik Devori -->
+
+    <!-- screen -->
+    <string name="AyuFirewallTitle">Shaxsiy xavfsizlik devori</string>
+    <string name="AyuFirewallEnable">Shaxsiy xavfsizlik devorini yoqish</string>
+    <string name="AyuFirewallEnableInfo">Fayl yoki havola ochilishidan va yuklanishidan oldin tekshiriladi. Siz tanimaydigan akkauntlardan kelgan xavfli narsalar telefoningizga yetib bormaydi.</string>
+    <string name="AyuFirewallRulesHeader">Qoidalar</string>
+    <string name="AyuFirewallBlockExecutables">Dastur fayllarini bloklash</string>
+    <string name="AyuFirewallBlockLinks">Shubhali havolalarni bloklash</string>
+    <string name="AyuFirewallBlockArchives">Xavfli arxivlarni bloklash</string>
+    <string name="AyuFirewallUnknownOnly">Faqat notanish yuboruvchilar uchun</string>
+    <string name="AyuFirewallRulesInfo">Notanish yuboruvchi — kontaktlaringizda yo\'q har qanday odam, har qanday bot va tasdiqlanmagan har qanday kanal. Bu sozlama o\'chirilganda qoidalar kontaktlaringizga ham qo\'llanadi, lekin u yerda bloklash o\'rniga ochish imkoni bo\'lgan ogohlantirish chiqadi.</string>
+    <string name="AyuFirewallHardRuleInfo">Doim yoqilgan: 5 MB dan kichik har bir .exe va .apk fayl butunlay taqiqlanadi — hatto kontaktlaringizdan kelgani ham. Bunday faylga bosilganda faqat qizil ogohlantirish chiqadi; xavfsizlik devori yoqilgan ekan, uni hech qachon ochib bo\'lmaydi. Shu hajmdagi fayllar deyarli har doim josuslik dasturi yoki akkaunt o\'g\'rilaridir.</string>
+
+    <!-- whitelist -->
+    <string name="AyuFirewallWhitelistHeader">Ishonchli yuboruvchilar</string>
+    <string name="AyuFirewallWhitelistEmpty">Hozircha ishonchli yuboruvchilar yo\'q. Bloklash oynasidan yuboruvchini ishonchli deb belgilashingiz mumkin, shunda uning fayl va havolalari tekshirilmaydi.</string>
+    <string name="AyuFirewallWhitelistInfo">Bu akkauntlarning fayl va havolalari tekshirilmaydi, faqat 5 MB lik .exe / .apk qoidasidan tashqari — u hammaga baravar qo\'llanadi.</string>
+    <string name="AyuFirewallWhitelistRemove">Ishonchlilardan olib tashlash</string>
+    <string name="AyuFirewallWhitelistRemoved">Ishonchli yuboruvchilardan olib tashlandi</string>
+    <string name="AyuFirewallWhitelistClear">Ishonchli yuboruvchilarni tozalash</string>
+    <string name="AyuFirewallWhitelistClearInfo">Barcha ishonchli yuboruvchilar olib tashlansinmi? Ularning fayl va havolalari yana tekshiriladi.</string>
+
+    <!-- blocked events log -->
+    <string name="AyuFirewallLogHeader">Bloklanganlar</string>
+    <string name="AyuFirewallLogEmpty">Hozircha hech narsa bloklanmagan.</string>
+    <string name="AyuFirewallLogClear">Jurnalni tozalash</string>
+    <string name="AyuFirewallLogClearInfo">Bloklangan fayl va havolalar ro\'yxati o\'chirilsinmi?</string>
+    <string name="AyuFirewallLogInfo">Oxirgi 100 ta bloklangan fayl va havola. Sababini ko\'rish uchun yozuvga bosing.</string>
+    <string name="AyuFirewallUnknownChat">Noma\'lum chat</string>
+
+    <!-- alerts -->
+    <string name="AyuFirewallVirusTitle">Bu virus, ochmang!</string>
+    <string name="AyuFirewallBlockedTitle">Xavfsizlik devori bloklandi</string>
+    <string name="AyuFirewallWarnTitle">Ehtiyot bo\'ling</string>
+    <string name="AyuFirewallBlockedGeneric">Shaxsiy xavfsizlik devori buni xavfli deb topdi va to\'xtatdi.</string>
+    <string name="AyuFirewallOpenAnyway">Baribir ochish</string>
+    <string name="AyuFirewallTrustSender">Bu yuboruvchiga ishonish</string>
+
+    <!-- short labels -->
+    <string name="AyuFirewallShortVirus">Virus: 5 MB dan kichik .exe / .apk</string>
+    <string name="AyuFirewallShortExecutable">Dastur fayli</string>
+    <string name="AyuFirewallShortArchive">Xavfli arxiv</string>
+    <string name="AyuFirewallShortArchiveExec">Ichida dastur bor arxiv</string>
+    <string name="AyuFirewallShortLink">Shubhali havola</string>
+
+    <!-- reasons -->
+    <string name="AyuFirewallReasonVirus">%1$s — hajmi %2$s bo\'lgan dastur fayli.\n\nShunday kichik fayllar deyarli har doim josuslik dasturi, akkaunt o\'g\'risi yoki soxta \"mod\" bo\'ladi. Shaxsiy xavfsizlik devori yoqilgan ekan, bu faylni ochib bo\'lmaydi.</string>
+    <string name="AyuFirewallReasonExecutable">%1$s — qurilmangizda kod ishga tushira oladigan dastur fayli (.%2$s).</string>
+    <string name="AyuFirewallReasonDoubleExtension">%1$s zararsizdek ko\'ringan kengaytma ortida haqiqiy .%2$s dasturini yashirmoqda. Bu zararli dasturlarning mashhur niqobi.</string>
+    <string name="AyuFirewallReasonArchive">%1$s — .%2$s arxivi. Siz tanimaydigan odamlardan kelgan arxivlar ichida ko\'pincha dasturlar bo\'ladi.</string>
+    <string name="AyuFirewallReasonArchiveExecutable">%1$s arxivi ichida dastur fayli bor: %2$s.\n\nIchida dastur bo\'lgan arxivlar — zararli dasturlarni tarqatishning keng tarqalgan yo\'li.</string>
+    <string name="AyuFirewallReasonLinkLookalike">Bu manzil faqat rasmiy Telegram manziliga o\'xshaydi, xolos. Bu — akkauntlarni o\'g\'irlash uchun yasalgan soxta domen.</string>
+    <string name="AyuFirewallReasonLinkPunycode">Bu manzil kodlangan (punycode) domen nomidan foydalanadi; bunday nomlar haqiqiy saytlarga taqlid qilish uchun ishlatiladi.</string>
+    <string name="AyuFirewallReasonLinkMixedScript">Bu manzil haqiqiy saytga o\'xshab ko\'rinishi uchun turli alifbolardagi harflarni aralashtirgan.</string>
+    <string name="AyuFirewallReasonLinkMismatch">Havolada bir manzil ko\'rsatilgan, lekin u boshqa manzilga olib boradi.</string>
+    <string name="AyuFirewallReasonLinkRawIp">Bu havola sayt nomi o\'rniga to\'g\'ridan-to\'g\'ri IP manzilga ishora qiladi.</string>
+    <string name="AyuFirewallReasonLinkInsecure">Bu — kirish, hamyon yoki sovg\'a sahifasiga olib boradigan shifrlanmagan (http) havola, ya\'ni odatiy fishing sahifasi.</string>
+    <string name="AyuFirewallReasonLinkShortener">Bu qisqartirilgan havola, shuning uchun haqiqiy manzil yashiringan.</string>
+
+    <!-- detail lines -->
+    <string name="AyuFirewallFileSize">Hajmi: %1$s</string>
+    <string name="AyuFirewallLinkLine">Havola: %1$s</string>
+    <string name="AyuFirewallLinkVisibleLine">Ko\'rsatilgani: %1$s</string>
+    <string name="AyuFirewallSenderUnknown">Yuboruvchi kontaktlaringizda yo\'q.</string>
+    <string name="AyuFirewallSenderKnown">Yuboruvchi kontaktlaringizda bor.</string>
+    <string name="AyuFirewallUnnamedFile">Bu fayl</string>
+</resources>

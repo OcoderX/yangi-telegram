@@ -85,6 +85,13 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
     // ---- sync ----
     private static final int SYNC = 50;
     private static final int DYNAMIC_ISLAND = 55;
+    private static final int FILE_EXPLORER = 56;
+    private static final int DUPLICATE_CLEANER = 57;
+    private static final int FIREWALL = 58;
+    private static final int MENTION_RADAR = 59;
+    // 60..63 are taken by the debug section below
+    private static final int ZERO_REUPLOAD = 70;
+    private static final int NETWORK_DIAGNOSTICS = 71;
 
     // ---- debug ----
     private static final int DEBUG_WAL = 60;
@@ -212,6 +219,14 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
                 getString(AyuConfig.regexFiltersEnabled ? R.string.AyuEnabled : R.string.AyuDisabled)));
         items.add(UItem.asShadow(getString(R.string.AyuRegexFiltersInfo)));
 
+        // ------------- mention radar -------------
+        final int radarUnread = org.telegram.messenger.ayu.radar.MentionRadar.getInstance(currentAccount).getUnreadCount();
+        items.add(UItem.asHeader(getString(R.string.RadarTitle)));
+        items.add(UItem.asSettingsCell(MENTION_RADAR, 0, getString(R.string.RadarTitle),
+                radarUnread > 0 ? LocaleController.formatString(R.string.RadarUnread, radarUnread)
+                        : getString(org.telegram.messenger.ayu.radar.RadarConfig.enabled ? R.string.RadarStateOn : R.string.RadarStateOff)));
+        items.add(UItem.asShadow(getString(R.string.RadarHubInfo)));
+
         // ------------- quality of life -------------
         items.add(UItem.asHeader(getString(R.string.AyuQualityOfLife)));
         items.add(UItem.asCheck(QOL_KEEP_ALIVE, getString(R.string.AyuKeepAliveService)).setChecked(AyuConfig.keepAliveService));
@@ -242,13 +257,39 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
         items.add(UItem.asHeader(getString(R.string.AyuDynamicIsland)));
         items.add(UItem.asSettingsCell(DYNAMIC_ISLAND, 0, getString(R.string.AyuDynamicIsland),
                 getString(AyuConfig.dynamicIsland ? R.string.AyuEnabled : R.string.AyuDisabled)));
+        items.add(UItem.asSettingsCell(NETWORK_DIAGNOSTICS, 0, getString(R.string.AyuNetDiagTitle), getString(R.string.AyuNetDiagSubtitle)));
         items.add(UItem.asShadow(getString(R.string.AyuDynamicIslandInfo)));
+
+        // ------------- file explorer -------------
+        items.add(UItem.asHeader(getString(R.string.AyuFileExplorer)));
+        items.add(UItem.asSettingsCell(FILE_EXPLORER, 0, getString(R.string.AyuFileExplorer)));
+        items.add(UItem.asShadow(getString(R.string.AyuFileExplorerInfo)));
+
+        // ------------- duplicate cleaner -------------
+        items.add(UItem.asHeader(getString(R.string.AyuDuplicates)));
+        CharSequence duplicatesValue = org.telegram.ui.ayu.duplicates.DuplicateCleanerActivity.getHubValue();
+        items.add(duplicatesValue != null
+                ? UItem.asSettingsCell(DUPLICATE_CLEANER, 0, getString(R.string.AyuDuplicates), duplicatesValue)
+                : UItem.asSettingsCell(DUPLICATE_CLEANER, 0, getString(R.string.AyuDuplicates)));
+        items.add(UItem.asShadow(getString(R.string.AyuDuplicatesInfo)));
+
+        // ------------- zero-reupload -------------
+        items.add(UItem.asHeader(getString(R.string.AyuZeroReupload)));
+        items.add(UItem.asSettingsCell(ZERO_REUPLOAD, 0, getString(R.string.AyuZeroReupload),
+                getString(org.telegram.messenger.ayu.reupload.ZeroReuploadConfig.isEnabled() ? R.string.AyuEnabled : R.string.AyuDisabled)));
+        items.add(UItem.asShadow(getString(R.string.AyuZeroReuploadInfo)));
 
         // ------------- sync -------------
         items.add(UItem.asHeader(getString(R.string.AyuSyncScreenTitle)));
         items.add(UItem.asSettingsCell(SYNC, 0, getString(R.string.AyuSyncScreenTitle),
                 getString(AyuConfig.syncEnabled ? R.string.AyuEnabled : R.string.AyuDisabled)));
         items.add(UItem.asShadow(getString(R.string.AyuSyncInfo)));
+
+        // ------------- personal firewall -------------
+        items.add(UItem.asHeader(getString(R.string.AyuFirewallTitle)));
+        items.add(UItem.asSettingsCell(FIREWALL, 0, getString(R.string.AyuFirewallTitle),
+                getString(org.telegram.messenger.ayu.firewall.Firewall.isEnabled() ? R.string.AyuEnabled : R.string.AyuDisabled)));
+        items.add(UItem.asShadow(getString(R.string.AyuFirewallEnableInfo)));
 
         // ------------- debug -------------
         items.add(UItem.asHeader(getString(R.string.AyuDebug)));
@@ -390,6 +431,24 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
                 break;
             case DYNAMIC_ISLAND:
                 presentFragment(new DynamicIslandPreferencesActivity());
+                break;
+            case NETWORK_DIAGNOSTICS:
+                presentFragment(new org.telegram.ui.ayu.netdiag.NetworkDiagnosticsActivity());
+                break;
+            case FILE_EXPLORER:
+                presentFragment(new org.telegram.ui.ayu.explorer.FileExplorerActivity());
+                break;
+            case DUPLICATE_CLEANER:
+                presentFragment(new org.telegram.ui.ayu.duplicates.DuplicateCleanerActivity());
+                break;
+            case ZERO_REUPLOAD:
+                presentFragment(new org.telegram.ui.ayu.reupload.ZeroReuploadPreferencesActivity());
+                break;
+            case MENTION_RADAR:
+                presentFragment(new org.telegram.ui.ayu.radar.MentionRadarActivity());
+                break;
+            case FIREWALL:
+                presentFragment(new org.telegram.ui.ayu.firewall.FirewallPreferencesActivity());
                 break;
 
             case DEBUG_WAL:

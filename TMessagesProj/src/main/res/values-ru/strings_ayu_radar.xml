@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: радар упоминаний -->
+    <string name="RadarTitle">Радар упоминаний</string>
+    <string name="RadarHubInfo">Одна лента со всеми сообщениями, где вас упомянули, ответили вам, назвали по имени или совпало ваше ключевое слово.</string>
+    <string name="RadarStateOn">Вкл.</string>
+    <string name="RadarStateOff">Выкл.</string>
+    <string name="RadarUnread">%1$d непрочитанных</string>
+    <string name="RadarEmpty">Пока пусто. Новые упоминания, ответы и совпадения по ключевым словам появятся здесь автоматически.</string>
+    <string name="RadarNoText">(без текста)</string>
+
+    <!-- фильтры -->
+    <string name="RadarFilterAll">Все</string>
+    <string name="RadarFilterMentions">Упоминания</string>
+    <string name="RadarFilterReplies">Ответы</string>
+    <string name="RadarFilterName">Имя</string>
+    <string name="RadarFilterKeywords">Ключевые слова</string>
+
+    <!-- типы -->
+    <string name="RadarKindMention">УПОМИНАНИЕ</string>
+    <string name="RadarKindReply">ОТВЕТ</string>
+    <string name="RadarKindName">ИМЯ</string>
+    <string name="RadarKindKeyword">КЛЮЧ. СЛОВО</string>
+
+    <!-- действия -->
+    <string name="RadarMarkAllRead">Отметить всё прочитанным</string>
+    <string name="RadarMarkRead">Отметить прочитанным</string>
+    <string name="RadarOpenChat">Открыть чат</string>
+    <string name="RadarDelete">Удалить</string>
+    <string name="RadarClearAll">Очистить ленту</string>
+    <string name="RadarClearAllMessage">Удалить все собранные совпадения? Сами сообщения не затрагиваются.</string>
+
+    <!-- сканирование истории -->
+    <string name="RadarScanHistory">Сканировать историю</string>
+    <string name="RadarScanCancel">Отменить сканирование</string>
+    <string name="RadarScanStarting">Запуск сканирования…</string>
+    <string name="RadarScanProgress">Сканирование %1$d/%2$d, найдено %3$d</string>
+    <string name="RadarScanDone">Сканирование завершено, новых совпадений: %1$d.</string>
+    <string name="RadarScanCancelled">Сканирование отменено.</string>
+
+    <!-- настройки / ключевые слова -->
+    <string name="RadarKeywords">Ключевые слова радара</string>
+    <string name="RadarCollectHeader">Что собирать</string>
+    <string name="RadarEnable">Включить радар</string>
+    <string name="RadarCollectMentions">Упоминания меня</string>
+    <string name="RadarCollectReplies">Ответы на мои сообщения</string>
+    <string name="RadarCollectName">Моё имя или фамилия</string>
+    <string name="RadarCollectKeywords">Мои ключевые слова</string>
+    <string name="RadarCollectInfo">Входящие сообщения проверяются в фоне; никуда ничего не отправляется.</string>
+
+    <string name="RadarScopeHeader">Где искать</string>
+    <string name="RadarScopeGroups">Группы и супергруппы</string>
+    <string name="RadarScopeChannels">Каналы</string>
+    <string name="RadarScopePrivate">Личные чаты</string>
+    <string name="RadarScopeSkipMuted">Пропускать беззвучные чаты</string>
+    <string name="RadarScopeInfo">Секретные чаты никогда не сканируются.</string>
+
+    <string name="RadarKeywordsHeader">Ключевые слова</string>
+    <string name="RadarKeywordAdd">Добавить ключевое слово</string>
+    <string name="RadarKeywordEdit">Изменить ключевое слово</string>
+    <string name="RadarKeywordDelete">Удалить ключевое слово</string>
+    <string name="RadarKeywordEnable">Включить</string>
+    <string name="RadarKeywordDisable">Отключить</string>
+    <string name="RadarKeywordDisabled">отключено</string>
+    <string name="RadarKeywordHint">Ключевое слово</string>
+    <string name="RadarKeywordWholeWord">Только целое слово</string>
+    <string name="RadarKeywordAnywhere">В любом месте текста</string>
+    <string name="RadarKeywordRegex">Регулярное выражение</string>
+    <string name="RadarKeywordInvalidRegex">Неверное регулярное выражение</string>
+    <string name="RadarKeywordEmptyError">Введите ключевое слово.</string>
+    <string name="RadarKeywordsEmpty">У вас пока нет ключевых слов.</string>
+    <string name="RadarKeywordsInfo">Регистр не учитывается. Нажмите на слово, чтобы изменить его, удерживайте для других действий.</string>
+
+    <string name="RadarNotifyKeywords">Уведомлять о ключевых словах</string>
+    <string name="RadarNotifyKeywordsInfo">Показывает локальное уведомление при совпадении ключевого слова. Для упоминаний и ответов остаются обычные уведомления Telegram.</string>
+
+    <!-- уведомление -->
+    <string name="RadarNotificationTitle">Ключевое слово: %1$s</string>
+    <string name="RadarNotificationTitleMany">Новых совпадений: %1$d</string>
+</resources>

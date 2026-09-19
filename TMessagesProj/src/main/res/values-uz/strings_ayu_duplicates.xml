@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: nusxalarni tozalash -->
+    <string name="AyuDuplicates">Nusxalarni tozalash</string>
+    <string name="AyuDuplicatesInfo">Turli suhbatlarda bir necha marta yuklab olingan video va fayllarni toping va har biridan faqat bitta nusxani qoldiring.</string>
+
+    <!-- skanerlash -->
+    <string name="AyuDuplicatesScan">Nusxalarni izlash</string>
+    <string name="AyuDuplicatesScanAgain">Qayta skanerlash</string>
+    <string name="AyuDuplicatesCancelScan">Bekor qilish uchun bosing</string>
+    <string name="AyuDuplicatesStageFiles">Mahalliy fayllar yig\'ilmoqda…</string>
+    <string name="AyuDuplicatesStageCompare">Fayllar tarkibi solishtirilmoqda…</string>
+    <string name="AyuDuplicatesStageChats">Fayllar suhbatlarga moslashtirilmoqda…</string>
+    <string name="AyuDuplicatesProgressFiles">%2$d fayldan %1$d · %3$s</string>
+    <string name="AyuDuplicatesProgressFilesUnknown">%1$d fayl · %2$s</string>
+    <string name="AyuDuplicatesScanInfo">Fayllar tarkibining SHA-256 qiymati bo\'yicha solishtiriladi, shuning uchun faqat aynan bir xil nusxalar guruhlanadi. Siz so\'ramaguningizcha hech narsa o\'chirilmaydi.</string>
+    <string name="AyuDuplicatesScanCancelled">Skanerlash bekor qilindi</string>
+
+    <!-- natijalar -->
+    <string name="AyuDuplicatesSummary">Natijalar</string>
+    <string name="AyuDuplicatesSets">Nusxa guruhlari</string>
+    <string name="AyuDuplicatesExtraCopies">Ortiqcha nusxalar</string>
+    <string name="AyuDuplicatesReclaimable">Bo\'shatish mumkin</string>
+    <string name="AyuDuplicatesChecked">Tekshirilgan fayllar</string>
+    <string name="AyuDuplicatesLastScan">Oxirgi skanerlash</string>
+    <string name="AyuDuplicatesNever">hech qachon</string>
+    <string name="AyuDuplicatesFreedTotal">Jami bo\'shatilgan</string>
+
+    <!-- guruhlar -->
+    <string name="AyuDuplicatesFound">Nusxalar</string>
+    <string name="AyuDuplicatesFoundInfo">Qaysi nusxa qolishini tanlash uchun guruhga bosing. O\'chirilgan nusxalarni istalgan vaqtda qayta yuklab olish mumkin.</string>
+    <string name="AyuDuplicatesCopiesCount">%1$d nusxa</string>
+    <string name="AyuDuplicatesUnknownChat">Noma\'lum suhbat</string>
+    <string name="AyuDuplicatesMoreChats">yana %1$d ta</string>
+
+    <!-- o'chirish -->
+    <string name="AyuDuplicatesCleanAll">Barcha nusxalarni o\'chirish</string>
+    <string name="AyuDuplicatesCleanAllTitle">Nusxalarni o\'chirish</string>
+    <string name="AyuDuplicatesCleanAllMessage">%1$d ta ortiqcha nusxa o\'chiriladi va %2$s bo\'shatiladi. Har bir faylning eng eski nusxasi qurilmada qoladi.</string>
+    <string name="AyuDuplicatesCleanGroupMessage">%1$d ta nusxa o\'chiriladi va %2$s bo\'shatiladi. Bitta nusxa qurilmada qoladi.</string>
+    <string name="AyuDuplicatesDelete">O\'chirish</string>
+    <string name="AyuDuplicatesKeepOldest">Eng eski nusxani qoldirish</string>
+    <string name="AyuDuplicatesKeepNewest">Eng yangi nusxani qoldirish</string>
+    <string name="AyuDuplicatesKeepInChat">«%1$s» dagi nusxani qoldirish</string>
+    <string name="AyuDuplicatesOpenMessage">Xabarni ochish</string>
+    <string name="AyuDuplicatesDeletedBulletin">%1$d ta fayl o\'chirildi, %2$s bo\'shatildi</string>
+    <string name="AyuDuplicatesOpenKept">Ochish</string>
+    <string name="AyuDuplicatesNothingToDelete">O\'chiradigan narsa yo\'q</string>
+
+    <!-- bo'sh holatlar -->
+    <string name="AyuDuplicatesNothingFound">Nusxalar topilmadi — bu qurilmadagi barcha yuklab olingan fayllar noyob.</string>
+    <string name="AyuDuplicatesNotScannedYet">Hali skanerlanmagan. Turli suhbatlarda bir necha marta yuklab olingan fayllarni topish uchun skanerlashni boshlang.</string>
+
+    <!-- sozlamalar -->
+    <string name="AyuDuplicatesOptions">Sozlamalar</string>
+    <string name="AyuDuplicatesIncludeStickerCache">Stiker va emoji keshini ham qo\'shish</string>
+    <string name="AyuDuplicatesIncludeStickerCacheInfo">Stiker va emoji fayllari kichik va barcha suhbatlar uchun umumiy, shuning uchun ular sukut bo\'yicha o\'tkazib yuboriladi.</string>
+</resources>

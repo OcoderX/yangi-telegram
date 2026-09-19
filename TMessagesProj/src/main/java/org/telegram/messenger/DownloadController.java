@@ -687,6 +687,8 @@ public class DownloadController extends BaseController implements NotificationCe
 
     private int canDownloadMediaInternal(MessageObject message) {
         if (message == null || message.messageOwner == null) return 0;
+        // AyuGram: Personal Firewall - blocked documents must never land on disk by themselves
+        if (org.telegram.messenger.ayu.firewall.Firewall.blocksAutoDownload(currentAccount, message.messageOwner)) return 0;
         if (message.messageOwner.media instanceof TLRPC.TL_messageMediaStory) {
             return canPreloadStories() ? 2 : 0;
         }
@@ -777,6 +779,8 @@ public class DownloadController extends BaseController implements NotificationCe
 
     private int canDownloadMediaInternal(MessageObject message, long overrideSize) {
         if (message == null || message.messageOwner == null) return 0;
+        // AyuGram: Personal Firewall - blocked documents must never land on disk by themselves
+        if (org.telegram.messenger.ayu.firewall.Firewall.blocksAutoDownload(currentAccount, message.messageOwner)) return 0;
         if (message.messageOwner.media instanceof TLRPC.TL_messageMediaStory) {
             return canPreloadStories() ? 2 : 0;
         }
@@ -862,6 +866,8 @@ public class DownloadController extends BaseController implements NotificationCe
         if (message == null || message.media instanceof TLRPC.TL_messageMediaStory) {
             return canPreloadStories() ? 2 : 0;
         }
+        // AyuGram: Personal Firewall - blocked documents must never land on disk by themselves
+        if (org.telegram.messenger.ayu.firewall.Firewall.blocksAutoDownload(currentAccount, message)) return 0;
         int type;
         boolean isVideo;
         if ((isVideo = MessageObject.isVideoMessage(message)) || MessageObject.isGifMessage(message) || MessageObject.isRoundVideoMessage(message) || MessageObject.isGameMessage(message)) {
@@ -943,6 +949,8 @@ public class DownloadController extends BaseController implements NotificationCe
         if (message == null || media instanceof TLRPC.TL_messageMediaStory) {
             return canPreloadStories() ? 2 : 0;
         }
+        // AyuGram: Personal Firewall - blocked documents must never land on disk by themselves
+        if (media != null && org.telegram.messenger.ayu.firewall.Firewall.blocksAutoDownload(currentAccount, message, media.document)) return 0;
         int type;
         boolean isVideo = false;
         if (MessageObject.isVideoDocument(media.document)) {

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: anti delete (keep deleted messages and their media) -->
+    <string name="AyuDeletedByAuthor">deleted by author</string>
+
+    <string name="AyuAntiDelete">Anti-Delete</string>
+    <string name="AyuAntiDeleteInfo">Messages that are deleted on the server stay in the chat, marked as deleted. Media that was already downloaded is copied to a private folder so it keeps opening after Telegram clears its cache.</string>
+
+    <string name="AyuShowDeletedLabel">Show \"deleted by author\" label</string>
+    <string name="AyuShowDeletedLabelInfo">When off, only the deleted mark is shown next to the time.</string>
+
+    <string name="AyuKeepOnClearHistory">Keep messages on \"Clear history\"</string>
+    <string name="AyuKeepOnDeleteDialog">Keep messages when a chat is deleted</string>
+    <string name="AyuKeepOnDeleteInfo">Up to 300 of the most recent messages of the chat are archived locally.</string>
+
+    <string name="AyuRestoreMediaToCache">Restore saved media</string>
+    <string name="AyuRestoreMediaToCacheInfo">Puts saved photos back where Telegram looks for them, so a deleted photo still opens in full size.</string>
+
+    <string name="AyuExcludedChats">Chats excluded from saving</string>
+    <string name="AyuExcludedChatsInfo">Nothing is kept for these chats. Use \"Do not save here\" in the chat menu to add one.</string>
+    <string name="AyuExcludedChatsEmpty">No excluded chats</string>
+    <string name="AyuExcludedChatsClear">Remove all exclusions</string>
+    <string name="AyuExcludedChatsCleared">All exclusions removed</string>
+
+    <string name="AyuDontSaveHere">Do not save here</string>
+    <string name="AyuSaveHere">Save deleted messages here</string>
+    <string name="AyuDontSaveHereEnabled">Deleted messages from this chat are no longer kept</string>
+    <string name="AyuDontSaveHereDisabled">Deleted messages from this chat are kept again</string>
+</resources>

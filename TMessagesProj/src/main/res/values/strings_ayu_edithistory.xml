@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: edit history (stored previous versions of edited messages) -->
+    <string name="AyuEditedCountFormat">%1$s (%2$d)</string>
+    <string name="AyuEditHistoryLoading">Loading…</string>
+    <string name="AyuEditHistoryCopyVersion">Copy</string>
+    <string name="AyuEditHistoryShowFullText">Show full text</string>
+    <string name="AyuEditHistoryShowChangesOnly">Show changes only</string>
+    <string name="AyuEditHistoryMediaReplaced">Media was replaced</string>
+    <string name="AyuEditHistoryOldMedia">Previous media</string>
+
+    <!-- settings -->
+    <string name="AyuEditHistorySettings">Edit history</string>
+    <string name="AyuEditHistoryCapture">Save previous versions</string>
+    <string name="AyuEditHistoryCaptureInfo">Keeps every version of an edited message on this device so you can see what changed.</string>
+    <string name="AyuEditHistoryOnLoad">Detect edits on history load</string>
+    <string name="AyuEditHistoryOnLoadInfo">Compares messages coming from the server with the local copy and stores edits that happened while you were offline.</string>
+    <string name="AyuEditHistoryKeepOldMedia">Keep replaced media</string>
+    <string name="AyuEditHistoryShowCount">Show number of edits</string>
+    <string name="AyuEditHistoryTapToOpen">Tap the edited mark to open history</string>
+    <string name="AyuEditHistoryWordDiff">Highlight changed words</string>
+    <string name="AyuEditHistoryExpandByDefault">Always show full text</string>
+</resources>

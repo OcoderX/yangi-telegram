@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: xabar tahrirlari tarixi -->
+    <string name="AyuEditedCountFormat">%1$s (%2$d)</string>
+    <string name="AyuEditHistoryLoading">Yuklanmoqda…</string>
+    <string name="AyuEditHistoryCopyVersion">Nusxalash</string>
+    <string name="AyuEditHistoryShowFullText">To\'liq matnni ko\'rsatish</string>
+    <string name="AyuEditHistoryShowChangesOnly">Faqat o\'zgarishlar</string>
+    <string name="AyuEditHistoryMediaReplaced">Media almashtirildi</string>
+    <string name="AyuEditHistoryOldMedia">Oldingi media</string>
+
+    <!-- sozlamalar -->
+    <string name="AyuEditHistorySettings">Tahrirlar tarixi</string>
+    <string name="AyuEditHistoryCapture">Oldingi versiyalarni saqlash</string>
+    <string name="AyuEditHistoryCaptureInfo">Tahrirlangan xabarning har bir versiyasini shu qurilmada saqlaydi, shunda nima o\'zgarganini ko\'ra olasiz.</string>
+    <string name="AyuEditHistoryOnLoad">Tarix yuklanganda tahrirlarni aniqlash</string>
+    <string name="AyuEditHistoryOnLoadInfo">Serverdan kelgan xabarlarni mahalliy nusxa bilan solishtiradi va siz oflayn bo\'lganingizda qilingan tahrirlarni saqlaydi.</string>
+    <string name="AyuEditHistoryKeepOldMedia">Almashtirilgan mediani saqlash</string>
+    <string name="AyuEditHistoryShowCount">Tahrirlar sonini ko\'rsatish</string>
+    <string name="AyuEditHistoryTapToOpen">Tahrir belgisiga bosilganda tarixni ochish</string>
+    <string name="AyuEditHistoryWordDiff">O\'zgargan so\'zlarni ajratib ko\'rsatish</string>
+    <string name="AyuEditHistoryExpandByDefault">Doim to\'liq matnni ko\'rsatish</string>
+</resources>

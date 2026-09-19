@@ -326,6 +326,10 @@ public class SharedConfig {
     public static boolean enableUploadAccelerator = true;
     public static int uploadThreadsCount = 8;
     public static int maxParallelActiveFiles = 4;
+    // Turbo Download: user facing 1..32 priority scale (TDLib-like) for "important" files
+    public static boolean turboDownloadEnabled = true;
+    public static int turboDownloadPriority = 32;
+    public static boolean turboDownloadKeepPartial = true;
     public static int fontSize = 16;
     public static boolean fontSizeIsDefault;
     public static int bubbleRadius = 17;
@@ -633,6 +637,9 @@ public class SharedConfig {
             enableUploadAccelerator = preferences.getBoolean("enableUploadAccelerator", true);
             uploadThreadsCount = preferences.getInt("uploadThreadsCount", 8);
             maxParallelActiveFiles = preferences.getInt("maxParallelActiveFiles", 4);
+            turboDownloadEnabled = preferences.getBoolean("turboDownloadEnabled", true);
+            turboDownloadPriority = Utilities.clamp(preferences.getInt("turboDownloadPriority", 32), 32, 1);
+            turboDownloadKeepPartial = preferences.getBoolean("turboDownloadKeepPartial", true);
             forceForumTabs = preferences.getBoolean("forceForumTabs", false);
             fastWallpaperDisabled = preferences.getBoolean("fastWallpaperDisabled", false);
             frameMetricsEnabled = preferences.getBoolean("frameMetricsEnabled", false);
@@ -1215,6 +1222,30 @@ public class SharedConfig {
         SharedPreferences preferences = MessagesController.getGlobalMainSettings();
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("uploadThreadsCount", uploadThreadsCount);
+        editor.apply();
+    }
+
+    public static void toggleTurboDownload() {
+        turboDownloadEnabled = !turboDownloadEnabled;
+        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("turboDownloadEnabled", turboDownloadEnabled);
+        editor.apply();
+    }
+
+    public static void setTurboDownloadPriority(int value) {
+        turboDownloadPriority = Utilities.clamp(value, 32, 1);
+        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("turboDownloadPriority", turboDownloadPriority);
+        editor.apply();
+    }
+
+    public static void toggleTurboDownloadKeepPartial() {
+        turboDownloadKeepPartial = !turboDownloadKeepPartial;
+        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("turboDownloadKeepPartial", turboDownloadKeepPartial);
         editor.apply();
     }
 

@@ -286,6 +286,24 @@ public class ApplicationLoader extends Application {
         } catch (Throwable e) {
             FileLog.e(e);
         }
+        // AyuGram: mention radar scanner
+        try {
+            org.telegram.messenger.ayu.radar.MentionRadar.initAll();
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        // AyuGram: restore the pending upload queue before the first re-send
+        try {
+            org.telegram.messenger.ayu.upload.AyuUploadManager.initAll();
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        // AyuGram: zero-reupload index observer
+        try {
+            org.telegram.messenger.ayu.reupload.ZeroReupload.ensureObserver(UserConfig.selectedAccount);
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
     }
 
     public ApplicationLoader() {

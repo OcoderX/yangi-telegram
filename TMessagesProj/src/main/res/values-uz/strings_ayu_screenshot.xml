@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: uzun skrinshot -->
+    <string name="AyuLongScreenshot">Uzun skrinshot</string>
+    <string name="AyuLongScreenshotFromHere">Shu yerdan uzun skrinshot…</string>
+
+    <string name="AyuScreenshotFormat">Format</string>
+    <string name="AyuScreenshotFormatPng">PNG rasm</string>
+    <string name="AyuScreenshotFormatPdf">PDF hujjat</string>
+
+    <string name="AyuScreenshotOverflow">Agar rasm juda baland bo\'lsa</string>
+    <string name="AyuScreenshotOverflowSplit">Bir nechta rasmga bo\'lish</string>
+    <string name="AyuScreenshotOverflowDownscale">Bitta rasmga kichraytirish</string>
+
+    <string name="AyuScreenshotPdfLayout">PDF sahifalari</string>
+    <string name="AyuScreenshotPdfContinuous">Bitta uzun sahifa</string>
+    <string name="AyuScreenshotPdfA4">A4 sahifalar</string>
+
+    <string name="AyuScreenshotAppearance">Ko\'rinish</string>
+    <string name="AyuScreenshotHideNames">Yuboruvchi ismlarini yashirish</string>
+    <string name="AyuScreenshotHideAvatars">Avatarlarni yashirish</string>
+    <string name="AyuScreenshotHideTimestamps">Vaqtni yashirish</string>
+    <string name="AyuScreenshotIncludeHeader">Chat sarlavhasi</string>
+    <string name="AyuScreenshotIncludeWatermark">Pastki yozuv</string>
+
+    <string name="AyuScreenshotBackground">Fon</string>
+    <string name="AyuScreenshotBackgroundWallpaper">Chat foni</string>
+    <string name="AyuScreenshotBackgroundLight">Yorug\'</string>
+    <string name="AyuScreenshotBackgroundDark">Qorong\'i</string>
+
+    <string name="AyuScreenshotQuality">Sifat</string>
+    <string name="AyuScreenshotAppearanceInfo">Xabarlar doimo ilovada hozir yoqilgan mavzuda chiziladi. Fon sozlamasi faqat ular ortidagi orqa fonni o\'zgartiradi.</string>
+
+    <string name="AyuScreenshotCreate">%1$d ta xabardan yaratish</string>
+    <string name="AyuScreenshotProgress">Skrinshot yaratilmoqda…</string>
+    <string name="AyuScreenshotShare">Ulashish</string>
+
+    <string name="AyuScreenshotSaved">Skrinshot galereyaga saqlandi</string>
+    <string name="AyuScreenshotSavedFiles">%1$d ta rasm galereyaga saqlandi</string>
+    <string name="AyuScreenshotSavedPdf">PDF «Yuklamalar»ga saqlandi</string>
+
+    <string name="AyuScreenshotError">Skrinshot yaratib bo\'lmadi</string>
+    <string name="AyuScreenshotNothing">Saqlash uchun hech narsa yo\'q</string>
+    <string name="AyuScreenshotTooMany">Juda ko\'p xabar tanlandi, faqat birinchi %1$d tasi saqlanadi.</string>
+
+    <string name="AyuScreenshotHiddenName">•••</string>
+    <string name="AyuScreenshotWatermark">AyuGram yordamida</string>
+    <string name="AyuScreenshotMessages">%1$d ta xabar</string>
+</resources>

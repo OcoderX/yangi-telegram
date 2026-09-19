@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Upload Accelerator -->
+    <string name="AyuUploadQueueTitle">Очередь загрузки</string>
+    <string name="AyuUploadQueueSection">Отправляются</string>
+    <string name="AyuUploadQueueEmpty">Сейчас ничего не отправляется.</string>
+    <string name="AyuUploadQueueInfo">Файлы отправляются по очереди, а не все сразу, поэтому каждому достаётся вся скорость канала. Прерванная отправка продолжается с последней части, подтверждённой сервером.</string>
+    <string name="AyuUploadSettingsSection">Ускоритель отправки</string>
+    <string name="AyuUploadSettingsInfo">Повторно отправляются только те части, которые сервер не подтвердил, поэтому обрыв связи никогда не начинает файл заново. Фоновый режим показывает постоянное уведомление, пока файлы ещё отправляются.</string>
+    <string name="AyuUploadQueueEnable">Фоновая очередь отправки</string>
+    <string name="AyuUploadConcurrency">Файлов одновременно</string>
+    <string name="AyuUploadConcurrencyValue">по %1$d за раз</string>
+    <string name="AyuUploadRetries">Попыток на часть</string>
+    <string name="AyuUploadRetriesValue">%1$d попыток</string>
+    <string name="AyuUploadRetriesOff">Выкл.</string>
+    <string name="AyuUploadResumeOnNetworkLoss">Продолжать после потери сети</string>
+    <string name="AyuUploadReuseParts">Не отправлять часть дважды</string>
+    <string name="AyuUploadKeepAlive">Отправлять в фоне</string>
+    <string name="AyuUploadPause">Пауза</string>
+    <string name="AyuUploadResume">Продолжить</string>
+    <string name="AyuUploadCancel">Отменить отправку</string>
+    <string name="AyuUploadMoveToTop">Переместить вверх</string>
+    <string name="AyuUploadStateQueued">В очереди</string>
+    <string name="AyuUploadStatePaused">Приостановлено</string>
+    <string name="AyuUploadStateWaitingNetwork">Ожидание сети</string>
+    <string name="AyuUploadStateFailed">Ошибка</string>
+    <string name="AyuUploadStateDone">Отправлено</string>
+    <string name="AyuUploadSpeed">%1$s/с</string>
+    <string name="AyuUploadNotificationTitle">Отправка файлов</string>
+    <string name="AyuUploadNotificationText">осталось файлов: %1$d</string>
+</resources>

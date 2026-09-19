@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: анти-удаление (сохранение удалённых сообщений и медиа) -->
+    <string name="AyuDeletedByAuthor">удалено автором</string>
+
+    <string name="AyuAntiDelete">Анти-удаление</string>
+    <string name="AyuAntiDeleteInfo">Сообщения, удалённые на сервере, остаются в чате с пометкой об удалении. Уже загруженные медиафайлы копируются в приватную папку, поэтому открываются и после очистки кэша Telegram.</string>
+
+    <string name="AyuShowDeletedLabel">Показывать надпись «удалено автором»</string>
+    <string name="AyuShowDeletedLabelInfo">Если выключено, рядом со временем показывается только метка удаления.</string>
+
+    <string name="AyuKeepOnClearHistory">Сохранять при очистке истории</string>
+    <string name="AyuKeepOnDeleteDialog">Сохранять при удалении чата</string>
+    <string name="AyuKeepOnDeleteInfo">Локально сохраняется до 300 последних сообщений чата.</string>
+
+    <string name="AyuRestoreMediaToCache">Восстанавливать сохранённые медиа</string>
+    <string name="AyuRestoreMediaToCacheInfo">Возвращает сохранённые фото туда, где их ищет Telegram, чтобы удалённое фото открывалось в полном размере.</string>
+
+    <string name="AyuExcludedChats">Чаты, исключённые из сохранения</string>
+    <string name="AyuExcludedChatsInfo">Для этих чатов ничего не сохраняется. Чтобы добавить чат, используйте «Не сохранять здесь» в его меню.</string>
+    <string name="AyuExcludedChatsEmpty">Исключённых чатов нет</string>
+    <string name="AyuExcludedChatsClear">Убрать все исключения</string>
+    <string name="AyuExcludedChatsCleared">Все исключения убраны</string>
+
+    <string name="AyuDontSaveHere">Не сохранять здесь</string>
+    <string name="AyuSaveHere">Сохранять удалённые сообщения здесь</string>
+    <string name="AyuDontSaveHereEnabled">Удалённые сообщения этого чата больше не сохраняются</string>
+    <string name="AyuDontSaveHereDisabled">Удалённые сообщения этого чата снова сохраняются</string>
+</resources>

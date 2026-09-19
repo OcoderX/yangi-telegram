@@ -295,4 +295,19 @@
     <string name="AyuBotOpenChatHint">@username или ID</string>
     <string name="AyuBotOpenChatNotFound">Такой чат не найден.</string>
     <string name="AyuBotHistoryUnavailable">Для аккаунта-бота старые сообщения загрузить нельзя.</string>
+
+    <!-- AyuGram: Turbo-загрузка -->
+    <string name="AyuTurboDownload">Turbo-загрузка</string>
+    <string name="AyuTurboDownloadEnable">Включить Turbo-загрузку</string>
+    <string name="AyuTurboDownloadInfo">Файлы, которые вы запросили сами — нажатые вами, текущее видео и медиа в открытом чате — получают больше всего соединений и первое место в очереди, а фоновая автозагрузка довольствуется остатком. Прерванная загрузка продолжается с последней части, полностью записанной на диск.</string>
+    <string name="AyuTurboPriority">Приоритет важных файлов</string>
+    <string name="AyuTurboPriorityTitle">Приоритет загрузки</string>
+    <string name="AyuTurboPriorityValue">%1$d / 32</string>
+    <string name="AyuTurboPriorityGentle">Щадящий</string>
+    <string name="AyuTurboPriorityBalanced">Сбалансированный</string>
+    <string name="AyuTurboPriorityFast">Быстрый</string>
+    <string name="AyuTurboPriorityMaximum">Максимальный</string>
+    <string name="AyuTurboIslandBadge">Turbo</string>
+    <string name="AyuTurboKeepPartial">Сохранять недокачанные файлы</string>
+    <string name="AyuTurboKeepPartialInfo">Сохранять уже загруженную часть при отмене или ошибке, чтобы повторный запуск продолжал загрузку, а не начинал её заново.</string>
 </resources>

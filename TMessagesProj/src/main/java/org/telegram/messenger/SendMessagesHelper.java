@@ -7873,6 +7873,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     getFileRefController().requestReference(parentObject, req, msgObj, originalPath, parentMessage, check, delayedMessage, scheduled);
                     return;
                 } else if (delayedMessage != null) {
+                    //ayu-reupload: the reused row's file_reference is dead - drop it now, while req still
+                    //holds the rejected media, so this retry (and any later send) uploads fresh
+                    org.telegram.messenger.ayu.reupload.ZeroReupload.invalidateForRequest(currentAccount, req);
                     AndroidUtilities.runOnUIThread(() -> {
                         removeFromSendingMessages(newMsgObj.id, scheduled);
                         if (req instanceof TLRPC.TL_messages_addPollAnswer) {
@@ -7917,6 +7920,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         performSendDelayedMessage(delayedMessage);
                     });
                     return;
+                } else {
+                    //ayu-reupload: nothing left to refresh this reference with - if it came from our
+                    //index the row is unusable, drop it so the next send does a real upload
+                    org.telegram.messenger.ayu.reupload.ZeroReupload.invalidateForRequest(currentAccount, req);
                 }
             }
             if (error != null && req instanceof TLRPC.TL_messages_sendMedia && ((TLRPC.TL_messages_sendMedia) req).media instanceof TLRPC.TL_inputMediaStakeDice) {
@@ -8522,6 +8529,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     sentFileType = newMsgObj.sentHighQuality ? MessagesStorage.SENT_FILE_TYPE_VIDEO_HIGH_QUALITY : MessagesStorage.SENT_FILE_TYPE_VIDEO;
                 }
                 getMessagesStorage().putSentFile(originalPath, sentMedia.photo, sentFileType, "sent_" + sentMessage.peer_id.channel_id + "_" + sentMessage.id + "_" + DialogObject.getPeerDialogId(sentMessage.peer_id) + "_" + MessageObject.TYPE_PHOTO + "_" + MessageObject.getMediaSize(newMedia));
+                // AyuGram Zero-Reupload: remember the same media under the content hash of the local file
+                org.telegram.messenger.ayu.reupload.ZeroReupload.putSentFile(currentAccount, originalPath, sentMedia.photo, sentFileType, "sent_" + sentMessage.peer_id.channel_id + "_" + sentMessage.id + "_" + DialogObject.getPeerDialogId(sentMessage.peer_id) + "_" + MessageObject.TYPE_PHOTO + "_" + MessageObject.getMediaSize(newMedia));
             }
 
             if (newMedia.photo.sizes.size() == 1 && newMedia.photo.sizes.get(0).location instanceof TLRPC.TL_fileLocationUnavailable) {
@@ -8658,6 +8667,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     if (!newMsgObj.scheduled && !MessageObject.isEphemeral(sentMessage)) {
                         MessageObject messageObject = new MessageObject(currentAccount, sentMessage, false, false);
                         getMessagesStorage().putSentFile(originalPath, sentMedia.document, 2, "sent_" + sentMessage.peer_id.channel_id + "_" + sentMessage.id + "_" + DialogObject.getPeerDialogId(sentMessage.peer_id) + "_" + messageObject.type + "_" + messageObject.getSize());
+                        // AyuGram Zero-Reupload: remember the same media under the content hash of the local file
+                        org.telegram.messenger.ayu.reupload.ZeroReupload.putSentFile(currentAccount, originalPath, sentMedia.document, 2, "sent_" + sentMessage.peer_id.channel_id + "_" + sentMessage.id + "_" + DialogObject.getPeerDialogId(sentMessage.peer_id) + "_" + messageObject.type + "_" + messageObject.getSize());
                     }
                     if (isVideo) {
                         sentMessage.attachPath = newMsg.attachPath;
@@ -8665,6 +8676,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 } else if (!MessageObject.isVoiceMessage(sentMessage) && !MessageObject.isRoundVideoMessage(sentMessage) && !newMsgObj.scheduled && !MessageObject.isEphemeral(sentMessage)) {
                     MessageObject messageObject = new MessageObject(currentAccount, sentMessage, false, false);
                     getMessagesStorage().putSentFile(originalPath, sentMedia.document, 1, "sent_" + sentMessage.peer_id.channel_id + "_" + sentMessage.id + "_" + DialogObject.getPeerDialogId(sentMessage.peer_id) + "_" + messageObject.type + "_" + messageObject.getSize());
+                    // AyuGram Zero-Reupload: remember the same media under the content hash of the local file
+                    org.telegram.messenger.ayu.reupload.ZeroReupload.putSentFile(currentAccount, originalPath, sentMedia.document, 1, "sent_" + sentMessage.peer_id.channel_id + "_" + sentMessage.id + "_" + DialogObject.getPeerDialogId(sentMessage.peer_id) + "_" + messageObject.type + "_" + messageObject.getSize());
                 }
             }
 
@@ -9304,6 +9317,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 if (sentData != null && sentData[0] instanceof TLRPC.TL_document) {
                     document = (TLRPC.TL_document) sentData[0];
                     parentObject = (String) sentData[1];
+                }
+            }
+            if (document == null) {
+                // AyuGram Zero-Reupload: same content under a different path
+                Object[] zrData = org.telegram.messenger.ayu.reupload.ZeroReupload.getSentFile(accountInstance.getCurrentAccount(), path, originalPath, MessagesStorage.SENT_FILE_TYPE_AUDIO);
+                if (zrData != null && zrData[0] instanceof TLRPC.TL_document) {
+                    document = (TLRPC.TL_document) zrData[0];
+                    parentObject = (String) zrData[1];
                 }
             }
             ensureMediaThumbExists(accountInstance, isEncrypted, document, path, null, 0);
@@ -10718,6 +10739,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                     parentObject = (String) sentData[1];
                                 }
                             }
+                            if (photo == null) {
+                                // AyuGram Zero-Reupload: same content under a different path
+                                Object[] zrData = org.telegram.messenger.ayu.reupload.ZeroReupload.getSentFile(accountInstance.getCurrentAccount(), tempPath, originalPath, sentFileType);
+                                if (zrData != null && zrData[0] instanceof TLRPC.TL_photo) {
+                                    photo = (TLRPC.TL_photo) zrData[0];
+                                    parentObject = (String) zrData[1];
+                                }
+                            }
                             ensureMediaThumbExists(accountInstance, isEncrypted, photo, info.path, info.uri, 0, info.highQuality);
                         }
                         final MediaSendPrepareWorker worker = new MediaSendPrepareWorker();
@@ -11004,6 +11033,15 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                     document = (TLRPC.TL_document) sentData[0];
                                     parentObject = (String) sentData[1];
                                     ensureMediaThumbExists(accountInstance, isEncrypted, document, info.path, null, startTime);
+                                }
+                                if (document == null) {
+                                    // AyuGram Zero-Reupload: same content under a different path
+                                    Object[] zrData = org.telegram.messenger.ayu.reupload.ZeroReupload.getSentFile(accountInstance.getCurrentAccount(), info.path, originalPath, MessagesStorage.SENT_FILE_TYPE_VIDEO);
+                                    if (zrData != null && zrData[0] instanceof TLRPC.TL_document) {
+                                        document = (TLRPC.TL_document) zrData[0];
+                                        parentObject = (String) zrData[1];
+                                        ensureMediaThumbExists(accountInstance, isEncrypted, document, info.path, null, startTime);
+                                    }
                                 }
                             }
                             if (document == null) {
@@ -11368,6 +11406,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                         if (sentData != null && sentData[0] instanceof TLRPC.TL_photo) {
                                             photo = (TLRPC.TL_photo) sentData[0];
                                             parentObject = (String) sentData[1];
+                                        }
+                                    }
+                                    if (photo == null) {
+                                        // AyuGram Zero-Reupload: same content under a different path
+                                        Object[] zrData = org.telegram.messenger.ayu.reupload.ZeroReupload.getSentFile(accountInstance.getCurrentAccount(), tempPath, originalPath, sentFileType);
+                                        if (zrData != null && zrData[0] instanceof TLRPC.TL_photo) {
+                                            photo = (TLRPC.TL_photo) zrData[0];
+                                            parentObject = (String) zrData[1];
                                         }
                                     }
                                     ensureMediaThumbExists(accountInstance, isEncrypted, photo, info.path, info.uri, 0);
@@ -11851,6 +11897,15 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         document = (TLRPC.TL_document) sentData[0];
                         parentObject = (String) sentData[1];
                         ensureMediaThumbExists(accountInstance, isEncrypted, document, videoPath, null, startTime);
+                    }
+                    if (document == null) {
+                        // AyuGram Zero-Reupload: same content under a different path
+                        Object[] zrData = org.telegram.messenger.ayu.reupload.ZeroReupload.getSentFile(accountInstance.getCurrentAccount(), videoPath, originalPath, MessagesStorage.SENT_FILE_TYPE_VIDEO);
+                        if (zrData != null && zrData[0] instanceof TLRPC.TL_document) {
+                            document = (TLRPC.TL_document) zrData[0];
+                            parentObject = (String) zrData[1];
+                            ensureMediaThumbExists(accountInstance, isEncrypted, document, videoPath, null, startTime);
+                        }
                     }
                 }
                 if (document == null) {

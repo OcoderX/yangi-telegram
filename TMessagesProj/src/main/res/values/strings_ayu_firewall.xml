@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Personal Firewall -->
+
+    <!-- screen -->
+    <string name="AyuFirewallTitle">Personal Firewall</string>
+    <string name="AyuFirewallEnable">Enable Personal Firewall</string>
+    <string name="AyuFirewallEnableInfo">Checks files and links before anything is opened or downloaded. Dangerous items from accounts you do not know are stopped before they reach your phone.</string>
+    <string name="AyuFirewallRulesHeader">Rules</string>
+    <string name="AyuFirewallBlockExecutables">Block program files</string>
+    <string name="AyuFirewallBlockLinks">Block suspicious links</string>
+    <string name="AyuFirewallBlockArchives">Block dangerous archives</string>
+    <string name="AyuFirewallUnknownOnly">Only for unknown senders</string>
+    <string name="AyuFirewallRulesInfo">An unknown sender is anyone who is not in your contacts, any bot, and any unverified channel. When this option is off, the rules also apply to your contacts, but there you get a warning with a way through instead of a block.</string>
+    <string name="AyuFirewallHardRuleInfo">Always on: every .exe and .apk file smaller than 5 MB is banned outright, from anyone — contacts included. Tapping one only shows a red warning; it can never be opened while the firewall is enabled. Files that size are almost always spyware or account stealers.</string>
+
+    <!-- whitelist -->
+    <string name="AyuFirewallWhitelistHeader">Trusted senders</string>
+    <string name="AyuFirewallWhitelistEmpty">No trusted senders yet. You can trust a sender from the block alert, so their files and links are no longer checked.</string>
+    <string name="AyuFirewallWhitelistInfo">Files and links from these accounts are not checked, except for the 5 MB .exe / .apk rule, which applies to everyone.</string>
+    <string name="AyuFirewallWhitelistRemove">Remove from trusted</string>
+    <string name="AyuFirewallWhitelistRemoved">Removed from trusted senders</string>
+    <string name="AyuFirewallWhitelistClear">Clear trusted senders</string>
+    <string name="AyuFirewallWhitelistClearInfo">Remove every trusted sender? The firewall will start checking their files and links again.</string>
+
+    <!-- blocked events log -->
+    <string name="AyuFirewallLogHeader">Blocked</string>
+    <string name="AyuFirewallLogEmpty">Nothing has been blocked yet.</string>
+    <string name="AyuFirewallLogClear">Clear the log</string>
+    <string name="AyuFirewallLogClearInfo">Delete the list of blocked files and links?</string>
+    <string name="AyuFirewallLogInfo">The last 100 blocked files and links. Tap an entry to see why it was blocked.</string>
+    <string name="AyuFirewallUnknownChat">Unknown chat</string>
+
+    <!-- alerts -->
+    <string name="AyuFirewallVirusTitle">This is a virus, do not open!</string>
+    <string name="AyuFirewallBlockedTitle">Blocked by the firewall</string>
+    <string name="AyuFirewallWarnTitle">Careful</string>
+    <string name="AyuFirewallBlockedGeneric">The Personal Firewall stopped this because it looks dangerous.</string>
+    <string name="AyuFirewallOpenAnyway">Open anyway</string>
+    <string name="AyuFirewallTrustSender">Trust this sender</string>
+
+    <!-- short labels -->
+    <string name="AyuFirewallShortVirus">Virus: .exe / .apk under 5 MB</string>
+    <string name="AyuFirewallShortExecutable">Program file</string>
+    <string name="AyuFirewallShortArchive">Dangerous archive</string>
+    <string name="AyuFirewallShortArchiveExec">Archive with a program inside</string>
+    <string name="AyuFirewallShortLink">Suspicious link</string>
+
+    <!-- reasons -->
+    <string name="AyuFirewallReasonVirus">%1$s is a program file of %2$s.\n\nFiles this small are almost always spyware, account stealers or fake \"mods\". This file cannot be opened while the Personal Firewall is enabled.</string>
+    <string name="AyuFirewallReasonExecutable">%1$s is a program file (.%2$s) that can run code on your device.</string>
+    <string name="AyuFirewallReasonDoubleExtension">%1$s hides a real .%2$s program behind a harmless looking extension. This is a classic disguise for malware.</string>
+    <string name="AyuFirewallReasonArchive">%1$s is a .%2$s archive. Archives from people you do not know often carry programs inside.</string>
+    <string name="AyuFirewallReasonArchiveExecutable">The archive %1$s contains a program file: %2$s.\n\nArchives that carry executables are a common way to deliver malware.</string>
+    <string name="AyuFirewallReasonLinkLookalike">This address only looks like an official Telegram address. It is a fake domain used to steal accounts.</string>
+    <string name="AyuFirewallReasonLinkPunycode">This address uses an encoded (punycode) domain name, which is used to imitate real websites.</string>
+    <string name="AyuFirewallReasonLinkMixedScript">This address mixes letters from different alphabets so it looks like a real website.</string>
+    <string name="AyuFirewallReasonLinkMismatch">The link shows one address but actually leads to a different one.</string>
+    <string name="AyuFirewallReasonLinkRawIp">This link points at a raw IP address instead of a real website name.</string>
+    <string name="AyuFirewallReasonLinkInsecure">This is an unencrypted (http) link to a login, wallet or giveaway page — a typical phishing page.</string>
+    <string name="AyuFirewallReasonLinkShortener">This is a shortened link, so the real address is hidden.</string>
+
+    <!-- detail lines -->
+    <string name="AyuFirewallFileSize">Size: %1$s</string>
+    <string name="AyuFirewallLinkLine">Link: %1$s</string>
+    <string name="AyuFirewallLinkVisibleLine">Shown as: %1$s</string>
+    <string name="AyuFirewallSenderUnknown">The sender is not in your contacts.</string>
+    <string name="AyuFirewallSenderKnown">The sender is in your contacts.</string>
+    <string name="AyuFirewallUnnamedFile">This file</string>
+</resources>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: очистка дубликатов -->
+    <string name="AyuDuplicates">Очистка дубликатов</string>
+    <string name="AyuDuplicatesInfo">Найдите видео и файлы, скачанные несколько раз в разных чатах, и оставьте только одну копию каждого.</string>
+
+    <!-- сканирование -->
+    <string name="AyuDuplicatesScan">Найти дубликаты</string>
+    <string name="AyuDuplicatesScanAgain">Сканировать снова</string>
+    <string name="AyuDuplicatesCancelScan">Нажмите, чтобы отменить</string>
+    <string name="AyuDuplicatesStageFiles">Собираем локальные файлы…</string>
+    <string name="AyuDuplicatesStageCompare">Сравниваем содержимое файлов…</string>
+    <string name="AyuDuplicatesStageChats">Ищем чаты для файлов…</string>
+    <string name="AyuDuplicatesProgressFiles">%1$d из %2$d файлов · %3$s</string>
+    <string name="AyuDuplicatesProgressFilesUnknown">%1$d файлов · %2$s</string>
+    <string name="AyuDuplicatesScanInfo">Файлы сравниваются по SHA-256 их содержимого, поэтому в группу попадают только полностью одинаковые копии. Ничего не удаляется без вашего подтверждения.</string>
+    <string name="AyuDuplicatesScanCancelled">Сканирование отменено</string>
+
+    <!-- итоги -->
+    <string name="AyuDuplicatesSummary">Итоги</string>
+    <string name="AyuDuplicatesSets">Групп дубликатов</string>
+    <string name="AyuDuplicatesExtraCopies">Лишних копий</string>
+    <string name="AyuDuplicatesReclaimable">Можно освободить</string>
+    <string name="AyuDuplicatesChecked">Проверено файлов</string>
+    <string name="AyuDuplicatesLastScan">Последнее сканирование</string>
+    <string name="AyuDuplicatesNever">никогда</string>
+    <string name="AyuDuplicatesFreedTotal">Освобождено всего</string>
+
+    <!-- группы -->
+    <string name="AyuDuplicatesFound">Дубликаты</string>
+    <string name="AyuDuplicatesFoundInfo">Нажмите на группу, чтобы выбрать, какую копию оставить. Удалённые копии всегда можно скачать заново.</string>
+    <string name="AyuDuplicatesCopiesCount">%1$d копий</string>
+    <string name="AyuDuplicatesUnknownChat">Неизвестный чат</string>
+    <string name="AyuDuplicatesMoreChats">и ещё %1$d</string>
+
+    <!-- удаление -->
+    <string name="AyuDuplicatesCleanAll">Удалить все дубликаты</string>
+    <string name="AyuDuplicatesCleanAllTitle">Удаление дубликатов</string>
+    <string name="AyuDuplicatesCleanAllMessage">Будет удалено %1$d лишних копий и освобождено %2$s. Самая старая копия каждого файла останется на устройстве.</string>
+    <string name="AyuDuplicatesCleanGroupMessage">Будет удалено %1$d копий и освобождено %2$s. Одна копия останется на устройстве.</string>
+    <string name="AyuDuplicatesDelete">Удалить</string>
+    <string name="AyuDuplicatesKeepOldest">Оставить самую старую копию</string>
+    <string name="AyuDuplicatesKeepNewest">Оставить самую новую копию</string>
+    <string name="AyuDuplicatesKeepInChat">Оставить копию из «%1$s»</string>
+    <string name="AyuDuplicatesOpenMessage">Открыть сообщение</string>
+    <string name="AyuDuplicatesDeletedBulletin">Удалено файлов: %1$d, освобождено %2$s</string>
+    <string name="AyuDuplicatesOpenKept">Открыть</string>
+    <string name="AyuDuplicatesNothingToDelete">Нечего удалять</string>
+
+    <!-- пустые состояния -->
+    <string name="AyuDuplicatesNothingFound">Дубликаты не найдены — все скачанные файлы на этом устройстве уникальны.</string>
+    <string name="AyuDuplicatesNotScannedYet">Сканирование ещё не выполнялось. Запустите его, чтобы найти файлы, скачанные несколько раз в разных чатах.</string>
+
+    <!-- настройки -->
+    <string name="AyuDuplicatesOptions">Настройки</string>
+    <string name="AyuDuplicatesIncludeStickerCache">Включая кэш стикеров и эмодзи</string>
+    <string name="AyuDuplicatesIncludeStickerCacheInfo">Файлы стикеров и эмодзи маленькие и общие для всех чатов, поэтому по умолчанию они пропускаются.</string>
+</resources>

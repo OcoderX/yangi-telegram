@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Upload Accelerator -->
+    <string name="AyuUploadQueueTitle">Yuklash navbati</string>
+    <string name="AyuUploadQueueSection">Yuborilmoqda</string>
+    <string name="AyuUploadQueueEmpty">Hozircha hech nima yuborilmayapti.</string>
+    <string name="AyuUploadQueueInfo">Fayllar hammasi birdan emas, navbat bilan yuboriladi, shuning uchun har biriga to‘liq tezlik tegadi. Uzilib qolgan yuklash server tasdiqlagan oxirgi qismdan davom etadi.</string>
+    <string name="AyuUploadSettingsSection">Yuklash tezlatkichi</string>
+    <string name="AyuUploadSettingsInfo">Faqat server tasdiqlamagan qismlar qayta yuboriladi, shuning uchun aloqa uzilsa ham fayl boshidan boshlanmaydi. Fon rejimi fayllar yuborilayotganda doimiy bildirishnoma ko‘rsatadi.</string>
+    <string name="AyuUploadQueueEnable">Fondagi yuklash navbati</string>
+    <string name="AyuUploadConcurrency">Bir vaqtda fayllar</string>
+    <string name="AyuUploadConcurrencyValue">bir vaqtda %1$d ta</string>
+    <string name="AyuUploadRetries">Har qism uchun urinish</string>
+    <string name="AyuUploadRetriesValue">%1$d marta</string>
+    <string name="AyuUploadRetriesOff">O‘chiq</string>
+    <string name="AyuUploadResumeOnNetworkLoss">Aloqa uzilgach davom ettirish</string>
+    <string name="AyuUploadReuseParts">Qismni ikki marta yubormaslik</string>
+    <string name="AyuUploadKeepAlive">Fonda yuborishni davom ettirish</string>
+    <string name="AyuUploadPause">To‘xtatish</string>
+    <string name="AyuUploadResume">Davom ettirish</string>
+    <string name="AyuUploadCancel">Yuborishni bekor qilish</string>
+    <string name="AyuUploadMoveToTop">Tepaga ko‘chirish</string>
+    <string name="AyuUploadStateQueued">Navbatda</string>
+    <string name="AyuUploadStatePaused">To‘xtatilgan</string>
+    <string name="AyuUploadStateWaitingNetwork">Tarmoq kutilmoqda</string>
+    <string name="AyuUploadStateFailed">Xatolik</string>
+    <string name="AyuUploadStateDone">Yuborildi</string>
+    <string name="AyuUploadSpeed">%1$s/s</string>
+    <string name="AyuUploadNotificationTitle">Fayllar yuborilmoqda</string>
+    <string name="AyuUploadNotificationText">%1$d ta fayl qoldi</string>
+</resources>

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: Network diagnostics -->
+    <string name="AyuNetDiagTitle">Network diagnostics</string>
+    <string name="AyuNetDiagSubtitle">Live datacenter, ping, packet loss and speed</string>
+    <string name="AyuNetDiagIslandTitle">Network</string>
+
+    <!-- Dynamic Island -->
+    <string name="AyuNetDiagIslandToggle">Network in island</string>
+    <string name="AyuNetDiagIslandToggleInfo">Show the current download and upload speed and the ping to your datacenter in the Dynamic Island. Tap the pill to see packet loss, the proxy ping and why the connection is slow.</string>
+    <string name="AyuNetDiagIslandWithDownloads">Speed next to downloads</string>
+    <string name="AyuNetDiagIslandWithDownloadsInfo">Also append the current speed to the downloads row of the island.</string>
+    <string name="AyuNetDiagOpen">Open diagnostics</string>
+    <string name="AyuNetDiagProxySettings">Proxy settings</string>
+
+    <!-- Metrics -->
+    <string name="AyuNetDiagLive">Live</string>
+    <string name="AyuNetDiagDatacenter">Datacenter</string>
+    <string name="AyuNetDiagDc">DC%1$d</string>
+    <string name="AyuNetDiagState">Connection</string>
+    <string name="AyuNetDiagPing">Ping</string>
+    <string name="AyuNetDiagProxy">Proxy</string>
+    <string name="AyuNetDiagProxyPing">Proxy ping</string>
+    <string name="AyuNetDiagLoss">Packet loss</string>
+    <string name="AyuNetDiagDownload">Download</string>
+    <string name="AyuNetDiagUpload">Upload</string>
+    <string name="AyuNetDiagActiveTransfers">Active transfers</string>
+    <string name="AyuNetDiagTransfersValue">%1$d downloading, %2$d uploading</string>
+    <string name="AyuNetDiagMs">%1$d ms</string>
+    <string name="AyuNetDiagDbm">%1$d dBm</string>
+    <string name="AyuNetDiagUnreachable">unreachable</string>
+    <string name="AyuNetDiagNoProxy">not used</string>
+    <string name="AyuNetDiagYes">Yes</string>
+    <string name="AyuNetDiagNo">No</string>
+
+    <!-- Connection states -->
+    <string name="AyuNetDiagStateConnected">Connected</string>
+    <string name="AyuNetDiagStateConnecting">Connecting…</string>
+    <string name="AyuNetDiagStateNoNetwork">Waiting for network</string>
+    <string name="AyuNetDiagStateProxy">Connecting to proxy…</string>
+    <string name="AyuNetDiagStateUpdating">Updating…</string>
+
+    <!-- Slowdown reasons -->
+    <string name="AyuNetDiagSlowdown">Why it is slow</string>
+    <string name="AyuNetDiagReasonOk">Everything looks fine</string>
+    <string name="AyuNetDiagReasonNoNetwork">No network</string>
+    <string name="AyuNetDiagReasonConnecting">Connecting</string>
+    <string name="AyuNetDiagReasonUpdating">Fetching updates</string>
+    <string name="AyuNetDiagReasonProxyConnecting">Connecting to proxy</string>
+    <string name="AyuNetDiagReasonProxySlow">Slow proxy</string>
+    <string name="AyuNetDiagReasonHighPing">High ping</string>
+    <string name="AyuNetDiagReasonPacketLoss">Packet loss</string>
+    <string name="AyuNetDiagReasonDataSaver">Data Saver is on</string>
+    <string name="AyuNetDiagReasonMetered">Metered network</string>
+    <string name="AyuNetDiagReasonBatterySaver">Battery Saver is on</string>
+    <string name="AyuNetDiagReasonWeakWifi">Weak Wi-Fi signal</string>
+
+    <!-- Hints -->
+    <string name="AyuNetDiagHintOk">Ping, packet loss and throughput are all within normal range.</string>
+    <string name="AyuNetDiagHintNoNetwork">The device reports no usable connection. Check Wi-Fi or mobile data.</string>
+    <string name="AyuNetDiagHintConnecting">Telegram is still establishing the connection to the datacenter. This usually takes a second.</string>
+    <string name="AyuNetDiagHintUpdating">Telegram is downloading the message history it missed. Speed goes back to normal once it finishes.</string>
+    <string name="AyuNetDiagHintProxySlow">Every packet goes through your proxy, and the proxy itself is slow or unreachable. Try another one or turn the proxy off.</string>
+    <string name="AyuNetDiagHintHighPing">The round trip to the datacenter takes a long time. A distant datacenter, a busy network or a proxy are the usual causes.</string>
+    <string name="AyuNetDiagHintPacketLoss">Requests are timing out. This is usually a weak signal or a congested network.</string>
+    <string name="AyuNetDiagHintDataSaver">Android Data Saver limits background traffic on this network. Allow unrestricted data for Telegram to lift the limit.</string>
+    <string name="AyuNetDiagHintMetered">Android treats this network as metered, so auto-download and background traffic are reduced.</string>
+    <string name="AyuNetDiagHintBatterySaver">Battery Saver throttles background network activity. Turn it off for full speed.</string>
+    <string name="AyuNetDiagHintWeakWifi">The Wi-Fi signal is weak, which causes retransmissions and slow transfers. Move closer to the router.</string>
+
+    <!-- Graphs -->
+    <string name="AyuNetDiagGraphs">Last 60 seconds</string>
+    <string name="AyuNetDiagGraphPing">Ping</string>
+    <string name="AyuNetDiagGraphLoss">Packet loss</string>
+    <string name="AyuNetDiagGraphThroughput">Throughput</string>
+    <string name="AyuNetDiagGraphEmpty">Collecting data…</string>
+
+    <!-- Test -->
+    <string name="AyuNetDiagRunTest">Run test</string>
+    <string name="AyuNetDiagRunning">Testing…</string>
+    <string name="AyuNetDiagTestResults">Test results</string>
+    <string name="AyuNetDiagTestPing">Ping min / avg / max</string>
+    <string name="AyuNetDiagTestPingValue">%1$d / %2$d / %3$d ms</string>
+    <string name="AyuNetDiagTestJitter">Jitter</string>
+    <string name="AyuNetDiagTestLoss">Lost probes</string>
+    <string name="AyuNetDiagTestLossValue">%1$d of %2$d</string>
+    <string name="AyuNetDiagTestBurst">Burst throughput</string>
+    <string name="AyuNetDiagTestBurstValue">%1$s · %2$d replies in %3$d ms</string>
+    <string name="AyuNetDiagTestFailed">The test could not reach the datacenter.</string>
+
+    <!-- Device -->
+    <string name="AyuNetDiagDevice">Device and network</string>
+    <string name="AyuNetDiagMetered">Metered network</string>
+    <string name="AyuNetDiagDataSaver">Data Saver</string>
+    <string name="AyuNetDiagBatterySaver">Battery Saver</string>
+    <string name="AyuNetDiagWifiSignal">Wi-Fi signal</string>
+
+    <!-- Report -->
+    <string name="AyuNetDiagCopyReport">Copy report</string>
+    <string name="AyuNetDiagCopied">Diagnostics report copied</string>
+    <string name="AyuNetDiagFooter">Ping and the datacenter id come from the MTProto connection itself. Download and upload speeds are the whole app\'s traffic measured by Android; the values in brackets are what the file loader is moving right now.</string>
+</resources>

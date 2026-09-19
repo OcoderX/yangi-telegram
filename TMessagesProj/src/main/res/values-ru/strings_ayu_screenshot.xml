@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: длинный скриншот -->
+    <string name="AyuLongScreenshot">Длинный скриншот</string>
+    <string name="AyuLongScreenshotFromHere">Длинный скриншот отсюда…</string>
+
+    <string name="AyuScreenshotFormat">Формат</string>
+    <string name="AyuScreenshotFormatPng">Изображение PNG</string>
+    <string name="AyuScreenshotFormatPdf">Документ PDF</string>
+
+    <string name="AyuScreenshotOverflow">Если изображение слишком высокое</string>
+    <string name="AyuScreenshotOverflowSplit">Разбить на несколько изображений</string>
+    <string name="AyuScreenshotOverflowDownscale">Уменьшить до одного изображения</string>
+
+    <string name="AyuScreenshotPdfLayout">Страницы PDF</string>
+    <string name="AyuScreenshotPdfContinuous">Одна длинная страница</string>
+    <string name="AyuScreenshotPdfA4">Страницы A4</string>
+
+    <string name="AyuScreenshotAppearance">Оформление</string>
+    <string name="AyuScreenshotHideNames">Скрыть имена отправителей</string>
+    <string name="AyuScreenshotHideAvatars">Скрыть аватары</string>
+    <string name="AyuScreenshotHideTimestamps">Скрыть время</string>
+    <string name="AyuScreenshotIncludeHeader">Шапка чата</string>
+    <string name="AyuScreenshotIncludeWatermark">Подпись внизу</string>
+
+    <string name="AyuScreenshotBackground">Фон</string>
+    <string name="AyuScreenshotBackgroundWallpaper">Обои чата</string>
+    <string name="AyuScreenshotBackgroundLight">Светлый</string>
+    <string name="AyuScreenshotBackgroundDark">Тёмный</string>
+
+    <string name="AyuScreenshotQuality">Качество</string>
+    <string name="AyuScreenshotAppearanceInfo">Сообщения всегда рисуются в той теме, которая сейчас включена в приложении. Настройка фона меняет только подложку под ними.</string>
+
+    <string name="AyuScreenshotCreate">Создать из %1$d сообщений</string>
+    <string name="AyuScreenshotProgress">Создание скриншота…</string>
+    <string name="AyuScreenshotShare">Поделиться</string>
+
+    <string name="AyuScreenshotSaved">Скриншот сохранён в галерею</string>
+    <string name="AyuScreenshotSavedFiles">%1$d изображений сохранено в галерею</string>
+    <string name="AyuScreenshotSavedPdf">PDF сохранён в «Загрузки»</string>
+
+    <string name="AyuScreenshotError">Не удалось создать скриншот</string>
+    <string name="AyuScreenshotNothing">Нечего сохранять</string>
+    <string name="AyuScreenshotTooMany">Выбрано слишком много сообщений, будут сохранены только первые %1$d.</string>
+
+    <string name="AyuScreenshotHiddenName">•••</string>
+    <string name="AyuScreenshotWatermark">Сделано в AyuGram</string>
+    <string name="AyuScreenshotMessages">%1$d сообщений</string>
+</resources>

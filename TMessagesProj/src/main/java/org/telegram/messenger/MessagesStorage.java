@@ -14098,18 +14098,31 @@ public class MessagesStorage extends BaseController {
         if (!org.telegram.messenger.ayu.AyuConfig.saveDeletedMessages) {
             return;
         }
-        ayuArchiveQuery(String.format(Locale.US, "SELECT data, mid, uid FROM messages_v2 WHERE uid = %d AND mid <= %d", -channelId, maxMid));
+        // bounded: "delete history up to mid" can match the whole locally cached channel
+        ayuArchiveQuery(String.format(Locale.US, "SELECT data, mid, uid FROM messages_v2 WHERE uid = %d AND mid <= %d ORDER BY mid DESC LIMIT %d", -channelId, maxMid, AYU_MAX_CLEAR_HISTORY_SAVE));
     }
 
     /** how many messages of a cleared history we are willing to archive (a full clear is otherwise unbounded) */
     private static final int AYU_MAX_CLEAR_HISTORY_SAVE = 300;
 
-    //ayu: "clear history" keeps the dialog, so archive the tail of it (bounded); a full dialog deletion is never archived
+    //ayu: "clear history" keeps the dialog, "delete dialog" does not - archive the (bounded) tail of both
     private void ayuSaveClearedHistory(long did, int messagesOnly) {
         if (!org.telegram.messenger.ayu.AyuConfig.saveDeletedMessages) {
             return;
         }
-        if (messagesOnly != 1 || DialogObject.isEncryptedDialog(did)) {
+        if (DialogObject.isEncryptedDialog(did)) {
+            return;
+        }
+        if (messagesOnly == 3) {
+            // "delete the dialog only when it never had a message" - nothing worth archiving
+            return;
+        }
+        final boolean historyOnly = messagesOnly == 1;
+        if (historyOnly) {
+            if (!org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.keepOnClearHistory) {
+                return;
+            }
+        } else if (!org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.keepOnDeleteDialog) {
             return;
         }
         ayuArchiveQuery(String.format(Locale.US, "SELECT data, mid, uid FROM messages_v2 WHERE uid = %d ORDER BY mid DESC LIMIT %d", did, AYU_MAX_CLEAR_HISTORY_SAVE));
@@ -15727,6 +15740,8 @@ public class MessagesStorage extends BaseController {
                 final long selfId = getUserConfig().getClientUserId();
                 final boolean scheduled = mode == ChatActivity.MODE_SCHEDULED;
                 final boolean quickReplies = mode == ChatActivity.MODE_QUICK_REPLIES;
+                //ayu: capture edits that happened while we were offline (compare with the local copy before it is replaced)
+                org.telegram.messenger.ayu.edithistory.AyuEditHistoryDetector.onMessagesLoadedFromServer(currentAccount, dialogId, messages, load_type, mode);
                 if (quickReplies) {
                     state_messages = database.executeFast("REPLACE INTO quick_replies_messages VALUES(?, ?, ?, ?, ?, ?, NULL, 0)");
                     int count = messages.messages.size();

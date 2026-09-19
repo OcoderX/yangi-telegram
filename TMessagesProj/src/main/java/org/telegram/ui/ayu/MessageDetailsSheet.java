@@ -223,13 +223,15 @@ public class MessageDetailsSheet extends BottomSheetWithRecyclerListView {
         }
         addRow(R.string.AyuDetailsEntities, String.valueOf(message.entities == null ? 0 : message.entities.size()));
         addRow(R.string.AyuDetailsDeleted, String.valueOf(message.ayuDeleted));
-        int revisions = message.ayuEditedCount;
+        //ayu: the stored revisions are the only reliable source (ayuEditedCount is in-memory only)
+        int revisions = 0;
+        try {
+            revisions = AyuMessagesController.getInstance().getRevisionsCount(currentAccount, dialogId, message.id);
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
         if (revisions <= 0) {
-            try {
-                revisions = AyuMessagesController.getInstance().getRevisions(currentAccount, dialogId, message.id).size();
-            } catch (Exception e) {
-                FileLog.e(e);
-            }
+            revisions = message.ayuEditedCount;
         }
         if (revisions > 0) {
             addRow(R.string.AyuDetailsRevisions, String.valueOf(revisions));

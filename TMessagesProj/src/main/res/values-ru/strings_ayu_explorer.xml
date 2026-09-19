@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: проводник файлов -->
+    <string name="AyuFileExplorer">Проводник файлов</string>
+    <string name="AyuFileExplorerInfo">Все файлы из всех чатов в одном месте — по чатам, по типу, по размеру или по дате.</string>
+
+    <!-- главный экран -->
+    <string name="AyuFeStorageHeader">Хранилище</string>
+    <string name="AyuFeOnThisDevice">На устройстве</string>
+    <string name="AyuFeTotalIndexed">В индексе</string>
+    <string name="AyuFeFreeSpace">Свободно</string>
+    <string name="AyuFeStorageInfo">Индекс строится по локальному кэшу сообщений и по файлам, которые Telegram хранит на устройстве. Удаление локальной копии не удаляет сообщение.</string>
+    <string name="AyuFeIndexing">Индексация…</string>
+
+    <string name="AyuFeBrowseHeader">Обзор</string>
+    <string name="AyuFeByChat">По чатам</string>
+    <string name="AyuFeByType">По типу</string>
+    <string name="AyuFeBySize">По размеру</string>
+    <string name="AyuFeByDate">По дате</string>
+    <string name="AyuFeBySizeValue">Сначала большие</string>
+    <string name="AyuFeByDateValue">По месяцам</string>
+    <string name="AyuFeBrowseInfo">В любом списке можно искать по имени файла и сортировать по имени, размеру или дате.</string>
+
+    <string name="AyuFeOptionsHeader">Настройки</string>
+    <string name="AyuFeOnlyDownloaded">Только загруженные</string>
+    <string name="AyuFeScanDownloads">Сканировать папки загрузок</string>
+    <string name="AyuFeRefresh">Пересобрать индекс</string>
+    <string name="AyuFeOptionsInfo">Сканирование папок загрузок также находит файлы, на которые больше не ссылается ни одно сообщение. Пересборка индекса может занять время при большом кэше.</string>
+
+    <!-- категории -->
+    <string name="AyuFeCategoryPhotos">Фото</string>
+    <string name="AyuFeCategoryVideos">Видео</string>
+    <string name="AyuFeCategoryDocuments">Документы</string>
+    <string name="AyuFeCategoryMusic">Аудио</string>
+    <string name="AyuFeCategoryVoice">Голосовые</string>
+    <string name="AyuFeCategoryGifs">GIF</string>
+    <string name="AyuFeCategoryStickers">Стикеры</string>
+    <string name="AyuFeCategoryOther">Прочее</string>
+    <string name="AyuFeNoExtension">Без расширения</string>
+
+    <!-- списки -->
+    <string name="AyuFeEmpty">Здесь пока нет файлов.</string>
+    <string name="AyuFeUnknownChat">Неизвестный чат</string>
+    <string name="AyuFeUnknownDate">Дата неизвестна</string>
+    <string name="AyuFeSelect">Выбрать</string>
+    <string name="AyuFeSortByDate">Сортировать по дате</string>
+    <string name="AyuFeSortBySize">Сортировать по размеру</string>
+    <string name="AyuFeSortByName">Сортировать по имени</string>
+
+    <!-- действия -->
+    <string name="AyuFeOpen">Открыть</string>
+    <string name="AyuFeDownload">Загрузить</string>
+    <string name="AyuFeGoToMessage">Перейти к сообщению</string>
+    <string name="AyuFeDeleteLocal">Удалить локальную копию</string>
+    <string name="AyuFeDeleteMessage">Сообщения останутся в чатах, удалятся только копии, сохранённые на этом устройстве (%1$s).</string>
+    <string name="AyuFeDeleted">Освобождено %1$s</string>
+    <string name="AyuFeDownloadStarted">Загрузка начата</string>
+    <string name="AyuFeNotDownloaded">Этого файла нет на устройстве.</string>
+    <string name="AyuFeNoMessage">Сообщение для этого файла больше не найдено в локальном кэше.</string>
+    <string name="AyuFeCannotOpen">Нет приложения, способного открыть этот файл.</string>
+
+    <!-- множественные формы -->
+    <string name="AyuFeFiles_one">%1$d файл</string>
+    <string name="AyuFeFiles_few">%1$d файла</string>
+    <string name="AyuFeFiles_many">%1$d файлов</string>
+    <string name="AyuFeFiles_other">%1$d файлов</string>
+    <string name="AyuFeChats_one">%1$d чат</string>
+    <string name="AyuFeChats_few">%1$d чата</string>
+    <string name="AyuFeChats_many">%1$d чатов</string>
+    <string name="AyuFeChats_other">%1$d чатов</string>
+    <string name="AyuFeTypes_one">%1$d тип</string>
+    <string name="AyuFeTypes_few">%1$d типа</string>
+    <string name="AyuFeTypes_many">%1$d типов</string>
+    <string name="AyuFeTypes_other">%1$d типов</string>
+    <string name="AyuFeDeleteTitle_one">Удалить %1$d файл</string>
+    <string name="AyuFeDeleteTitle_few">Удалить %1$d файла</string>
+    <string name="AyuFeDeleteTitle_many">Удалить %1$d файлов</string>
+    <string name="AyuFeDeleteTitle_other">Удалить %1$d файлов</string>
+</resources>

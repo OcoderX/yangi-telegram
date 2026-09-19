@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: File Explorer -->
+    <string name="AyuFileExplorer">File Explorer</string>
+    <string name="AyuFileExplorerInfo">Browse every file from every chat in one place — by chat, by type, by size or by date.</string>
+
+    <!-- root screen -->
+    <string name="AyuFeStorageHeader">Storage</string>
+    <string name="AyuFeOnThisDevice">On this device</string>
+    <string name="AyuFeTotalIndexed">Indexed files</string>
+    <string name="AyuFeFreeSpace">Free space</string>
+    <string name="AyuFeStorageInfo">The index is built from the local message cache and from the files Telegram keeps on this device. Deleting a local copy never deletes the message.</string>
+    <string name="AyuFeIndexing">Indexing…</string>
+
+    <string name="AyuFeBrowseHeader">Browse</string>
+    <string name="AyuFeByChat">By chat</string>
+    <string name="AyuFeByType">By type</string>
+    <string name="AyuFeBySize">By size</string>
+    <string name="AyuFeByDate">By date</string>
+    <string name="AyuFeBySizeValue">Largest first</string>
+    <string name="AyuFeByDateValue">Grouped by month</string>
+    <string name="AyuFeBrowseInfo">Every list can be searched by file name and sorted by name, size or date.</string>
+
+    <string name="AyuFeOptionsHeader">Options</string>
+    <string name="AyuFeOnlyDownloaded">Show only downloaded</string>
+    <string name="AyuFeScanDownloads">Scan the download folders</string>
+    <string name="AyuFeRefresh">Rebuild the index</string>
+    <string name="AyuFeOptionsInfo">Scanning the download folders also finds files that no message points to any more. Rebuilding the index may take a while on large caches.</string>
+
+    <!-- categories -->
+    <string name="AyuFeCategoryPhotos">Photos</string>
+    <string name="AyuFeCategoryVideos">Videos</string>
+    <string name="AyuFeCategoryDocuments">Documents</string>
+    <string name="AyuFeCategoryMusic">Audio</string>
+    <string name="AyuFeCategoryVoice">Voice</string>
+    <string name="AyuFeCategoryGifs">GIFs</string>
+    <string name="AyuFeCategoryStickers">Stickers</string>
+    <string name="AyuFeCategoryOther">Other</string>
+    <string name="AyuFeNoExtension">No extension</string>
+
+    <!-- lists -->
+    <string name="AyuFeEmpty">No files here yet.</string>
+    <string name="AyuFeUnknownChat">Unknown chat</string>
+    <string name="AyuFeUnknownDate">Unknown date</string>
+    <string name="AyuFeSelect">Select</string>
+    <string name="AyuFeSortByDate">Sort by date</string>
+    <string name="AyuFeSortBySize">Sort by size</string>
+    <string name="AyuFeSortByName">Sort by name</string>
+
+    <!-- actions -->
+    <string name="AyuFeOpen">Open</string>
+    <string name="AyuFeDownload">Download</string>
+    <string name="AyuFeGoToMessage">Go to message</string>
+    <string name="AyuFeDeleteLocal">Delete local copy</string>
+    <string name="AyuFeDeleteMessage">The messages stay in your chats, only the copies stored on this device are removed (%1$s).</string>
+    <string name="AyuFeDeleted">Freed %1$s</string>
+    <string name="AyuFeDownloadStarted">Download started</string>
+    <string name="AyuFeNotDownloaded">This file is not on your device.</string>
+    <string name="AyuFeNoMessage">The message for this file is not in the local cache any more.</string>
+    <string name="AyuFeCannotOpen">There is no app that can open this file.</string>
+
+    <!-- plurals -->
+    <string name="AyuFeFiles_one">%1$d file</string>
+    <string name="AyuFeFiles_few">%1$d files</string>
+    <string name="AyuFeFiles_many">%1$d files</string>
+    <string name="AyuFeFiles_other">%1$d files</string>
+    <string name="AyuFeChats_one">%1$d chat</string>
+    <string name="AyuFeChats_few">%1$d chats</string>
+    <string name="AyuFeChats_many">%1$d chats</string>
+    <string name="AyuFeChats_other">%1$d chats</string>
+    <string name="AyuFeTypes_one">%1$d type</string>
+    <string name="AyuFeTypes_few">%1$d types</string>
+    <string name="AyuFeTypes_many">%1$d types</string>
+    <string name="AyuFeTypes_other">%1$d types</string>
+    <string name="AyuFeDeleteTitle_one">Delete %1$d file</string>
+    <string name="AyuFeDeleteTitle_few">Delete %1$d files</string>
+    <string name="AyuFeDeleteTitle_many">Delete %1$d files</string>
+    <string name="AyuFeDeleteTitle_other">Delete %1$d files</string>
+</resources>
