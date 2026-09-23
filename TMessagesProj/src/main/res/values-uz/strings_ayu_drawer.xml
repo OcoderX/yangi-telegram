@@ -20,6 +20,7 @@
     <string name="AyuDrawerKeepAlive">Faol saqlash xizmati</string>
     <string name="AyuDrawerFileExplorer">Fayl menejeri</string>
     <string name="AyuDrawerDuplicates">Nusxalarni tozalash</string>
-    <string name="AyuDrawerSync">AyuSync</string>
+    <string name="AyuDrawerSync">OcoderX-sync</string>
     <string name="AyuDrawerAllSettings">Barcha OcoderX sozlamalari</string>
+    <string name="OxMenuDownloadManager">Yuklab olish menejeri</string>
 </resources>

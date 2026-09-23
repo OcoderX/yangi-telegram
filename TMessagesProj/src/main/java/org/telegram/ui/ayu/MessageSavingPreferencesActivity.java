@@ -45,6 +45,7 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
     private static final int KEEP_ON_DELETE_DIALOG = 12;
     private static final int RESTORE_MEDIA_TO_CACHE = 13;
     private static final int CLEAR_EXCLUSIONS = 14;
+    private static final int DIM_DELETED_MESSAGES = 15;
 
     // ---------------- edit history ----------------
     private static final int EH_CAPTURE = 20;
@@ -112,6 +113,8 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
         items.add(UItem.asHeader(getString(R.string.AyuAntiDelete)));
         items.add(UItem.asCheck(SHOW_DELETED_LABEL, getString(R.string.AyuShowDeletedLabel)).setChecked(AyuAntiDeleteConfig.showDeletedLabel));
         items.add(UItem.asCheck(RESTORE_MEDIA_TO_CACHE, getString(R.string.AyuRestoreMediaToCache)).setChecked(AyuAntiDeleteConfig.restoreMediaToCache));
+        items.add(UItem.asCheck(DIM_DELETED_MESSAGES, getString(R.string.AyuDimDeletedMessages)).setChecked(AyuAntiDeleteConfig.dimDeletedMessages));
+        items.add(UItem.asShadow(getString(R.string.AyuDimDeletedMessagesInfo)));
         items.add(UItem.asShadow(getString(R.string.AyuAntiDeleteInfo)));
 
         items.add(UItem.asCheck(KEEP_ON_CLEAR_HISTORY, getString(R.string.AyuKeepOnClearHistory)).setChecked(AyuAntiDeleteConfig.keepOnClearHistory));
@@ -179,6 +182,10 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
             case RESTORE_MEDIA_TO_CACHE:
                 AyuAntiDeleteConfig.setRestoreMediaToCache(!AyuAntiDeleteConfig.restoreMediaToCache);
                 toggleSwitch(view, AyuAntiDeleteConfig.restoreMediaToCache);
+                break;
+            case DIM_DELETED_MESSAGES:
+                AyuAntiDeleteConfig.setDimDeletedMessages(!AyuAntiDeleteConfig.dimDeletedMessages);
+                toggleSwitch(view, AyuAntiDeleteConfig.dimDeletedMessages);
                 break;
             case KEEP_ON_CLEAR_HISTORY:
                 AyuAntiDeleteConfig.setKeepOnClearHistory(!AyuAntiDeleteConfig.keepOnClearHistory);

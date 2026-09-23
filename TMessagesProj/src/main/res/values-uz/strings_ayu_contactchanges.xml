@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX: kontaktlar profilidagi uzgarishlar tarixi -->
+    <string name="OxMenuContactsChanges">Kontakt o\'zgarishlari</string>
+    <string name="OxContactChangesTitle">Kontakt o\'zgarishlari</string>
+    <string name="OxContactChangesTrack">O\'zgarishlarni kuzatish</string>
+    <string name="OxContactChangesTrackEnabled">Kontakt o\'zgarishlari kuzatilmoqda</string>
+    <string name="OxContactChangesTrackDisabled">Kuzatish o\'chirilgan</string>
+    <string name="OxContactChangesClear">Tarixni tozalash</string>
+    <string name="OxContactChangesClearConfirm">Bu qurilmadagi barcha yozib olingan kontakt o\'zgarishlari o\'chirilsinmi? Buni qaytarib bo\'lmaydi.</string>
+    <string name="OxContactChangesCleared">Tarix tozalandi</string>
+    <string name="OxContactChangesName">Ism o\'zgardi</string>
+    <string name="OxContactChangesUsername">Foydalanuvchi nomi o\'zgardi</string>
+    <string name="OxContactChangesPhone">Telefon raqami o\'zgardi</string>
+    <string name="OxContactChangesPhoto">Profil rasmi o\'zgardi</string>
+    <string name="OxContactChangesBio">Tavsif o\'zgardi</string>
+    <string name="OxContactChangesEmpty">Hozircha hech narsa yozilmagan. Kontakt ismini, foydalanuvchi nomini, telefonini, rasmini yoki tavsifini o\'zgartirsa, bu yerda ko\'rinadi.</string>
+    <string name="OxContactChangesToday">Bugun</string>
+    <string name="OxContactChangesYesterday">Kecha</string>
+</resources>

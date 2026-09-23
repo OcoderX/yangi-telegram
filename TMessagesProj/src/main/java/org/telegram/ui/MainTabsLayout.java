@@ -395,7 +395,10 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
     private void checkLongMove(float x_, float y, boolean start, boolean end) {
         final float x = clampXToChildrenCenters(x_, this);
-        final View found = findNearestVisibleChildByX(x, this);
+        View found = findNearestVisibleChildByX(x, this);
+        if (found != null && tabsWithIgnoreSelect.contains(found)) {
+            found = null;
+        }
         if (start) {
             View selected = findSelectedTab();
             if (selected != null) {
@@ -431,6 +434,12 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private final Set<View> tabsWithIgnoreClick = new HashSet<>();
     public void addTabToIgnoreClick(View v) {
         tabsWithIgnoreClick.add(v);
+    }
+
+    // tabs that must never become "selected" (f.ex. menu tabs that do not own a page)
+    private final Set<View> tabsWithIgnoreSelect = new HashSet<>();
+    public void addTabToIgnoreSelect(View v) {
+        tabsWithIgnoreSelect.add(v);
     }
 
     private final BoolAnimator animatorIsScaled = new BoolAnimator(0, (a, factor, c, g) -> {

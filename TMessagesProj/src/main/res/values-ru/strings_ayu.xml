@@ -19,6 +19,8 @@
     <string name="AyuCopiedToClipboard">Скопировано в буфер обмена</string>
 
     <string name="AyuDeleteLocally">Удалить локально</string>
+    <string name="AyuReadMessage">Прочитать сообщение</string>
+    <string name="AyuReadMessageDone">Отметка о прочтении отправлена</string>
     <string name="AyuDeleteLocallyTitle">Удалить локально</string>
     <string name="AyuDeleteLocallyMessage">Это сообщение уже удалено на сервере. Удалить и локальную копию?</string>
 
@@ -203,7 +205,7 @@
     <string name="AyuCustomizationInfo">Переключатель призрака и кнопка завершения показываются на панели действий в списке чатов.</string>
 
     <!-- Синхронизация -->
-    <string name="AyuSyncInfo">Синхронизация настроек OcoderX-gram между вашими устройствами.</string>
+    <string name="AyuSyncInfo">Серверный сервис OcoderX 24/7, который сохраняет исчезающие медиа, фото «для одного просмотра» и удалённые сообщения, даже когда телефон офлайн.</string>
     <string name="AyuEnabled">Включено</string>
     <string name="AyuDisabled">Отключено</string>
 
@@ -228,7 +230,7 @@
     <string name="AyuPeerIdCopied">ID скопирован в буфер обмена</string>
 
     <!-- AyuGram: AyuSync -->
-    <string name="AyuSyncScreenTitle">OcoderX-gram Sync</string>
+    <string name="AyuSyncScreenTitle">OcoderX-sync</string>
     <string name="AyuSyncEnable">Включить OcoderX-gram Sync</string>
     <string name="AyuSyncEnableInfo">Синхронизирует режим призрака, отметки о прочтении и историю удалённых и изменённых сообщений между вашими устройствами с OcoderX-gram через сервер OcoderX-gram Sync.</string>
     <string name="AyuSyncServerSection">Сервер</string>
@@ -279,7 +281,7 @@
     <string name="AyuBotLoginTitle">Токен бота</string>
     <string name="AyuBotLoginHeader">Вход как бот</string>
     <string name="AyuBotLoginSubtitle">Вставьте токен, который выдал @BotFather. Бот будет добавлен отдельным аккаунтом.</string>
-    <string name="AyuBotLoginField">Токен бота</string>
+    <string name="AyuBotLoginField">Токен бота от @BotFather</string>
     <string name="AyuBotLoginPaste">Вставить из буфера</string>
     <string name="AyuBotLoginInfo">Telegram не даёт боту загрузить список чатов, контакты и старую переписку. Чаты появятся здесь по мере поступления сообщений и сохранятся на этом устройстве.</string>
     <string name="AyuBotLoginLink">Войти по токену бота</string>
@@ -310,4 +312,77 @@
     <string name="AyuTurboIslandBadge">Turbo</string>
     <string name="AyuTurboKeepPartial">Сохранять недокачанные файлы</string>
     <string name="AyuTurboKeepPartialInfo">Сохранять уже загруженную часть при отмене или ошибке, чтобы повторный запуск продолжал загрузку, а не начинал её заново.</string>
+
+    <!-- Members filter -->
+    <string name="OxMembersFilter">Фильтр участников</string>
+    <string name="OxMembersFilterAll">Все</string>
+    <string name="OxMembersFilterAdmins">Администраторы</string>
+    <string name="OxMembersFilterBots">Боты</string>
+    <string name="OxMembersFilterContacts">Контакты</string>
+    <string name="OxMembersFilterMutual">Взаимные контакты</string>
+    <string name="OxMembersFilterDeleted">Удалённые аккаунты</string>
+    <string name="OxMembersFilterPremium">Premium-пользователи</string>
+    <string name="OxMembersFilterNonPremium">Без Premium</string>
+    <string name="AyuBotLoginShowToken">Показать токен</string>
+    <string name="AyuBotLoginHideToken">Скрыть токен</string>
+    <string name="AyuBotLoginPasteDetected">Вставить токен из буфера</string>
+    <string name="AyuBotLoginErrorApiId">Telegram отклонил API ID этого приложения. Попробуйте позже.</string>
+    <string name="AyuBotLoginErrorNetwork">Не удалось связаться с Telegram. Проверьте соединение и попробуйте снова.</string>
+    <string name="AyuBotLoginErrorGeneric">Не удалось войти: %1$s</string>
+    <string name="AyuBotAccountBadge">бот</string>
+    <string name="AyuBotAddAccount">Добавить аккаунт бота</string>
+    <string name="AyuBotFatherHint">Имя, username, описание и фото бота меняются в @BotFather, а не здесь.</string>
+    <string name="AyuBotFatherOpen">Открыть @BotFather</string>
+
+    <!-- Ox-gram: контекстное меню сообщения -->
+    <string name="AyuCopyPiece">Копировать часть текста</string>
+    <string name="AyuCopyPieceHint">Выделите нужный фрагмент и нажмите «Копировать».</string>
+
+    <string name="AyuAiTools">AI-инструменты</string>
+    <string name="AyuAiSummarize">Кратко пересказать</string>
+    <string name="AyuAiExplain">Объяснить</string>
+    <string name="AyuAiRephrase">Переформулировать</string>
+    <string name="AyuAiTranslate">Перевести на язык приложения</string>
+    <string name="AyuAiReplySuggestions">Варианты ответа</string>
+    <string name="AyuAiAsk">Спросить об этом сообщении</string>
+    <string name="AyuAiAskHint">Что вы хотите узнать?</string>
+    <string name="AyuAiInsert">Вставить в поле ввода</string>
+    <string name="AyuAiError">Запрос не удался: %1$s</string>
+    <string name="AyuAiNotConfigured">Добавьте API-ключ, чтобы пользоваться AI-инструментами.</string>
+    <string name="AyuAiEnable">Включить AI-инструменты</string>
+    <string name="AyuAiEnableInfo">Добавляет пункт «AI-инструменты» в контекстное меню сообщения. Выбранное сообщение отправляется указанному ниже провайдеру.</string>
+    <string name="AyuAiProvider">Провайдер</string>
+    <string name="AyuAiProviderClaude">Claude API</string>
+    <string name="AyuAiProviderOpenAi">Совместимый с OpenAI</string>
+    <string name="AyuAiProviderInfo">Ключ хранится только на этом устройстве и отправляется по HTTPS на указанный адрес.</string>
+    <string name="AyuAiApiKey">API-ключ</string>
+    <string name="AyuAiApiKeyNotSet">Не задан</string>
+    <string name="AyuAiModel">Модель</string>
+    <string name="AyuAiBaseUrl">Базовый URL</string>
+
+    <string name="AyuSetBackground">Установить как фон</string>
+    <string name="AyuSetBackgroundFailed">Не удалось открыть это изображение.</string>
+
+    <string name="AyuSpecialForward">Особая пересылка</string>
+    <string name="AyuSpecialForwardHideSender">Скрыть имя отправителя</string>
+    <string name="AyuSpecialForwardHideCaption">Скрыть подпись</string>
+    <string name="AyuSpecialForwardNoSound">Переслать без звука</string>
+    <string name="AyuSpecialForwardInfo">Если скрыть имя отправителя, сообщение уходит копией — без заголовка пересылки.</string>
+
+    <string name="AyuMarkMessage">Отметить сообщение</string>
+    <string name="AyuUnmarkMessage">Снять отметку</string>
+    <string name="AyuMessageMarked">Сообщение отмечено</string>
+    <string name="AyuMessageUnmarked">Отметка снята</string>
+    <string name="AyuMarkedMessages">Отмеченные сообщения</string>
+    <string name="AyuMarkedMessagesEmpty">В этом чате пока нет отмеченных сообщений.</string>
+    <string name="AyuMarkedMessagesClear">Снять все отметки</string>
+    <string name="AyuMarkedMessagesInfo">Отметки хранятся только на этом устройстве. Удерживайте строку, чтобы снять одну отметку.</string>
+    <string name="AyuMarkedMessageNoText">Медиасообщение</string>
+    <string name="AyuMarkedMessageNotLoaded">Сообщения нет в кэше</string>
+
+    <string name="AyuMessageMenu">Меню сообщения</string>
+    <string name="AyuMessageMenuInfo">Дополнительные пункты меню, которое открывается долгим нажатием на сообщение.</string>
+    <string name="AyuContextMenuOnTap">Меню по одиночному нажатию</string>
+    <string name="AyuContextMenuOnTapInfo">Одиночное нажатие на сообщение открывает контекстное меню.</string>
+    <string name="AyuMarkedMessagesEnable">Отметки сообщений</string>
 </resources>

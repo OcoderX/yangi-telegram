@@ -5,7 +5,7 @@
     <string name="AyuPeerIdCopied">ID copied to clipboard</string>
 
     <!-- AyuGram: AyuSync -->
-    <string name="AyuSyncScreenTitle">OcoderX-gram Sync</string>
+    <string name="AyuSyncScreenTitle">OcoderX-sync</string>
     <string name="AyuSyncEnable">Enable OcoderX-gram Sync</string>
     <string name="AyuSyncEnableInfo">Keeps ghost mode, read receipts and the deleted/edited message history in sync between your OcoderX-gram devices through an OcoderX-gram Sync server.</string>
     <string name="AyuSyncServerSection">Server</string>
@@ -29,4 +29,33 @@
 
     <!-- AyuGram: keep-alive service -->
     <string name="AyuKeepAliveNotification">OcoderX-gram keep-alive</string>
+    <!-- Ox-gram: OcoderX-sync service screen -->
+    <string name="OxSyncHeroTitle">What is OcoderX-sync?</string>
+    <string name="OxSyncHeroText">It is a paid service on the OcoderX server. It works for you 24 hours a day and keeps a copy of the things Telegram usually takes away, so nothing gets lost.</string>
+    <string name="OxSyncWhatHeader">What it saves for you</string>
+    <string name="OxSyncBulletDestruct">Self-destructing photos and videos</string>
+    <string name="OxSyncBulletOnce">View-once and timed media</string>
+    <string name="OxSyncBulletDeleted">Deleted and edited messages</string>
+    <string name="OxSyncBulletOffline">Works while your phone is offline</string>
+    <string name="OxSyncWhatInfo">The server keeps working even when your phone has no internet or the app is closed, so nothing is lost.</string>
+    <string name="OxSyncOrder">Order the service</string>
+    <string name="OxSyncOrderInfo">After ordering, OcoderX will send you the API ID, API hash and session string. Enter them below and the userbot will start working.</string>
+    <string name="OxSyncCredentialsSection">Userbot credentials</string>
+    <string name="OxSyncApiId">API ID</string>
+    <string name="OxSyncApiIdInvalid">The API ID must be a number.</string>
+    <string name="OxSyncApiHash">API hash</string>
+    <string name="OxSyncSessionString">Session string</string>
+    <string name="OxSyncSessionHint">Paste the session string</string>
+    <string name="OxSyncNotSet">Not set</string>
+    <string name="OxSyncStatus">Status</string>
+    <string name="OxSyncStatusNotConfigured">Not configured</string>
+    <string name="OxSyncStatusConfigured">Configured — waiting for activation</string>
+    <string name="OxSyncCredentialsInfo">These details are stored only on this phone. Do not share them with anyone: they give full access to your account.</string>
+    <string name="OxSyncSaved">Saved</string>
+    <string name="OxSyncClear">Clear credentials</string>
+    <string name="OxSyncClearTitle">Clear credentials?</string>
+    <string name="OxSyncClearText">The API ID, API hash and session string will be removed from this phone.</string>
+    <string name="OxSyncClearButton">Clear</string>
+    <string name="OxSyncCleared">Credentials cleared</string>
 </resources>
+

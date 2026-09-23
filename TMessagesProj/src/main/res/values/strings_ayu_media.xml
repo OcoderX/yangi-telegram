@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX: send gallery video as a round video note -->
+    <string name="OxRoundVideo">Round video</string>
+    <string name="OxRoundVideoHint">Send as a round video</string>
+    <string name="OxRoundVideoTooBig">Round video file size must be lower than 20 MB, for change file size you can change video quality or duration.</string>
+    <string name="OxRoundVideoTrimmed">Round videos are limited to 60 seconds, the video was trimmed.</string>
+</resources>

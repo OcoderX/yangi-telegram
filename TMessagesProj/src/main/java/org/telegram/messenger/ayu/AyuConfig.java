@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 
 /**
@@ -18,6 +19,14 @@ public class AyuConfig {
 
     public static SharedPreferences preferences;
     private static boolean loaded;
+
+    // ---------------- Colored message status ----------------
+    /** read (double tick) */
+    public static final int STATUS_COLOR_READ = 0xFF34C759;
+    /** sent / delivered but not read (single tick) */
+    public static final int STATUS_COLOR_SENT = 0xFFFF3B30;
+    /** sending (clock) */
+    public static final int STATUS_COLOR_PENDING = 0xFFFFC107;
 
     // ---------------- Ghost mode ----------------
     /** false = do not send read receipts (messages_readHistory, readMessageContents, readDiscussion, readReactions) */
@@ -93,6 +102,37 @@ public class AyuConfig {
     public static boolean showMessageDetails = true;
     public static boolean showMessageShadow = false;
     public static boolean simpleQuotesAndReplies = false;
+    /** true = outgoing message ticks are green (read) / red (delivered) and the sending clock is yellow */
+    public static boolean coloredMessageStatus = true;
+
+    /** true = every chat in the main list is drawn as a separate rounded card */
+    public static boolean cardChatList = true;
+
+    // ---------------- AI Tools (message context menu) ----------------
+    public static final int AI_PROVIDER_CLAUDE = 0;
+    public static final int AI_PROVIDER_OPENAI = 1;
+
+    public static final String DEFAULT_AI_BASE_URL_CLAUDE = "https://api.anthropic.com";
+    public static final String DEFAULT_AI_BASE_URL_OPENAI = "https://api.openai.com/v1";
+    public static final String DEFAULT_AI_MODEL_CLAUDE = "claude-sonnet-5";
+    public static final String DEFAULT_AI_MODEL_OPENAI = "gpt-4o-mini";
+
+    /** master toggle of the "AI Tools" context menu entry */
+    public static boolean aiToolsEnabled = false;
+    /** {@link #AI_PROVIDER_CLAUDE} or {@link #AI_PROVIDER_OPENAI} */
+    public static int aiProvider = AI_PROVIDER_CLAUDE;
+    /** secret: never logged, never sent anywhere but to the configured provider */
+    public static String aiApiKey = "";
+    /** empty = provider default, see {@link #getAiModel()} */
+    public static String aiModel = "";
+    /** empty = provider default, see {@link #getAiBaseUrl()} */
+    public static String aiBaseUrl = "";
+
+    // ---------------- Message context menu ----------------
+    /** true = a single tap on a message bubble opens the context menu */
+    public static boolean contextMenuOnTap = false;
+    /** true = show the "Marking message" bookmark entry and the bookmark badge */
+    public static boolean markedMessagesEnabled = true;
 
     // ---------------- AyuSync ----------------
     public static boolean syncEnabled = false;
@@ -166,6 +206,18 @@ public class AyuConfig {
         showMessageDetails = preferences.getBoolean("showMessageDetails", true);
         showMessageShadow = preferences.getBoolean("showMessageShadow", false);
         simpleQuotesAndReplies = preferences.getBoolean("simpleQuotesAndReplies", false);
+        coloredMessageStatus = preferences.getBoolean("coloredMessageStatus", true);
+
+        cardChatList = preferences.getBoolean("cardChatList", true);
+
+        aiToolsEnabled = preferences.getBoolean("aiToolsEnabled", false);
+        aiProvider = preferences.getInt("aiProvider", AI_PROVIDER_CLAUDE);
+        aiApiKey = preferences.getString("aiApiKey", "");
+        aiModel = preferences.getString("aiModel", "");
+        aiBaseUrl = preferences.getString("aiBaseUrl", "");
+
+        contextMenuOnTap = preferences.getBoolean("contextMenuOnTap", false);
+        markedMessagesEnabled = preferences.getBoolean("markedMessagesEnabled", true);
 
         syncEnabled = preferences.getBoolean("syncEnabled", false);
         useSecureConnection = preferences.getBoolean("useSecureConnection", true);
@@ -296,8 +348,44 @@ public class AyuConfig {
     public static void setShowMessageDetails(boolean v) { showMessageDetails = v; putBoolean("showMessageDetails", v); }
     public static void setShowMessageShadow(boolean v) { showMessageShadow = v; putBoolean("showMessageShadow", v); }
     public static void setSimpleQuotesAndReplies(boolean v) { simpleQuotesAndReplies = v; putBoolean("simpleQuotesAndReplies", v); }
+    public static void setColoredMessageStatus(boolean v) { coloredMessageStatus = v; putBoolean("coloredMessageStatus", v); }
+
+    public static void setCardChatList(boolean v) {
+        cardChatList = v;
+        putBoolean("cardChatList", v);
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.dialogsNeedReload, true);
+    }
 
     public static void setSyncEnabled(boolean v) { syncEnabled = v; putBoolean("syncEnabled", v); }
+
+    // ---------------- AI Tools ----------------
+    public static void setAiToolsEnabled(boolean v) { aiToolsEnabled = v; putBoolean("aiToolsEnabled", v); }
+    public static void setAiProvider(int v) { aiProvider = v; putInt("aiProvider", v); }
+    public static void setAiApiKey(String v) { aiApiKey = v == null ? "" : v.trim(); putString("aiApiKey", aiApiKey); }
+    public static void setAiModel(String v) { aiModel = v == null ? "" : v.trim(); putString("aiModel", aiModel); }
+    public static void setAiBaseUrl(String v) { aiBaseUrl = v == null ? "" : v.trim(); putString("aiBaseUrl", aiBaseUrl); }
+
+    /** configured model, falling back to the provider default */
+    public static String getAiModel() {
+        ensureLoaded();
+        if (aiModel != null && aiModel.length() > 0) {
+            return aiModel;
+        }
+        return aiProvider == AI_PROVIDER_OPENAI ? DEFAULT_AI_MODEL_OPENAI : DEFAULT_AI_MODEL_CLAUDE;
+    }
+
+    /** configured base url, falling back to the provider default */
+    public static String getAiBaseUrl() {
+        ensureLoaded();
+        if (aiBaseUrl != null && aiBaseUrl.length() > 0) {
+            return aiBaseUrl;
+        }
+        return aiProvider == AI_PROVIDER_OPENAI ? DEFAULT_AI_BASE_URL_OPENAI : DEFAULT_AI_BASE_URL_CLAUDE;
+    }
+
+    // ---------------- Message context menu ----------------
+    public static void setContextMenuOnTap(boolean v) { contextMenuOnTap = v; putBoolean("contextMenuOnTap", v); }
+    public static void setMarkedMessagesEnabled(boolean v) { markedMessagesEnabled = v; putBoolean("markedMessagesEnabled", v); }
     public static void setUseSecureConnection(boolean v) { useSecureConnection = v; putBoolean("useSecureConnection", v); }
     public static void setSyncServerURL(String v) { syncServerURL = v; putString("syncServerURL", v); }
     public static void setSyncServerToken(String v) { syncServerToken = v; putString("syncServerToken", v); }

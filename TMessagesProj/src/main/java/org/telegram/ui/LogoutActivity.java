@@ -81,7 +81,8 @@ public class LogoutActivity extends BaseFragment {
             passcodeRow = -1;
         }
         cacheRow = rowCount++;
-        phoneRow = rowCount++;
+        // a bot has no phone number to change
+        phoneRow = UserConfig.getInstance(currentAccount).isBotAccount() ? -1 : rowCount++;
         supportRow = rowCount++;
         alternativeSectionRow = rowCount++;
         logoutRow = rowCount++;

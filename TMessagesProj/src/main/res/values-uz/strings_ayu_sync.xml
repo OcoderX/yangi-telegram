@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Ox-gram: OcoderX-sync xizmati ekrani -->
+    <string name="OxSyncHeroTitle">OcoderX-sync nima?</string>
+    <string name="OxSyncHeroText">Bu OcoderX serverida 24/7 ishlaydigan pullik xizmat: o\'chib ketadigan rasm va videolarni, bir marta ko\'riladigan (sekundli) medialarni, o\'chirilgan va tahrirlangan xabarlarni saqlab qoladi. Telefoningiz internetsiz yoki ilova yopiq bo\'lsa ham hech narsa yo\'qolmaydi.</string>
+    <string name="OxSyncWhatHeader">Nimalarni saqlab qoladi</string>
+    <string name="OxSyncBulletDestruct">O\'chib ketadigan rasm va videolar</string>
+    <string name="OxSyncBulletOnce">Bir marta ko\'riladigan (sekundli) medialar</string>
+    <string name="OxSyncBulletDeleted">O\'chirilgan va tahrirlangan xabarlar</string>
+    <string name="OxSyncBulletOffline">Telefon internetsiz bo\'lsa ham ishlaydi</string>
+    <string name="OxSyncWhatInfo">Server telefoningizda internet bo\'lmasa yoki ilova yopiq bo\'lsa ham ishlashda davom etadi, shuning uchun hech narsa yo\'qolmaydi.</string>
+    <string name="OxSyncOrder">Xizmatga buyurtma berish</string>
+    <string name="OxSyncOrderInfo">Buyurtmadan so\'ng OcoderX sizga API ID, API hash va sessiya satrini yuboradi. Ularni quyiga kiriting va userbot ishlay boshlaydi.</string>
+    <string name="OxSyncCredentialsSection">Userbot ma\'lumotlari</string>
+    <string name="OxSyncApiId">API ID</string>
+    <string name="OxSyncApiIdInvalid">API ID raqam bo\'lishi kerak.</string>
+    <string name="OxSyncApiHash">API hash</string>
+    <string name="OxSyncSessionString">Sessiya satri</string>
+    <string name="OxSyncSessionHint">Sessiya satrini joylashtiring</string>
+    <string name="OxSyncNotSet">Kiritilmagan</string>
+    <string name="OxSyncStatus">Holat</string>
+    <string name="OxSyncStatusNotConfigured">Sozlanmagan</string>
+    <string name="OxSyncStatusConfigured">Sozlangan — faollashtirish kutilmoqda</string>
+    <string name="OxSyncCredentialsInfo">Bu ma\'lumotlar faqat shu telefonda saqlanadi. Ularni hech kimga bermang: ular akkauntingizga to\'liq kirish huquqini beradi.</string>
+    <string name="OxSyncSaved">Saqlandi</string>
+    <string name="OxSyncClear">Ma\'lumotlarni tozalash</string>
+    <string name="OxSyncClearTitle">Ma\'lumotlar tozalansinmi?</string>
+    <string name="OxSyncClearText">API ID, API hash va sessiya satri shu telefondan o\'chiriladi.</string>
+    <string name="OxSyncClearButton">Tozalash</string>
+    <string name="OxSyncCleared">Ma\'lumotlar tozalandi</string>
+</resources>

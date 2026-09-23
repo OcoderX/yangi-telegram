@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Strings for the OcoderX contacts features: Online contacts, Special contacts and the Contact
+    tracker. Every key is prefixed with OxContacts (or OxMenu for the main menu labels) and must
+    exist in values-ru/ and values-uz/ as well.
+-->
+<resources>
+    <!-- screen titles -->
+    <string name="OxContactsOnlineTitle">Online contacts</string>
+    <string name="OxContactsSpecialTitle">Special contacts</string>
+    <string name="OxContactsTrackerTitle">Contact tracker</string>
+
+    <!-- online contacts -->
+    <string name="OxContactsOnlineOfTotal">%1$d online of %2$d contacts</string>
+    <string name="OxContactsOnlineEmpty">None of your contacts are online right now.</string>
+    <string name="OxContactsOnline">Online</string>
+    <string name="OxContactsOffline">Offline</string>
+    <string name="OxContactsOpenProfile">Open profile</string>
+    <string name="OxContactsMarkSpecial">Mark as special contact</string>
+    <string name="OxContactsUnmarkSpecial">Remove from special contacts</string>
+    <string name="OxContactsAddedToSpecial">%1$s added to special contacts</string>
+    <string name="OxContactsRemovedFromSpecial">%1$s removed from special contacts</string>
+
+    <!-- special contacts -->
+    <string name="OxContactsSpecialHeader">Special contacts</string>
+    <string name="OxContactsAdd">Add contact</string>
+    <string name="OxContactsRemove">Remove</string>
+    <string name="OxContactsSpecialEmpty">No special contacts yet. Add contacts to get notified when they come online and to track their activity.</string>
+    <string name="OxContactsNotify">Notify when online/offline</string>
+    <string name="OxContactsNotifyInfo">A local notification is shown when a special contact comes online or goes offline. Nothing is sent to the server.</string>
+    <string name="OxContactsIsOnline">%1$s is online</string>
+    <string name="OxContactsWentOffline">%1$s went offline</string>
+    <string name="OxContactsManageSpecial">Special contacts</string>
+
+    <!-- contact tracker -->
+    <string name="OxContactsTrackerEmpty">Add special contacts to track their online activity.</string>
+    <string name="OxContactsSummaryHeader">Summary</string>
+    <string name="OxContactsToday">Today</string>
+    <string name="OxContactsYesterday">Yesterday</string>
+    <string name="OxContactsThisWeek">This week</string>
+    <string name="OxContactsTotalOnline">Total online: %1$s</string>
+    <string name="OxContactsNoLog">No activity recorded yet.</string>
+    <string name="OxContactsSessionRange">Online %1$s – %2$s (%3$s)</string>
+    <string name="OxContactsSessionOngoing">Online since %1$s (%2$s)</string>
+    <string name="OxContactsClearLog">Clear log</string>
+    <string name="OxContactsClearLogMessage">Delete all recorded online activity of %1$s?</string>
+    <string name="OxContactsClearLogAllMessage">Delete all recorded online activity of every special contact?</string>
+    <string name="OxContactsLogCleared">Log cleared</string>
+
+    <!-- durations -->
+    <string name="OxContactsDurationSec">%1$d s</string>
+    <string name="OxContactsDurationMin">%1$d min</string>
+    <string name="OxContactsDurationHour">%1$d h</string>
+    <string name="OxContactsDurationHourMin">%1$d h %2$d min</string>
+
+    <!-- main menu labels -->
+    <string name="OxMenuOnlineContacts">Online Contacts</string>
+    <string name="OxMenuSpecialContact">Special Contact</string>
+    <string name="OxMenuContactTracker">Contact Tracker</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxWholeMessage">Whole Message</string>
+    <string name="OxCollapseLongMessages">Collapse long messages</string>
+    <string name="OxCollapseLongMessagesInfo">Long texts show only the first lines with a \"Whole Message\" button.</string>
+</resources>

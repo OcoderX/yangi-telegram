@@ -16,6 +16,9 @@
     <string name="AyuRestoreMediaToCache">Восстанавливать сохранённые медиа</string>
     <string name="AyuRestoreMediaToCacheInfo">Возвращает сохранённые фото туда, где их ищет Telegram, чтобы удалённое фото открывалось в полном размере.</string>
 
+    <string name="AyuDimDeletedMessages">Затемнять удалённые сообщения</string>
+    <string name="AyuDimDeletedMessagesInfo">Сообщения, сохранённые после удаления отправителем, показываются с непрозрачностью 60%, чтобы отличать их от остальных в чате.</string>
+
     <string name="AyuExcludedChats">Чаты, исключённые из сохранения</string>
     <string name="AyuExcludedChatsInfo">Для этих чатов ничего не сохраняется. Чтобы добавить чат, используйте «Не сохранять здесь» в его меню.</string>
     <string name="AyuExcludedChatsEmpty">Исключённых чатов нет</string>

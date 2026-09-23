@@ -84,6 +84,7 @@ import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
+import org.telegram.messenger.ayu.AyuConfig;
 import org.telegram.messenger.utils.DrawableUtils;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
@@ -114,6 +115,7 @@ import org.telegram.ui.Components.Premium.PremiumGradient;
 import org.telegram.ui.Components.PullForegroundDrawable;
 import org.telegram.ui.Components.QuoteSpan;
 import org.telegram.ui.Components.RLottieDrawable;
+import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.StaticLayoutEx;
 import org.telegram.ui.Components.StatusDrawable;
@@ -148,7 +150,7 @@ import java.util.Stack;
 
 import me.vkryl.android.animator.BoolAnimator;
 
-public class DialogCell extends BaseCell implements StoriesListPlaceProvider.AvatarOverlaysView, Theme.Colorable {
+public class DialogCell extends BaseCell implements StoriesListPlaceProvider.AvatarOverlaysView, Theme.Colorable, RecyclerListView.SelectorShapeProvider {
 
     public boolean collapsed;
     public boolean drawArchive = true;
@@ -168,6 +170,24 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     public ShareDialogCell.RepostStoryDrawable repostStoryDrawable;
     public int avatarStart = 11;
     public int messagePaddingStart = 72;
+
+    // ---- Ox-gram: card style chat list (AyuConfig.cardChatList) ----
+    /** default value of {@link #avatarStart} for a chat list cell */
+    private static final int DEFAULT_AVATAR_START = 11;
+    /** default value of {@link #messagePaddingStart} for a chat list cell */
+    private static final int DEFAULT_MESSAGE_PADDING_START = 72;
+    /** horizontal margin of the card from the screen edges, dp */
+    public static final int CARD_MARGIN_DP = 10;
+    /** vertical gap between two cards, dp (added to the measured height of every cell) */
+    public static final int CARD_GAP_DP = 4;
+    /** corner radius of the card, dp */
+    public static final int CARD_RADIUS_DP = 18;
+    /** additional inset of the content inside the card, dp */
+    private static final int CARD_CONTENT_PAD_DP = 5;
+    private final RectF cardRect = new RectF();
+    private final Path cardPath = new Path();
+    private Paint cardPaint;
+    private int cardPaintBaseColor;
     public int heightDefault = 70;
     public int heightThreeLines = 76;
     public int addHeightForTags = 3;
@@ -762,6 +782,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             currentDialogFolderId = 0;
         }
         dialogsType = type;
+        applyCardMetrics();
         showPremiumBlocked(dialogsType == DialogsActivity.DIALOGS_TYPE_FORWARD);
         if (tags == null) {
             tags = new DialogCellTags(this);
@@ -1010,6 +1031,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             if (hasTags()) {
                 height += dp(addForumHeightForTags);
             }
+            height += cardBottomGap();
         } else {
             height = getCollapsedHeight();
         }
@@ -1027,7 +1049,82 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         if (hasTags() && (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) || isForumCell())) {
             height += dp(isForumCell() ? addForumHeightForTags : addHeightForTags);
         }
+        height += cardBottomGap();
         return height;
+    }
+
+    /** true when this cell belongs to a dialog list that is drawn with the card style */
+    public static boolean isCardStyle(int dialogsType) {
+        return AyuConfig.cardChatList && (
+            dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT ||
+            dialogsType == DialogsActivity.DIALOGS_TYPE_FOLDER1 ||
+            dialogsType == DialogsActivity.DIALOGS_TYPE_FOLDER2
+        );
+    }
+
+    /** extra height every card-style dialog cell adds for the gap below it, px */
+    public static int getCardExtraHeight(int dialogsType) {
+        return isCardStyle(dialogsType) ? dp(CARD_GAP_DP) : 0;
+    }
+
+    /** true when this very cell has to be drawn as a rounded card */
+    public boolean isCardStyle() {
+        return isCardStyle(dialogsType)
+            && isDialogCell
+            && !isTopic
+            && !isSavedDialog
+            && !isSavedDialogCell
+            && !isTransitionSupport
+            && !inPreviewMode
+            && !isShareToStoryCell
+            && !insideCommunityList;
+    }
+
+    /** empty space below the card, px */
+    private int cardBottomGap() {
+        return isCardStyle() ? dp(CARD_GAP_DP) : 0;
+    }
+
+    /** extra inset of the content inside the card, px */
+    private int cardSidePad() {
+        return isCardStyle() ? dp(CARD_CONTENT_PAD_DP) : 0;
+    }
+
+    /** right edge of the cell content: the measured width minus the card inset */
+    private int contentWidth() {
+        return getMeasuredWidth() - cardSidePad();
+    }
+
+    /** moves the avatar and the texts a bit to the right so they sit nicely inside the card */
+    private void applyCardMetrics() {
+        final boolean card = isCardStyle();
+        avatarStart = card ? DEFAULT_AVATAR_START + CARD_CONTENT_PAD_DP : DEFAULT_AVATAR_START;
+        messagePaddingStart = card ? DEFAULT_MESSAGE_PADDING_START + CARD_CONTENT_PAD_DP : DEFAULT_MESSAGE_PADDING_START;
+    }
+
+    private Paint getCardPaint() {
+        final int base = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+        if (cardPaint == null) {
+            cardPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            cardPaintBaseColor = 0;
+        }
+        if (cardPaintBaseColor != base) {
+            cardPaintBaseColor = base;
+            final boolean dark = AndroidUtilities.computePerceivedBrightness(base) < 0.721f;
+            cardPaint.setColor(dark
+                ? ColorUtils.blendARGB(base, Color.WHITE, 0.07f)
+                : ColorUtils.blendARGB(base, Color.BLACK, 0.05f));
+        }
+        return cardPaint;
+    }
+
+    @Override
+    public float getSelectorShape(android.graphics.Rect insets) {
+        if (!isCardStyle()) {
+            return 0;
+        }
+        insets.set(dp(CARD_MARGIN_DP), 0, dp(CARD_MARGIN_DP), dp(CARD_GAP_DP));
+        return dp(CARD_RADIUS_DP);
     }
 
     private void checkTwoLinesForName() {
@@ -1345,7 +1442,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                         nameLockLeft = dp(messagePaddingStart + 6);
                         nameLeft = dp(messagePaddingStart + 10) + Theme.dialogs_lockDrawable.getIntrinsicWidth();
                     } else {
-                        nameLockLeft = getMeasuredWidth() - dp(messagePaddingStart + 6) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
+                        nameLockLeft = contentWidth() - dp(messagePaddingStart + 6) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
                         nameLeft = dp(22);
                     }
                 } else {
@@ -1354,7 +1451,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                         nameLockLeft = dp(messagePaddingStart + 4);
                         nameLeft = dp(messagePaddingStart + 8) + Theme.dialogs_lockDrawable.getIntrinsicWidth();
                     } else {
-                        nameLockLeft = getMeasuredWidth() - dp(messagePaddingStart + 4) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
+                        nameLockLeft = contentWidth() - dp(messagePaddingStart + 4) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
                         nameLeft = dp(18);
                     }
                 }
@@ -1455,7 +1552,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                             nameLockLeft = dp(messagePaddingStart + 6);
                             nameLeft = dp(messagePaddingStart + 10) + Theme.dialogs_lockDrawable.getIntrinsicWidth();
                         } else {
-                            nameLockLeft = getMeasuredWidth() - dp(messagePaddingStart + 6) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
+                            nameLockLeft = contentWidth() - dp(messagePaddingStart + 6) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
                             nameLeft = dp(22);
                         }
                     } else {
@@ -1464,7 +1561,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                             nameLockLeft = dp(messagePaddingStart + 4);
                             nameLeft = dp(messagePaddingStart + 8) + Theme.dialogs_lockDrawable.getIntrinsicWidth();
                         } else {
-                            nameLockLeft = getMeasuredWidth() - dp(messagePaddingStart + 4) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
+                            nameLockLeft = contentWidth() - dp(messagePaddingStart + 4) - Theme.dialogs_lockDrawable.getIntrinsicWidth();
                             nameLeft = dp(18);
                         }
                     }
@@ -1883,7 +1980,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                                     }
                                     if (message.hasHighlightedWords() && !TextUtils.isEmpty(message.messageOwner.message)) {
                                         CharSequence text = message.messageTrimmedToHighlight;
-                                        int w = getMeasuredWidth() - dp(messagePaddingStart + 23 + 24);
+                                        int w = contentWidth() - dp(messagePaddingStart + 23 + 24);
                                         if (hasNameInMessage) {
                                             if (!TextUtils.isEmpty(messageNameString)) {
                                                 w -= currentMessagePaint.measureText(messageNameString.toString());
@@ -1981,7 +2078,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                                             if (message.messageTrimmedToHighlight != null) {
                                                 messageString = message.messageTrimmedToHighlight;
                                             }
-                                            int w = getMeasuredWidth() - dp(messagePaddingStart + 23 );
+                                            int w = contentWidth() - dp(messagePaddingStart + 23 );
                                             if (message.messageTrimmedToHighlightCut) {
                                                 messageString = AndroidUtilities.ellipsizeCenterEnd(messageString, message.highlightedWords.get(0), w, currentMessagePaint, 130);
                                             }
@@ -2014,7 +2111,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                                         if (message.messageTrimmedToHighlight != null) {
                                             messageString = message.messageTrimmedToHighlight;
                                         }
-                                        int w = getMeasuredWidth() - dp(messagePaddingStart + 23 + (thumbSize + 2) * thumbsCount - 2 + 5);
+                                        int w = contentWidth() - dp(messagePaddingStart + 23 + (thumbSize + 2) * thumbsCount - 2 + 5);
                                         if (message.messageTrimmedToHighlightCut) {
                                             messageString = AndroidUtilities.ellipsizeCenterEnd(messageString, message.highlightedWords.get(0), w, currentMessagePaint, 130);
                                         }
@@ -2262,7 +2359,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             timeLayout = new StaticLayout(timeString, tp, timeWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
             timeWidth += dp(getIsPinned() ? 24 : 0);
             if (!LocaleController.isRTL) {
-                timeLeft = getMeasuredWidth() - dp(15) - timeWidth;
+                timeLeft = contentWidth() - dp(15) - timeWidth;
             } else {
                 timeLeft = dp(15);
             }
@@ -2284,9 +2381,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         }
 
         if (!LocaleController.isRTL) {
-            nameWidth = getMeasuredWidth() - nameLeft - dp(14 + 8) - timeWidth;
+            nameWidth = contentWidth() - nameLeft - dp(14 + 8) - timeWidth;
         } else {
-            nameWidth = getMeasuredWidth() - nameLeft - dp(messagePaddingStart + 5 + 8) - timeWidth;
+            nameWidth = contentWidth() - nameLeft - dp(messagePaddingStart + 5 + 8) - timeWidth;
             nameLeft += timeWidth;
         }
         if (drawNameLock) {
@@ -2430,7 +2527,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             pinTop = dp(43);
             countTop = dp(42.33f);
             checkDrawTop = dp(13);
-            messageWidth = getMeasuredWidth() - dp(messagePaddingStart + 21);
+            messageWidth = contentWidth() - dp(messagePaddingStart + 21);
 
             if (LocaleController.isRTL) {
                 buttonLeft = typingLeft = messageLeft = messageNameLeft = dp(16);
@@ -2453,7 +2550,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             pinTop = dp(39);
             countTop = isTopic ? dp(35f) : dp(38f);
             checkDrawTop = dp(17);
-            messageWidth = getMeasuredWidth() - dp(messagePaddingStart + 20 - (LocaleController.isRTL ? 0 : 12));
+            messageWidth = contentWidth() - dp(messagePaddingStart + 20 - (LocaleController.isRTL || isCardStyle() ? 0 : 12));
 
             if (LocaleController.isRTL) {
                 buttonLeft = typingLeft = messageLeft = messageNameLeft = dp(22);
@@ -2470,11 +2567,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             }
         }
         if (LocaleController.isRTL) {
-            tagsRight = getMeasuredWidth() - dp(messagePaddingStart);
+            tagsRight = contentWidth() - dp(messagePaddingStart);
             tagsLeft = dp(64);
         } else {
             tagsLeft = messageLeft;
-            tagsRight = getMeasuredWidth() - dp(64);
+            tagsRight = contentWidth() - dp(64);
         }
         if (twoLinesForName) {
             messageNameTop += dp(20);
@@ -2485,7 +2582,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         }
         if (getIsPinned()) {
             if (!LocaleController.isRTL) {
-                pinLeft = getMeasuredWidth() - Theme.dialogs_pinnedDrawable.getIntrinsicWidth() - dp(14);
+                pinLeft = contentWidth() - Theme.dialogs_pinnedDrawable.getIntrinsicWidth() - dp(14);
             } else {
                 pinLeft = dp(14);
             }
@@ -2494,7 +2591,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             int w = dp(21 + 8);
             messageWidth -= w;
             if (!LocaleController.isRTL) {
-                errorLeft = getMeasuredWidth() - dp(36.3333f);
+                errorLeft = contentWidth() - dp(36.3333f);
             } else {
                 errorLeft = dp(15.666f);
                 messageLeft += w;
@@ -2509,7 +2606,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 int w = countWidth + dp(BADGE_GAP);
                 messageWidth -= w;
                 if (!LocaleController.isRTL) {
-                    countLeft = getMeasuredWidth() - dp(BADGE_MARGIN) - (countWidth + dp(BADGE_TEXT_PADDING * 2));
+                    countLeft = contentWidth() - dp(BADGE_MARGIN) - (countWidth + dp(BADGE_TEXT_PADDING * 2));
                 } else {
                     countLeft = dp(BADGE_MARGIN);
                     messageLeft += w;
@@ -2531,7 +2628,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 int w = mentionWidth + dp(BADGE_GAP);
                 messageWidth -= w;
                 if (!LocaleController.isRTL) {
-                    mentionLeft = getMeasuredWidth() - (mentionWidth + dp(BADGE_TEXT_PADDING * 2)) - dp(BADGE_MARGIN) - (countWidth != 0 ? countWidth + dp(BADGE_GAP) : 0);
+                    mentionLeft = contentWidth() - (mentionWidth + dp(BADGE_TEXT_PADDING * 2)) - dp(BADGE_MARGIN) - (countWidth != 0 ? countWidth + dp(BADGE_GAP) : 0);
                 } else {
                     mentionLeft = dp(BADGE_MARGIN) + (countWidth != 0 ? countWidth + dp(BADGE_GAP) : 0);
                     messageLeft += w;
@@ -2547,7 +2644,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 int w = dp(25);
                 messageWidth -= w;
                 if (!LocaleController.isRTL) {
-                    reactionMentionLeft = getMeasuredWidth() - dp(BADGE_SIZE + BADGE_MARGIN);
+                    reactionMentionLeft = contentWidth() - dp(BADGE_SIZE + BADGE_MARGIN);
                     if (drawMention) {
                         reactionMentionLeft -= (mentionWidth != 0 ? (mentionWidth + dp(BADGE_GAP)) : 0);
                     }
@@ -2572,7 +2669,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 int w = dp(25);
                 messageWidth -= w;
                 if (!LocaleController.isRTL) {
-                    pollVotesMentionLeft = getMeasuredWidth() - dp(BADGE_SIZE + BADGE_MARGIN);
+                    pollVotesMentionLeft = contentWidth() - dp(BADGE_SIZE + BADGE_MARGIN);
                     if (drawReactionMention) {
                         pollVotesMentionLeft -= dp(25);
                     }
@@ -2610,7 +2707,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 y = isTopic ? dp(33) : dp(36);
             }
             if (!LocaleController.isRTL) {
-                openButtonRect.set(getMeasuredWidth() - buttonWidth - dp(13), y, getMeasuredWidth() - dp(13), y + dp(28));
+                openButtonRect.set(contentWidth() - buttonWidth - dp(13), y, contentWidth() - dp(13), y + dp(28));
             } else {
                 openButtonRect.set(dp(13), y, dp(13) + buttonWidth, y + dp(28));
                 messageLeft += buttonWidth + p;
@@ -3048,6 +3145,20 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             return;
         }
         float scale = 0.5f + 0.5f * alpha;
+        //ayu: colored message status - green read ticks, red delivered tick, amber sending clock.
+        //     re-asserted here because a day/night theme crossfade resets the drawables to the theme colours.
+        if (org.telegram.messenger.ayu.AyuConfig.coloredMessageStatus) {
+            if (drawClock) {
+                Theme.setStatusDrawableColor(Theme.dialogs_clockDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_PENDING);
+            } else if (drawCheck2) {
+                if (drawCheck1) {
+                    Theme.setStatusDrawableColor(Theme.dialogs_halfCheckDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_READ);
+                    Theme.setStatusDrawableColor(Theme.dialogs_checkReadDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_READ);
+                } else {
+                    Theme.setStatusDrawableColor(Theme.dialogs_checkDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_SENT);
+                }
+            }
+        }
         if (drawClock) {
             setDrawableBounds(Theme.dialogs_clockDrawable, clockDrawLeft, checkDrawTop);
             if (alpha != 1f) {
@@ -3113,9 +3224,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
     public boolean isPointInsideAvatar(float x, float y) {
         if (!LocaleController.isRTL) {
-            return x >= 0 && x < dp(60);
+            return x >= 0 && x < dp(60) + cardSidePad();
         } else {
-            return x >= getMeasuredWidth() - dp(60) && x < getMeasuredWidth();
+            return x >= getMeasuredWidth() - dp(60) - cardSidePad() && x < getMeasuredWidth();
         }
     }
 
@@ -3788,6 +3899,21 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         float gtx = 0, gty = 0;
         boolean emojiStatusVisible = false;
 
+        // Ox-gram: draw the whole row as a rounded card and clip everything that follows (the swipe
+        // background, the selected / pinned overlays, the tags) to its shape.
+        // Saved first so that the clipArchive / clipProgress restores below stay correctly nested.
+        int cardRestoreCount = -1;
+        if (isCardStyle() && getMeasuredWidth() > dp(CARD_MARGIN_DP * 2)) {
+            final float cardRadius = dp(CARD_RADIUS_DP);
+            cardRect.set(dp(CARD_MARGIN_DP), 0, getMeasuredWidth() - dp(CARD_MARGIN_DP), getMeasuredHeight() - dp(CARD_GAP_DP));
+            cardRect.offset(0, -translateY);
+            cardPath.rewind();
+            cardPath.addRoundRect(cardRect, cardRadius, cardRadius, Path.Direction.CW);
+            cardRestoreCount = canvas.save();
+            canvas.clipPath(cardPath);
+            canvas.drawPath(cardPath, getCardPaint());
+        }
+
         final boolean clipArchive = drawArchive && (currentDialogFolderId != 0 || isTopic && forumTopic != null && forumTopic.id == 1) && archivedChatsDrawable != null && translationX == 0.0f && parentFragment != null && parentFragment.hasHiddenArchive()
             && (parentFragment.rightSlidingDialogContainer == null || !parentFragment.rightSlidingDialogContainer.hasFragment());
         final float archivePullProgress = archivedChatsDrawable != null ? archivedChatsDrawable.getPullProgress() : 1f;
@@ -3917,7 +4043,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 }
             }
             int drawableX = getMeasuredWidth() - dp(43) - translationDrawable.getIntrinsicWidth() / 2;
-            int drawableY = (getMeasuredHeight() - dp(52)) / 2;
+            int drawableY = (getMeasuredHeight() - cardBottomGap() - dp(52)) / 2;
             int drawableCx = drawableX + translationDrawable.getIntrinsicWidth() / 2;
             int drawableCy = drawableY + translationDrawable.getIntrinsicHeight() / 2;
 
@@ -4036,9 +4162,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 canvas.save();
 
                 Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
-                rect.set(getMeasuredWidth() - dp(64), 0, getMeasuredWidth(), getMeasuredHeight());
+                rect.set(getMeasuredWidth() - dp(64), 0, getMeasuredWidth(), getMeasuredHeight() - cardBottomGap());
                 rect.offset(0, -translateY);
-                canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_pinnedPaint);
+                canvas.drawRoundRect(rect, cornersRadius, cornersRadius, isCardStyle() ? getCardPaint() : Theme.dialogs_pinnedPaint);
 
                 if (isSelected) {
                     canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_tabletSeletedPaint);
@@ -4673,7 +4799,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
             if (tags != null && !tags.isEmpty()) {
                 canvas.save();
-                canvas.translate(tagsLeft, getMeasuredHeight() - dp(21.66f) - (useSeparator ? 1 : 0));
+                canvas.translate(tagsLeft, getMeasuredHeight() - cardBottomGap() - dp(21.66f) - (useSeparator ? 1 : 0));
                 tags.draw(canvas, tagsRight - tagsLeft);
                 canvas.restore();
             }
@@ -4771,7 +4897,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             canvas.restore();
         }
 
-        if (useSeparator) {
+        if (useSeparator && !isCardStyle()) {
             int left;
             if (fullSeparator || currentDialogFolderId != 0 && archiveHidden && !fullSeparator2 || fullSeparator2 && !archiveHidden) {
                 left = 0;
@@ -4905,6 +5031,10 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 }
                 needInvalidate = true;
             }
+        }
+
+        if (cardRestoreCount >= 0) {
+            canvas.restoreToCount(cardRestoreCount);
         }
 
         emojiStatusView.setVisibility(emojiStatusVisible ? View.VISIBLE : View.INVISIBLE);
@@ -5914,7 +6044,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             }
             if (message.hasHighlightedWords() && !TextUtils.isEmpty(message.messageOwner.message)) {
                 CharSequence text = message.messageTrimmedToHighlight;
-                int w = getMeasuredWidth() - dp(messagePaddingStart + 23 + 24);
+                int w = contentWidth() - dp(messagePaddingStart + 23 + 24);
                 if (hasNameInMessage) {
                     if (!TextUtils.isEmpty(messageNameString)) {
                         w -= currentMessagePaint.measureText(messageNameString.toString());
@@ -6030,7 +6160,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 if (message.messageTrimmedToHighlight != null) {
                     mess = message.messageTrimmedToHighlight;
                 }
-                int w = getMeasuredWidth() - dp(messagePaddingStart + 23 + 10);
+                int w = contentWidth() - dp(messagePaddingStart + 23 + 10);
                 if (hasNameInMessage) {
                     if (!TextUtils.isEmpty(messageNameString)) {
                         w -= currentMessagePaint.measureText(messageNameString.toString());

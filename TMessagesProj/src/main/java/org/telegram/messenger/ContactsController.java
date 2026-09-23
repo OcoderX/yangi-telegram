@@ -349,6 +349,9 @@ public class ContactsController extends BaseController {
     }
 
     public void checkInviteText() {
+        if (getUserConfig().isBotAccount()) {
+            return;
+        }
         SharedPreferences preferences = MessagesController.getMainSettings(currentAccount);
         inviteLink = preferences.getString("invitelink", null);
         int time = preferences.getInt("invitelinktime", 0);
@@ -464,6 +467,9 @@ public class ContactsController extends BaseController {
     }
 
     public void checkContacts() {
+        if (getUserConfig().isBotAccount()) {
+            return;
+        }
         Utilities.globalQueue.postRunnable(() -> {
             if (checkContactsInternal()) {
                 if (BuildVars.LOGS_ENABLED) {
@@ -475,6 +481,9 @@ public class ContactsController extends BaseController {
     }
 
     public void forceImportContacts() {
+        if (getUserConfig().isBotAccount()) {
+            return;
+        }
         Utilities.globalQueue.postRunnable(() -> {
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("force import contacts");
@@ -484,6 +493,9 @@ public class ContactsController extends BaseController {
     }
 
     public void syncPhoneBookByAlert(final HashMap<String, Contact> contacts, final boolean first, final boolean schedule, final boolean cancel) {
+        if (getUserConfig().isBotAccount()) {
+            return;
+        }
         Utilities.globalQueue.postRunnable(() -> {
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("sync contacts by alert");
@@ -596,7 +608,24 @@ public class ContactsController extends BaseController {
         return reload;
     }
 
+    /**
+     * A bot has no contact list and contacts.getContacts is refused for it, so instead of a
+     * request that can only fail the list is reported as loaded and empty right away.
+     */
+    private void markBotContactsLoaded() {
+        synchronized (loadContactsSync) {
+            loadingContacts = false;
+        }
+        contactsLoaded = true;
+        contactsBookLoaded = true;
+        AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.contactsDidLoad));
+    }
+
     public void readContacts() {
+        if (getUserConfig().isBotAccount()) {
+            markBotContactsLoaded();
+            return;
+        }
         synchronized (loadContactsSync) {
             if (loadingContacts) {
                 return;
@@ -1506,6 +1535,10 @@ public class ContactsController extends BaseController {
     }
 
     public void loadContacts(boolean fromCache, final long hash) {
+        if (getUserConfig().isBotAccount()) {
+            markBotContactsLoaded();
+            return;
+        }
         synchronized (loadContactsSync) {
             loadingContacts = true;
         }

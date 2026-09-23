@@ -24,7 +24,9 @@ public class AyuGhostHelper {
     private static final int SCHEDULE_WHEN_ONLINE = 0x7ffffffe;
 
     private static boolean isActivated(int account) {
-        return account >= 0 && account < UserConfig.MAX_ACCOUNT_COUNT && UserConfig.getInstance(account).isClientActivated();
+        return account >= 0 && account < UserConfig.MAX_ACCOUNT_COUNT && UserConfig.getInstance(account).isClientActivated()
+                // bots have no online status to hide
+                && !UserConfig.getInstance(account).isBotAccount();
     }
 
     public static void sendOfflinePacket(int account) {

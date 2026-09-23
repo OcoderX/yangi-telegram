@@ -8515,11 +8515,19 @@ public class Theme {
 
         setDrawableColorByKey(dialogs_lockDrawable, key_chats_secretIcon);
         setDrawableColorByKey(dialogs_lock2Drawable, key_chats_pinnedIcon);
-        setDrawableColorByKey(dialogs_checkDrawable, key_chats_sentCheck);
         setDrawableColorByKey(dialogs_communityCardsDrawable, key_windowBackgroundWhiteBlackText);
-        setDrawableColorByKey(dialogs_checkReadDrawable, key_chats_sentReadCheck);
-        setDrawableColorByKey(dialogs_halfCheckDrawable, key_chats_sentReadCheck);
-        setDrawableColorByKey(dialogs_clockDrawable, key_chats_sentClock);
+        //ayu: colored outgoing message status in the dialog list
+        if (org.telegram.messenger.ayu.AyuConfig.coloredMessageStatus) {
+            setDrawableColor(dialogs_checkDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_SENT);
+            setDrawableColor(dialogs_checkReadDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_READ);
+            setDrawableColor(dialogs_halfCheckDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_READ);
+            setDrawableColor(dialogs_clockDrawable, org.telegram.messenger.ayu.AyuConfig.STATUS_COLOR_PENDING);
+        } else {
+            setDrawableColorByKey(dialogs_checkDrawable, key_chats_sentCheck);
+            setDrawableColorByKey(dialogs_checkReadDrawable, key_chats_sentReadCheck);
+            setDrawableColorByKey(dialogs_halfCheckDrawable, key_chats_sentReadCheck);
+            setDrawableColorByKey(dialogs_clockDrawable, key_chats_sentClock);
+        }
         setDrawableColorByKey(dialogs_errorDrawable, key_chats_sentErrorIcon);
         setDrawableColorByKey(dialogs_pinnedDrawable, key_chats_pinnedIcon);
         setDrawableColorByKey(dialogs_pinnedDrawable2, key_chats_pinnedIcon);
@@ -9742,6 +9750,30 @@ public class Theme {
 
     public static void setDrawableColorByKey(Drawable drawable, int key) {
         setDrawableColor(drawable, getColor(key));
+    }
+
+    //ayu: colored message status - same as setDrawableColor, but reuses the colour filters so that it
+    //     can be called from the draw pass without allocating on every frame.
+    private static final SparseArray<PorterDuffColorFilter> ayuStatusColorFilters = new SparseArray<>();
+
+    public static void setStatusDrawableColor(Drawable drawable, int color) {
+        if (drawable == null) {
+            return;
+        }
+        if (drawable instanceof org.telegram.ui.Components.ModernStatusDrawable) {
+            ((org.telegram.ui.Components.ModernStatusDrawable) drawable).setColor(color);
+        } else if (drawable instanceof MsgClockDrawable) {
+            ((MsgClockDrawable) drawable).setColor(color);
+        } else if (drawable instanceof StatusDrawable) {
+            ((StatusDrawable) drawable).setColor(color);
+        } else {
+            PorterDuffColorFilter filter = ayuStatusColorFilters.get(color);
+            if (filter == null) {
+                filter = new PorterDuffColorFilter(color, PorterDuff.Mode.MULTIPLY);
+                ayuStatusColorFilters.put(color, filter);
+            }
+            drawable.setColorFilter(filter);
+        }
     }
 
     public static void setEmojiDrawableColor(Drawable drawable, int color, boolean selected) {

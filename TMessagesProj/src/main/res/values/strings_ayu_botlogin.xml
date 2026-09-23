@@ -4,7 +4,7 @@
     <string name="AyuBotLoginTitle">Bot token</string>
     <string name="AyuBotLoginHeader">Log in as a bot</string>
     <string name="AyuBotLoginSubtitle">Paste the token @BotFather gave you. The bot is added as a separate account.</string>
-    <string name="AyuBotLoginField">Bot token</string>
+    <string name="AyuBotLoginField">Bot token from @BotFather</string>
     <string name="AyuBotLoginPaste">Paste from clipboard</string>
     <string name="AyuBotLoginInfo">Telegram does not let a bot download its chat list, contacts or old history. Chats show up here as messages arrive and stay saved on this device.</string>
     <string name="AyuBotLoginLink">Log in with a bot token</string>
@@ -22,4 +22,16 @@
     <string name="AyuBotOpenChatHint">@username or ID</string>
     <string name="AyuBotOpenChatNotFound">Could not find that chat.</string>
     <string name="AyuBotHistoryUnavailable">Older messages cannot be loaded for a bot account.</string>
+
+    <!-- AyuGram: bot token login, second pass -->
+    <string name="AyuBotLoginShowToken">Show token</string>
+    <string name="AyuBotLoginHideToken">Hide token</string>
+    <string name="AyuBotLoginPasteDetected">Paste the token from clipboard</string>
+    <string name="AyuBotLoginErrorApiId">Telegram rejected this app\'s API ID. Try again later.</string>
+    <string name="AyuBotLoginErrorNetwork">Could not reach Telegram. Check your connection and try again.</string>
+    <string name="AyuBotLoginErrorGeneric">Login failed: %1$s</string>
+    <string name="AyuBotAccountBadge">bot</string>
+    <string name="AyuBotAddAccount">Add bot account</string>
+    <string name="AyuBotFatherHint">A bot\'s name, username, description and photo are managed in @BotFather, not here.</string>
+    <string name="AyuBotFatherOpen">Open @BotFather</string>
 </resources>

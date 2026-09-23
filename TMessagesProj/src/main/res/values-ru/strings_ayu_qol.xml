@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: удобства -->
+    <string name="AyuCardChatList">Карточки в списке чатов</string>
+    <string name="AyuCardChatListInfo">Каждый чат в главном списке рисуется отдельной карточкой со скруглёнными углами и компактным отступом между карточками.</string>
+</resources>

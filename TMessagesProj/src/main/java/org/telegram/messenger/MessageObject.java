@@ -50,6 +50,7 @@ import androidx.collection.LongSparseArray;
 import androidx.core.graphics.ColorUtils;
 
 import org.telegram.PhoneFormat.PhoneFormat;
+import org.telegram.messenger.ayu.OxChatConfig;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.messenger.ringtone.RingtoneDataStore;
 import org.telegram.messenger.utils.tlutils.AmountUtils;
@@ -1836,6 +1837,14 @@ public class MessageObject {
     public boolean hasSingleQuote;
     public boolean hasSingleCode;
     public boolean hasQuoteAtBottom;
+
+    //ox: long text messages are laid out truncated until the "Whole Message" button is tapped.
+    //    oxCollapsed is set by generateLayout() when the layout it produced is the truncated one,
+    //    oxExpanded is the per-message user choice (transient: a reopened chat starts collapsed again).
+    public boolean oxCollapsed;
+    public boolean oxExpanded;
+    /** how many lines the full (uncollapsed) text has, only valid while {@link #oxCollapsed} is true */
+    public int oxFullLinesCount;
 
     public MessageObject(int accountNum, TL_stories.StoryItem storyItem) {
         currentAccount = accountNum;
@@ -8600,6 +8609,48 @@ public class MessageObject {
         return messageOwner.rich_message;
     }
 
+    /**
+     * ox: true when this message is a plain long-text bubble that may be laid out truncated.
+     * Grouped media captions, previews (forward/message details sheets), sponsored posts,
+     * restricted messages and texts with quotes/code blocks are never collapsed.
+     */
+    public boolean oxCanCollapseText() {
+        if (!OxChatConfig.isCollapseLongMessages()) {
+            return false;
+        }
+        if (type != TYPE_TEXT || messageOwner == null) {
+            return false;
+        }
+        if (isRepostPreview || preview || isRestrictedMessage || isSponsored() || isBotPendingDraft) {
+            return false;
+        }
+        if (eventId != 0 || scheduled || getGroupId() != 0) {
+            return false;
+        }
+        if (hasCode || hasQuote || emojiOnlyCount > 0) {
+            return false;
+        }
+        final TLRPC.MessageMedia media = getMedia(messageOwner);
+        if (media != null && !(media instanceof TLRPC.TL_messageMediaEmpty)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * ox: expands (or re-collapses) a message shown with the "Whole Message" button and rebuilds
+     * its text layout. The caller still has to make the cell re-measure (ChatMessageCell does that
+     * through {@code delegate.forceUpdate(cell, true)}).
+     */
+    public boolean oxSetTextExpanded(boolean expanded) {
+        if (oxExpanded == expanded) {
+            return false;
+        }
+        oxExpanded = expanded;
+        generateLayout(null);
+        return true;
+    }
+
     public void generateLayout(TLRPC.User fromUser) {
         if (type == TYPE_ARTICLE) {
             final int maxWidth = getMaxMessageTextWidth();
@@ -8714,6 +8765,43 @@ public class MessageObject {
                 } catch (Exception e) {
                     FileLog.e(e);
                     return;
+                }
+            }
+        }
+
+        //ox: collapse long text messages -- lay out only the first lines here, ChatMessageCell draws the "Whole Message" button
+        oxCollapsed = false;
+        oxFullLinesCount = 0;
+        if (!oxExpanded && oxCanCollapseText()) {
+            final int oxLines = textLayout.getLineCount();
+            final int oxMaxLines = OxChatConfig.getLongMessageCollapseLines();
+            final boolean oxByLines = oxLines > oxMaxLines;
+            final boolean oxByChars = text.length() > OxChatConfig.getLongMessageCollapseChars() && oxLines > OxChatConfig.MIN_COLLAPSE_LINES;
+            if (oxByLines || oxByChars) {
+                final int oxKeepLines = oxByLines ? oxMaxLines : Math.max(OxChatConfig.MIN_COLLAPSE_LINES, Math.min(oxMaxLines, oxLines - 1));
+                if (oxKeepLines > 0 && oxKeepLines < oxLines) {
+                    try {
+                        int oxEnd = textLayout.getLineEnd(oxKeepLines - 1);
+                        if (oxEnd > text.length()) {
+                            oxEnd = text.length();
+                        }
+                        while (oxEnd > 0 && Character.isWhitespace(text.charAt(oxEnd - 1))) {
+                            oxEnd--;
+                        }
+                        if (oxEnd > 0 && oxEnd < text.length()) {
+                            final CharSequence oxTruncated = new SpannableStringBuilder(text.subSequence(0, oxEnd));
+                            final StaticLayout oxLayout = makeStaticLayout(oxTruncated, paint, maxWidth, 1f, totalAnimatedEmojiCount >= 4 ? -1 : 0, emojiOnlyCount > 0);
+                            if (oxLayout != null) {
+                                text = oxTruncated;
+                                textLayout = oxLayout;
+                                textLayoutOriginalWidth = maxWidth;
+                                oxCollapsed = true;
+                                oxFullLinesCount = oxLines;
+                            }
+                        }
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
                 }
             }
         }

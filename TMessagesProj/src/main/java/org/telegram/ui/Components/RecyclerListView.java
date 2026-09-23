@@ -2656,7 +2656,49 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         canvas.restore();
     }
 
+    /**
+     * Implemented by item views that want the list selector (ripple / highlight) clipped to a
+     * rounded shape inside their own bounds, e.g. the card-style chat list cells.
+     */
+    public interface SelectorShapeProvider {
+        /**
+         * Fills {@code insets} (in px, relative to the item view bounds) and returns the corner
+         * radius in px. Returning 0 keeps the default full-bounds rectangular selector.
+         */
+        float getSelectorShape(Rect insets);
+    }
+
+    private final Rect selectorShapeInsets = new Rect();
+    private final RectF selectorShapeRect = new RectF();
+    private final Path selectorShapePath = new Path();
+
     private void drawSelector(Canvas canvas) {
+        float shapeRadius = 0;
+        if (selectorView instanceof SelectorShapeProvider) {
+            selectorShapeInsets.set(0, 0, 0, 0);
+            shapeRadius = ((SelectorShapeProvider) selectorView).getSelectorShape(selectorShapeInsets);
+        }
+        if (shapeRadius > 0) {
+            final Rect bounds = selectorDrawable.getBounds();
+            selectorShapeRect.set(
+                bounds.left + selectorShapeInsets.left,
+                bounds.top + selectorShapeInsets.top,
+                bounds.right - selectorShapeInsets.right,
+                bounds.bottom - selectorShapeInsets.bottom
+            );
+            if (selectorShapeRect.width() > 0 && selectorShapeRect.height() > 0) {
+                selectorShapePath.rewind();
+                selectorShapePath.addRoundRect(selectorShapeRect, shapeRadius, shapeRadius, Path.Direction.CW);
+                canvas.save();
+                canvas.clipPath(selectorShapePath);
+                if (hasSections()) {
+                    clipChild(canvas, selectorView);
+                }
+                selectorDrawable.draw(canvas);
+                canvas.restore();
+                return;
+            }
+        }
         if (hasSections()) {
             canvas.save();
             clipChild(canvas, selectorView);

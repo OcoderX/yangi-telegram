@@ -16,6 +16,9 @@
     <string name="AyuRestoreMediaToCache">Restore saved media</string>
     <string name="AyuRestoreMediaToCacheInfo">Puts saved photos back where Telegram looks for them, so a deleted photo still opens in full size.</string>
 
+    <string name="AyuDimDeletedMessages">Dim deleted messages</string>
+    <string name="AyuDimDeletedMessagesInfo">Messages kept after the sender deleted them are shown at 60% opacity, so they stand out from the rest of the chat.</string>
+
     <string name="AyuExcludedChats">Chats excluded from saving</string>
     <string name="AyuExcludedChatsInfo">Nothing is kept for these chats. Use \"Do not save here\" in the chat menu to add one.</string>
     <string name="AyuExcludedChatsEmpty">No excluded chats</string>

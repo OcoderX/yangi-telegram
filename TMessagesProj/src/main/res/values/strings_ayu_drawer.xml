@@ -21,6 +21,7 @@
     <string name="AyuDrawerKeepAlive">Keep-alive service</string>
     <string name="AyuDrawerFileExplorer">File explorer</string>
     <string name="AyuDrawerDuplicates">Duplicate cleaner</string>
-    <string name="AyuDrawerSync">AyuSync</string>
+    <string name="AyuDrawerSync">OcoderX-sync</string>
     <string name="AyuDrawerAllSettings">All OcoderX settings</string>
+    <string name="OxMenuDownloadManager">Download Manager</string>
 </resources>

@@ -10626,6 +10626,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 break;
             }
         }
+        // OcoderX: a round video note can never be part of an album
+        for (int a = 0, N = media.size(); a < N; a++) {
+            final SendingMediaInfo mediaInfo = media.get(a);
+            if (mediaInfo.videoEditedInfo != null && mediaInfo.videoEditedInfo.roundVideo) {
+                groupMedia = false;
+                break;
+            }
+        }
         final long forcedPollGroupId = pollSendParams != null ? pollSendParams.groupId : 0;
         final boolean forceDisableCheckSentMedia = forcedPollGroupId != 0;
         final boolean groupMediaFinal = groupMedia;
@@ -11128,6 +11136,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                     attributeVideo = new TLRPC.TL_documentAttributeVideo();
                                     attributeVideo.supports_streaming = true;
                                 }
+                                // OcoderX: gallery video sent as a round video note
+                                attributeVideo.round_message = videoEditedInfo != null && videoEditedInfo.roundVideo;
                                 document.attributes.add(attributeVideo);
                                 if (videoEditedInfo != null && (videoEditedInfo.needConvert() || !info.isVideo)) {
                                     if (info.isVideo && videoEditedInfo.muted) {

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxWholeMessage">Показать полностью</string>
+    <string name="OxCollapseLongMessages">Сворачивать длинные сообщения</string>
+    <string name="OxCollapseLongMessagesInfo">Длинные тексты показываются частично с кнопкой «Показать полностью».</string>
+</resources>

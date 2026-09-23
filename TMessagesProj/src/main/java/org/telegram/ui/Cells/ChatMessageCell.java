@@ -1237,6 +1237,16 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private int[] selectorDrawableMaskType = new int[2];
     private RectF instantButtonRect = new RectF();
     private LoadingDrawable instantButtonLoading;
+
+    //ox: "Whole Message" button of a collapsed long text message
+    private static final int OX_COLLAPSE_BUTTON_HEIGHT = 40;
+    private static final int OX_COLLAPSE_BUTTON_TOP_MARGIN = 8;
+    private static final int OX_COLLAPSE_BUTTON_BOTTOM_MARGIN = 14;
+    private final RectF oxCollapseButtonRect = new RectF();
+    private boolean oxCollapseButtonPressed;
+    private ButtonBounce oxCollapseButtonBounce;
+    private TextPaint oxCollapseTextPaint;
+    private Paint oxCollapseStrokePaint;
     private final int[] pressedState = new int[]{android.R.attr.state_enabled, android.R.attr.state_pressed};
     private float animatingLoadingProgressProgress;
     CharSequence accessibilityText;
@@ -4231,6 +4241,116 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return false;
     }
 
+    //ox: ------------- "Whole Message" button of a collapsed long text message -------------
+
+    /** extra bubble height a collapsed message needs for its "Whole Message" button */
+    private static int oxCollapseButtonTotalHeight() {
+        return dp(OX_COLLAPSE_BUTTON_TOP_MARGIN + OX_COLLAPSE_BUTTON_HEIGHT + OX_COLLAPSE_BUTTON_BOTTOM_MARGIN);
+    }
+
+    private boolean oxHasCollapseButton() {
+        return currentMessageObject != null && currentMessageObject.oxCollapsed && !currentMessageObject.oxExpanded
+                && currentMessagesGroup == null && currentPosition == null;
+    }
+
+    private void oxLayoutCollapseButtonRect() {
+        final int left = unmovedTextX - dp(2);
+        final int right = unmovedTextX + backgroundWidth - dp(currentMessageObject.isOutOwner() ? 22 : 28);
+        final float top = textY + currentMessageObject.textHeight(transitionParams) + dp(OX_COLLAPSE_BUTTON_TOP_MARGIN);
+        oxCollapseButtonRect.set(left, top, Math.max(left + dp(60), right), top + dp(OX_COLLAPSE_BUTTON_HEIGHT));
+    }
+
+    private void drawOxCollapseButton(Canvas canvas) {
+        if (!oxHasCollapseButton() || drawForBlur) {
+            return;
+        }
+        oxLayoutCollapseButtonRect();
+        final int color = getThemedColor(currentMessageObject.isOutOwner() ? Theme.key_chat_outPreviewInstantText : Theme.key_chat_inPreviewInstantText);
+        if (oxCollapseStrokePaint == null) {
+            oxCollapseStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            oxCollapseStrokePaint.setStyle(Paint.Style.STROKE);
+            oxCollapseStrokePaint.setStrokeWidth(Math.max(1, dp(1)));
+        }
+        if (oxCollapseTextPaint == null) {
+            oxCollapseTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+            oxCollapseTextPaint.setTypeface(AndroidUtilities.bold());
+            oxCollapseTextPaint.setTextSize(dp(14));
+            oxCollapseTextPaint.setTextAlign(Paint.Align.CENTER);
+        }
+        oxCollapseStrokePaint.setColor(ColorUtils.setAlphaComponent(color, 0x66));
+        oxCollapseTextPaint.setColor(color);
+        if (oxCollapseButtonBounce == null) {
+            oxCollapseButtonBounce = new ButtonBounce(this);
+        }
+        final float scale = oxCollapseButtonBounce.getScale(0.02f);
+        final boolean restore = scale != 1f;
+        if (restore) {
+            canvas.save();
+            canvas.scale(scale, scale, oxCollapseButtonRect.centerX(), oxCollapseButtonRect.centerY());
+        }
+        canvas.drawRoundRect(oxCollapseButtonRect, dp(10), dp(10), oxCollapseStrokePaint);
+        final CharSequence label = TextUtils.ellipsize(getString(R.string.OxWholeMessage), oxCollapseTextPaint, Math.max(dp(20), oxCollapseButtonRect.width() - dp(16)), TextUtils.TruncateAt.END);
+        canvas.drawText(label, 0, label.length(), oxCollapseButtonRect.centerX(),
+                oxCollapseButtonRect.centerY() - (oxCollapseTextPaint.descent() + oxCollapseTextPaint.ascent()) / 2f, oxCollapseTextPaint);
+        if (restore) {
+            canvas.restore();
+        }
+    }
+
+    private void oxSetCollapseButtonPressed(boolean pressed) {
+        oxCollapseButtonPressed = pressed;
+        if (oxCollapseButtonBounce == null) {
+            oxCollapseButtonBounce = new ButtonBounce(this);
+        }
+        oxCollapseButtonBounce.setPressed(pressed);
+        invalidate();
+    }
+
+    private boolean checkOxCollapseButtonMotionEvent(MotionEvent event) {
+        if (!oxHasCollapseButton()) {
+            return false;
+        }
+        final int action = event.getAction();
+        final float x = getEventX(event);
+        final float y = getEventY(event);
+        if (action == MotionEvent.ACTION_DOWN) {
+            if (oxCollapseButtonRect.contains(x, y)) {
+                oxSetCollapseButtonPressed(true);
+                return true;
+            }
+            return false;
+        }
+        if (!oxCollapseButtonPressed) {
+            return false;
+        }
+        if (action == MotionEvent.ACTION_MOVE) {
+            if (!oxCollapseButtonRect.contains(x, y)) {
+                oxSetCollapseButtonPressed(false);
+            }
+            return true;
+        }
+        if (action == MotionEvent.ACTION_UP) {
+            oxSetCollapseButtonPressed(false);
+            playSoundEffect(SoundEffectConstants.CLICK);
+            final MessageObject messageObject = currentMessageObject;
+            if (messageObject != null && messageObject.oxSetTextExpanded(true)) {
+                if (delegate != null) {
+                    // keeps the message anchored in the list while the bubble grows
+                    delegate.forceUpdate(this, true);
+                } else {
+                    // no chat list around (preview-like hosts): just re-measure this cell
+                    messageObject.forceUpdate = true;
+                    setMessageObject(messageObject, currentMessagesGroup, pinnedBottom, pinnedTop, firstInChat);
+                    requestLayout();
+                    invalidate();
+                }
+            }
+            return true;
+        }
+        oxSetCollapseButtonPressed(false);
+        return false;
+    }
+
     private boolean checkRoundSeekbar(MotionEvent event) {
         if (!MediaController.getInstance().isPlayingMessage(currentMessageObject) || !MediaController.getInstance().isMessagePaused()) {
             return false;
@@ -4979,6 +5099,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
         boolean result = checkSpoilersMotionEvent(event, 0);
 
+        if (!result) {
+            result = checkOxCollapseButtonMotionEvent(event); //ox: "Whole Message" expands a collapsed long text
+        }
         if (!result) {
             result = checkTextBlockMotionEvent(event);
         }
@@ -6795,6 +6918,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (messageObject.checkLayout() || currentPosition != null && lastHeight != AndroidUtilities.displaySize.y) {
             currentMessageObject = null;
         }
+        //ox: previews (forward sheet, message details, repost preview) always show the whole text:
+        //    the preview flags are set after the layout was generated, so undo the collapse here
+        if (messageObject.oxCollapsed && (messageObject.preview || messageObject.isRepostPreview)) {
+            messageObject.oxSetTextExpanded(true);
+        }
+        oxCollapseButtonPressed = false;
+        if (oxCollapseButtonBounce != null) {
+            oxCollapseButtonBounce.setPressed(false);
+        }
         messageObject.isOutOwnerCached = null;
         boolean widthChanged = lastWidth != getParentWidth();
         lastHeight = AndroidUtilities.displaySize.y;
@@ -7778,6 +7910,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     totalHeight = messageObject.richLayout.getHeight() + dp(19.5f) + namesOffset;
                 } else {
                     totalHeight = messageObject.textHeight() + dp(19.5f) + namesOffset;
+                }
+                if (messageObject.oxCollapsed && !messageObject.oxExpanded && currentMessagesGroup == null && currentPosition == null) {
+                    totalHeight += oxCollapseButtonTotalHeight(); //ox: room for the "Whole Message" button
                 }
 
                 if (!reactionsLayoutInBubble.isSmall) {
@@ -14418,6 +14553,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     drawMessageText(canvas);
                 }
             }
+            if (!enterTransitionInProgress && currentMessageObject != null && !currentMessageObject.preview) {
+                drawOxCollapseButton(canvas); //ox: "Whole Message" button under a collapsed long text
+            }
 
             if (!(enterTransitionInProgress && !currentMessageObject.isVoice())) {
                 drawLinkPreview(canvas, 1f);
@@ -20146,7 +20284,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return;
         }
 
-        final int sponosoredAlpha = (int) (255 * (1f - isSponsoredMessageHidden.getFloatValue()));
+        //ayu: dim the whole bubble for messages kept locally after the sender deleted them
+        final float ayuDeletedAlpha = (currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.ayuDeleted
+            && org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.dimDeletedMessages)
+            ? org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.DELETED_MESSAGE_ALPHA : 1f;
+
+        final int sponosoredAlpha = (int) (255 * (1f - isSponsoredMessageHidden.getFloatValue()) * ayuDeletedAlpha);
         if (sponosoredAlpha == 0) {
             return;
         }
@@ -23713,6 +23856,37 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return mediaBackground && (captionLayout == null || captionAbove) && (reactionsLayoutInBubble.isEmpty || reactionsLayoutInBubble.isSmall || currentMessageObject != null && (currentMessageObject.isAnyKindOfSticker() || currentMessageObject.isRoundVideo())) || currentMessageObject != null && currentMessageObject.type == MessageObject.TYPE_PAID_MEDIA/* || isMedia && drawCommentButton && !isRepliesChat*/;
     }
 
+    /** ox: "Marking message" - bookmark badge drawn in front of the time of a marked message */
+    private Drawable ayuMarkedDrawable;
+
+    private void drawAyuMarkedIcon(Canvas canvas, float alpha) {
+        if (!AyuConfig.markedMessagesEnabled || !drawTime || timeLayout == null || alpha <= 0) {
+            return;
+        }
+        if (currentMessageObject == null || currentMessageObject.messageOwner == null) {
+            return;
+        }
+        final int mid = currentMessageObject.getId();
+        final long did = currentMessageObject.getDialogId();
+        if (mid == 0 || did == 0 || !org.telegram.messenger.ayu.AyuMarkedMessages.isMarked(currentAccount, did, mid)) {
+            return;
+        }
+        if (ayuMarkedDrawable == null) {
+            try {
+                ayuMarkedDrawable = getContext().getResources().getDrawable(R.drawable.menu_browser_bookmarks).mutate();
+            } catch (Throwable e) {
+                return;
+            }
+        }
+        final int size = AndroidUtilities.dp(11);
+        final int x = (int) (drawTimeX - AndroidUtilities.dp(14));
+        final int y = (int) (drawTimeY + (timeLayout.getHeight() - size) / 2f);
+        ayuMarkedDrawable.setBounds(x, y, x + size, y + size);
+        ayuMarkedDrawable.setColorFilter(new PorterDuffColorFilter(Theme.chat_timePaint.getColor(), PorterDuff.Mode.SRC_IN));
+        ayuMarkedDrawable.setAlpha((int) (255 * Math.max(0f, Math.min(1f, alpha))));
+        ayuMarkedDrawable.draw(canvas);
+    }
+
     public void drawTime(Canvas canvas, float alpha, boolean fromParent) {
         if (!drawFromPinchToZoom && delegate != null && delegate.getPinchToZoomHelper() != null && delegate.getPinchToZoomHelper().isInOverlayModeFor(this) && shouldDrawTimeOnMedia()) {
             return;
@@ -23759,6 +23933,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 drawTimeInternal(canvas, currentAlpha, fromParent, timeX, timeLayout, timeWidth, drawSelectionBackground);
             }
         }
+
+        //ox: "Marking message" - a small bookmark in front of the time
+        drawAyuMarkedIcon(canvas, alpha);
 
         if (transitionParams.animateBackgroundBoundsInner && !(currentMessageObject != null && currentMessageObject.preview)) {
             drawOverlays(canvas);
@@ -24268,6 +24445,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 } else {
                     clockColor = getThemedColor(drawSelectionBackground ? Theme.key_chat_outSentClockSelected : Theme.key_chat_mediaSentClock);
                 }
+                //ayu: colored message status - sending clock is amber
+                if (AyuConfig.coloredMessageStatus) {
+                    clockColor = AyuConfig.STATUS_COLOR_PENDING;
+                }
                 Theme.setDrawableColor(clockDrawable, clockColor);
                 float timeY;
                 if (shouldDrawTimeOnMedia()) {
@@ -24617,6 +24798,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 setDrawableBounds(drawable, layoutWidth - dp(18.5f) - drawable.getIntrinsicWidth(), layoutHeight - dp(8.5f) - drawable.getIntrinsicHeight() + timeYOffset);
                 drawable.setAlpha((int) (255 * alpha));
             }
+            //ayu: colored message status - sending clock is amber
+            if (AyuConfig.coloredMessageStatus) {
+                color = AyuConfig.STATUS_COLOR_PENDING;
+            }
             Theme.setDrawableColor(drawable, color);
 
             if (useScale) {
@@ -24659,6 +24844,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     Theme.chat_msgMediaCheckDrawable.setAlpha((int) (255 * timeAlpha * alpha));
                     drawable = Theme.chat_msgMediaCheckDrawable;
                 }
+                //ayu: colored message status - green when read (double tick), red when only delivered
+                if (AyuConfig.coloredMessageStatus) {
+                    Theme.setStatusDrawableColor(drawable, drawCheck1 ? AyuConfig.STATUS_COLOR_READ : AyuConfig.STATUS_COLOR_SENT);
+                }
                 if (useScale) {
                     canvas.save();
                     canvas.scale(scale, scale, drawable.getBounds().centerX(), drawable.getBounds().centerY());
@@ -24686,6 +24875,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     drawable = getThemedDrawable(drawSelectionBackground ? Theme.key_drawable_msgOutCheckSelected : Theme.key_drawable_msgOutCheck);
                     setDrawableBounds(drawable, layoutWidth - dp(18.5f) - drawable.getIntrinsicWidth() + offsetX, layoutHeight - dp(pinnedBottom || pinnedTop ? 9 : 8) - drawable.getIntrinsicHeight() + timeYOffset);
                 }
+                //ayu: colored message status - green when read (double tick), red when only delivered
+                if (AyuConfig.coloredMessageStatus) {
+                    Theme.setStatusDrawableColor(drawable, drawCheck1 ? AyuConfig.STATUS_COLOR_READ : AyuConfig.STATUS_COLOR_SENT);
+                }
                 drawable.setAlpha((int) (255 * alpha));
                 if (useScale) {
                     canvas.save();
@@ -24705,6 +24898,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             if (shouldDrawTimeOnMedia()) {
                 Drawable drawable = currentMessageObject.shouldDrawWithoutBackground() ? getThemedDrawable(Theme.key_drawable_msgStickerHalfCheck) : Theme.chat_msgMediaHalfCheckDrawable;
                 setDrawableBounds(drawable, layoutWidth - dp(bigRadius ? 23.5f : 21.5f) - drawable.getIntrinsicWidth() + offsetX, timeY - drawable.getIntrinsicHeight() + timeYOffset);
+                //ayu: colored message status - the half check only shows together with the read tick
+                if (AyuConfig.coloredMessageStatus) {
+                    Theme.setStatusDrawableColor(drawable, AyuConfig.STATUS_COLOR_READ);
+                }
                 drawable.setAlpha((int) (255 * timeAlpha * alpha));
                 if (useScale || moveCheck) {
                     canvas.save();
@@ -24718,6 +24915,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             } else {
                 Drawable drawable = getThemedDrawable(drawSelectionBackground ? Theme.key_drawable_msgOutHalfCheckSelected : Theme.key_drawable_msgOutHalfCheck);
                 setDrawableBounds(drawable, layoutWidth - dp(18) - drawable.getIntrinsicWidth(), layoutHeight - dp(pinnedBottom || pinnedTop ? 9 : 8) - drawable.getIntrinsicHeight() + timeYOffset);
+                //ayu: colored message status - the half check only shows together with the read tick
+                if (AyuConfig.coloredMessageStatus) {
+                    Theme.setStatusDrawableColor(drawable, AyuConfig.STATUS_COLOR_READ);
+                }
                 drawable.setAlpha((int) (255 * alpha));
                 if (useScale || moveCheck) {
                     canvas.save();

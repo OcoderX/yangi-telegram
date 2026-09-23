@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX: отправка видео из галереи как кружка -->
+    <string name="OxRoundVideo">Кружок</string>
+    <string name="OxRoundVideoHint">Отправить как кружок</string>
+    <string name="OxRoundVideoTooBig">Размер кружка должен быть меньше 20 МБ. Измените качество или длительность видео.</string>
+    <string name="OxRoundVideoTrimmed">Кружок не может быть длиннее 60 секунд, видео обрезано.</string>
+</resources>

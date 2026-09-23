@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Русские строки функций OcoderX «Контакты онлайн», «Особые контакты» и «Трекер контактов».
+-->
+<resources>
+    <!-- заголовки экранов -->
+    <string name="OxContactsOnlineTitle">Контакты онлайн</string>
+    <string name="OxContactsSpecialTitle">Особые контакты</string>
+    <string name="OxContactsTrackerTitle">Трекер контактов</string>
+
+    <!-- контакты онлайн -->
+    <string name="OxContactsOnlineOfTotal">%1$d онлайн из %2$d контактов</string>
+    <string name="OxContactsOnlineEmpty">Сейчас никто из ваших контактов не в сети.</string>
+    <string name="OxContactsOnline">В сети</string>
+    <string name="OxContactsOffline">Не в сети</string>
+    <string name="OxContactsOpenProfile">Открыть профиль</string>
+    <string name="OxContactsMarkSpecial">Сделать особым контактом</string>
+    <string name="OxContactsUnmarkSpecial">Убрать из особых контактов</string>
+    <string name="OxContactsAddedToSpecial">%1$s добавлен(а) в особые контакты</string>
+    <string name="OxContactsRemovedFromSpecial">%1$s удалён(а) из особых контактов</string>
+
+    <!-- особые контакты -->
+    <string name="OxContactsSpecialHeader">Особые контакты</string>
+    <string name="OxContactsAdd">Добавить контакт</string>
+    <string name="OxContactsRemove">Удалить</string>
+    <string name="OxContactsSpecialEmpty">Особых контактов пока нет. Добавьте контакты, чтобы получать уведомления, когда они появятся в сети, и следить за их активностью.</string>
+    <string name="OxContactsNotify">Уведомлять о входе и выходе из сети</string>
+    <string name="OxContactsNotifyInfo">Локальное уведомление приходит, когда особый контакт появляется в сети или выходит из неё. Запросы на сервер не отправляются.</string>
+    <string name="OxContactsIsOnline">%1$s в сети</string>
+    <string name="OxContactsWentOffline">%1$s вышел(а) из сети</string>
+    <string name="OxContactsManageSpecial">Особые контакты</string>
+
+    <!-- трекер контактов -->
+    <string name="OxContactsTrackerEmpty">Добавьте особые контакты, чтобы отслеживать их активность в сети.</string>
+    <string name="OxContactsSummaryHeader">Сводка</string>
+    <string name="OxContactsToday">Сегодня</string>
+    <string name="OxContactsYesterday">Вчера</string>
+    <string name="OxContactsThisWeek">На этой неделе</string>
+    <string name="OxContactsTotalOnline">Всего в сети: %1$s</string>
+    <string name="OxContactsNoLog">Активность пока не записана.</string>
+    <string name="OxContactsSessionRange">В сети %1$s – %2$s (%3$s)</string>
+    <string name="OxContactsSessionOngoing">В сети с %1$s (%2$s)</string>
+    <string name="OxContactsClearLog">Очистить журнал</string>
+    <string name="OxContactsClearLogMessage">Удалить всю записанную активность контакта %1$s?</string>
+    <string name="OxContactsClearLogAllMessage">Удалить записанную активность всех особых контактов?</string>
+    <string name="OxContactsLogCleared">Журнал очищен</string>
+
+    <!-- длительности -->
+    <string name="OxContactsDurationSec">%1$d с</string>
+    <string name="OxContactsDurationMin">%1$d мин</string>
+    <string name="OxContactsDurationHour">%1$d ч</string>
+    <string name="OxContactsDurationHourMin">%1$d ч %2$d мин</string>
+
+    <!-- пункты главного меню -->
+    <string name="OxMenuOnlineContacts">Контакты онлайн</string>
+    <string name="OxMenuSpecialContact">Особый контакт</string>
+    <string name="OxMenuContactTracker">Трекер контактов</string>
+</resources>

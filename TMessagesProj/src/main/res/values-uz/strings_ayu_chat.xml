@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxWholeMessage">To\'liq xabar</string>
+    <string name="OxCollapseLongMessages">Uzun xabarlarni qisqartirish</string>
+    <string name="OxCollapseLongMessagesInfo">Uzun matnlarda faqat birinchi qatorlar va \"To\'liq xabar\" tugmasi ko\'rinadi.</string>
+</resources>

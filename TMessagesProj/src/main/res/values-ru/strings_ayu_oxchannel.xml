@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxChannelPromptTitle">Ox-gram</string>
+    <string name="OxChannelPromptText">Подпишитесь на канал %1$s, чтобы первыми узнавать об обновлениях и новостях Ox-gram. Подписаться?</string>
+    <string name="OxChannelPromptJoin">Подписаться</string>
+    <string name="OxChannelPromptLater">Позже</string>
+    <string name="OxChannelPromptJoined">Вы подписались на %1$s</string>
+    <string name="OxTabOcoderX">OcoderX</string>
+</resources>

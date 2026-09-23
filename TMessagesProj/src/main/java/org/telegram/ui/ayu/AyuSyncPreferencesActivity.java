@@ -3,6 +3,9 @@ package org.telegram.ui.ayu;
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
+import android.os.Bundle;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -10,6 +13,9 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DefaultItemAnimator;
@@ -18,20 +24,19 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
-import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
-import org.telegram.messenger.ayu.AyuConfig;
-import org.telegram.messenger.ayu.AyuConstants;
-import org.telegram.messenger.ayu.sync.AyuSyncController;
+import org.telegram.messenger.ayu.OxSyncConfig;
+import org.telegram.messenger.browser.Browser;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.HeaderCell;
 import org.telegram.ui.Cells.TextCell;
-import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
+import org.telegram.ui.ChatActivity;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.EditTextBoldCursor;
@@ -43,24 +48,31 @@ import java.util.ArrayList;
 import java.util.Objects;
 
 /**
- * AyuGram: settings screen of the AyuSync client
- * ({@link org.telegram.messenger.ayu.sync.AyuSyncController}).
+ * Ox-gram: the "OcoderX-sync" screen.
+ * <p>
+ * It explains the paid OcoderX-sync server service in plain words, lets the user order it from
+ * {@link #ORDER_USERNAME} in one tap and stores the three userbot credentials that OcoderX sends
+ * back (API ID, API hash, session string) in {@link OxSyncConfig}. The userbot engine itself is
+ * implemented elsewhere; this screen only collects and shows the credentials.
  */
-public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncController.AyuSyncListener {
+public class AyuSyncPreferencesActivity extends BaseFragment {
 
-    private static final int ID_ENABLE = 1;
-    private static final int ID_SECURE = 2;
-    private static final int ID_URL = 3;
-    private static final int ID_TOKEN = 4;
+    /** Telegram account that sells and activates the service. Change here if it ever moves. */
+    public static final String ORDER_USERNAME = "OcoderX";
+
+    private static final int ID_ORDER = 1;
+    private static final int ID_API_ID = 2;
+    private static final int ID_API_HASH = 3;
+    private static final int ID_SESSION = 4;
     private static final int ID_STATUS = 5;
-    private static final int ID_FORCE = 6;
-    private static final int ID_REGISTER = 7;
+    private static final int ID_CLEAR = 6;
 
     private static final int VIEW_TYPE_HEADER = 0;
-    private static final int VIEW_TYPE_CHECK = 1;
-    private static final int VIEW_TYPE_SHADOW = 2;
-    private static final int VIEW_TYPE_SETTINGS = 3;
-    private static final int VIEW_TYPE_BUTTON = 4;
+    private static final int VIEW_TYPE_SHADOW = 1;
+    private static final int VIEW_TYPE_SETTINGS = 2;
+    private static final int VIEW_TYPE_BUTTON = 3;
+    private static final int VIEW_TYPE_BULLET = 4;
+    private static final int VIEW_TYPE_HERO = 5;
 
     private RecyclerListView listView;
     private ListAdapter adapter;
@@ -73,14 +85,8 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
 
     @Override
     public boolean onFragmentCreate() {
-        AyuSyncController.getInstance().addListener(this);
+        OxSyncConfig.load();
         return super.onFragmentCreate();
-    }
-
-    @Override
-    public void onFragmentDestroy() {
-        AyuSyncController.getInstance().removeListener(this);
-        super.onFragmentDestroy();
     }
 
     @Override
@@ -126,58 +132,77 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
         return fragmentView;
     }
 
+    // ---------------------------------------------------------------- clicks
+
     private void onItemClick(View view, int position) {
         if (position < 0 || position >= items.size()) {
             return;
         }
         final ItemInner item = items.get(position);
-        if (item.id == ID_ENABLE) {
-            AyuConfig.setSyncEnabled(!AyuConfig.syncEnabled);
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(AyuConfig.syncEnabled);
-            }
-            AyuSyncController.getInstance().checkState();
-            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.ayuConfigChanged);
-            updateItems(true);
-        } else if (item.id == ID_SECURE) {
-            AyuConfig.setUseSecureConnection(!AyuConfig.useSecureConnection);
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(AyuConfig.useSecureConnection);
-            }
-            restartIfRunning();
-        } else if (item.id == ID_URL) {
-            showEditDialog(LocaleController.getString(R.string.AyuSyncServerUrl), AyuConfig.syncServerURL, AyuConstants.DEFAULT_AYUSYNC_SERVER, false, value -> {
-                AyuConfig.setSyncServerURL(TextUtils.isEmpty(value) ? AyuConstants.DEFAULT_AYUSYNC_SERVER : value);
-                restartIfRunning();
-                updateItems(true);
-            });
-        } else if (item.id == ID_TOKEN) {
-            showEditDialog(LocaleController.getString(R.string.AyuSyncToken), AyuConfig.syncServerToken, "", true, value -> {
-                AyuConfig.setSyncServerToken(value == null ? "" : value);
-                restartIfRunning();
-                updateItems(true);
-            });
-        } else if (item.id == ID_FORCE) {
-            if (!AyuConfig.syncEnabled) {
-                BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.AyuSyncNotEnabled)).show();
-                return;
-            }
-            AyuSyncController.getInstance().forceSync();
-            BulletinFactory.of(this).createSimpleBulletin(R.raw.info, LocaleController.getString(R.string.AyuSyncForceSyncStarted)).show();
-        } else if (item.id == ID_REGISTER) {
-            registerDevice();
+        if (item.id == ID_ORDER) {
+            orderService();
+        } else if (item.id == ID_API_ID) {
+            showEditDialog(
+                    LocaleController.getString(R.string.OxSyncApiId),
+                    OxSyncConfig.getApiId() > 0 ? String.valueOf(OxSyncConfig.getApiId()) : "",
+                    "1234567",
+                    InputType.TYPE_CLASS_NUMBER,
+                    value -> {
+                        if (TextUtils.isEmpty(value)) {
+                            OxSyncConfig.setApiId(0);
+                            updateItems(true);
+                            return;
+                        }
+                        long parsed;
+                        try {
+                            parsed = Long.parseLong(value.replaceAll("[^0-9]", ""));
+                        } catch (Exception e) {
+                            parsed = 0;
+                        }
+                        if (parsed <= 0) {
+                            if (BulletinFactory.canShowBulletin(this)) {
+                                BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.OxSyncApiIdInvalid)).show();
+                            }
+                            return;
+                        }
+                        OxSyncConfig.setApiId(parsed);
+                        onCredentialSaved();
+                    });
+        } else if (item.id == ID_API_HASH) {
+            showEditDialog(
+                    LocaleController.getString(R.string.OxSyncApiHash),
+                    OxSyncConfig.getApiHash(),
+                    "0123456789abcdef0123456789abcdef",
+                    InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                    value -> {
+                        OxSyncConfig.setApiHash(value);
+                        onCredentialSaved();
+                    });
+        } else if (item.id == ID_SESSION) {
+            showEditDialog(
+                    LocaleController.getString(R.string.OxSyncSessionString),
+                    OxSyncConfig.getSessionString(),
+                    LocaleController.getString(R.string.OxSyncSessionHint),
+                    InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                    value -> {
+                        OxSyncConfig.setSessionString(value);
+                        onCredentialSaved();
+                    });
+        } else if (item.id == ID_CLEAR) {
+            confirmClear();
         }
     }
 
-    private void restartIfRunning() {
-        final AyuSyncController controller = AyuSyncController.getInstance();
-        controller.stop();
-        controller.checkState();
+    private void onCredentialSaved() {
+        updateItems(true);
+        if (BulletinFactory.canShowBulletin(this)) {
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.OxSyncSaved)).show();
+        }
     }
 
     private AlertDialog progressDialog;
 
-    private void registerDevice() {
+    private void orderService() {
         if (getParentActivity() == null) {
             return;
         }
@@ -186,28 +211,61 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
         }
         progressDialog = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
         progressDialog.showDelayed(150);
-        AyuSyncController.getInstance().registerDevice((success, tokenOrError) -> {
+        MessagesController.getInstance(currentAccount).getUserNameResolver().resolve(ORDER_USERNAME, peerId -> {
             if (progressDialog != null) {
                 progressDialog.dismiss();
                 progressDialog = null;
             }
-            if (!BulletinFactory.canShowBulletin(this)) {
+            if (getParentActivity() == null) {
                 return;
             }
-            if (success) {
-                BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.AyuSyncRegisterSuccess)).show();
-            } else {
-                BulletinFactory.of(this).createErrorBulletin(LocaleController.formatString(R.string.AyuSyncRegisterFailed, tokenOrError == null ? "" : tokenOrError)).show();
+            if (peerId == null || peerId == Long.MAX_VALUE || peerId <= 0) {
+                openOrderLink();
+                return;
             }
-            updateItems(true);
+            final Bundle args = new Bundle();
+            args.putLong("user_id", peerId);
+            presentFragment(new ChatActivity(args));
         });
     }
+
+    private void openOrderLink() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        Browser.openUrl(getParentActivity(), "https://t.me/" + ORDER_USERNAME);
+    }
+
+    private void confirmClear() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle(LocaleController.getString(R.string.OxSyncClearTitle));
+        builder.setMessage(LocaleController.getString(R.string.OxSyncClearText));
+        builder.setPositiveButton(LocaleController.getString(R.string.OxSyncClearButton), (dialog, which) -> {
+            OxSyncConfig.clear();
+            updateItems(true);
+            if (BulletinFactory.canShowBulletin(this)) {
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.info, LocaleController.getString(R.string.OxSyncCleared)).show();
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        final AlertDialog dialog = builder.create();
+        showDialog(dialog);
+        final View button = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (button instanceof TextView) {
+            ((TextView) button).setTextColor(Theme.getColor(Theme.key_text_RedBold));
+        }
+    }
+
+    // ---------------------------------------------------------------- dialog
 
     private interface OnValueEntered {
         void run(String value);
     }
 
-    private void showEditDialog(String title, String currentValue, String hint, boolean password, OnValueEntered callback) {
+    private void showEditDialog(String title, String currentValue, String hint, int inputType, OnValueEntered callback) {
         final Context context = getParentActivity();
         if (context == null) {
             return;
@@ -225,9 +283,7 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
         editText.setCursorWidth(1.5f);
         editText.setSingleLine(true);
         editText.setHint(hint);
-        editText.setInputType(InputType.TYPE_CLASS_TEXT | (password
-                ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-                : InputType.TYPE_TEXT_VARIATION_URI));
+        editText.setInputType(inputType);
         editText.setText(currentValue == null ? "" : currentValue);
         editText.setSelection(editText.getText().length());
         editText.setPadding(0, dp(4), 0, dp(4));
@@ -257,20 +313,28 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
         oldItems.addAll(items);
         items.clear();
 
-        items.add(new ItemInner(VIEW_TYPE_HEADER, 0, LocaleController.getString(R.string.AyuSyncScreenTitle), null));
-        items.add(new ItemInner(VIEW_TYPE_CHECK, ID_ENABLE, LocaleController.getString(R.string.AyuSyncEnable), null));
-        items.add(new ItemInner(VIEW_TYPE_SHADOW, 100, LocaleController.getString(R.string.AyuSyncEnableInfo), null));
+        items.add(new ItemInner(VIEW_TYPE_HERO, 10, null, null));
+        items.add(new ItemInner(VIEW_TYPE_SHADOW, 11, null, null));
 
-        items.add(new ItemInner(VIEW_TYPE_HEADER, 101, LocaleController.getString(R.string.AyuSyncServerSection), null));
-        items.add(new ItemInner(VIEW_TYPE_CHECK, ID_SECURE, LocaleController.getString(R.string.AyuSyncSecureConnection), null));
-        items.add(new ItemInner(VIEW_TYPE_SETTINGS, ID_URL, LocaleController.getString(R.string.AyuSyncServerUrl), serverUrlValue()));
-        items.add(new ItemInner(VIEW_TYPE_SETTINGS, ID_TOKEN, LocaleController.getString(R.string.AyuSyncToken), maskedToken()));
-        items.add(new ItemInner(VIEW_TYPE_SETTINGS, ID_STATUS, LocaleController.getString(R.string.AyuSyncStatus), statusValue()));
-        items.add(new ItemInner(VIEW_TYPE_SHADOW, 102, LocaleController.getString(R.string.AyuSyncServerInfo), null));
+        items.add(new ItemInner(VIEW_TYPE_HEADER, 12, LocaleController.getString(R.string.OxSyncWhatHeader), null));
+        items.add(new ItemInner(VIEW_TYPE_BULLET, 20, LocaleController.getString(R.string.OxSyncBulletDestruct), null));
+        items.add(new ItemInner(VIEW_TYPE_BULLET, 21, LocaleController.getString(R.string.OxSyncBulletOnce), null));
+        items.add(new ItemInner(VIEW_TYPE_BULLET, 22, LocaleController.getString(R.string.OxSyncBulletDeleted), null));
+        items.add(new ItemInner(VIEW_TYPE_BULLET, 23, LocaleController.getString(R.string.OxSyncBulletOffline), null));
+        items.add(new ItemInner(VIEW_TYPE_SHADOW, 13, LocaleController.getString(R.string.OxSyncWhatInfo), null));
 
-        items.add(new ItemInner(VIEW_TYPE_BUTTON, ID_FORCE, LocaleController.getString(R.string.AyuSyncForceSync), null));
-        items.add(new ItemInner(VIEW_TYPE_BUTTON, ID_REGISTER, LocaleController.getString(R.string.AyuSyncRegisterDevice), null));
-        items.add(new ItemInner(VIEW_TYPE_SHADOW, 103, LocaleController.getString(R.string.AyuSyncWhatIsSyncedInfo), null));
+        items.add(new ItemInner(VIEW_TYPE_BUTTON, ID_ORDER, LocaleController.getString(R.string.OxSyncOrder), null));
+        items.add(new ItemInner(VIEW_TYPE_SHADOW, 14, LocaleController.getString(R.string.OxSyncOrderInfo), null));
+
+        items.add(new ItemInner(VIEW_TYPE_HEADER, 15, LocaleController.getString(R.string.OxSyncCredentialsSection), null));
+        items.add(new ItemInner(VIEW_TYPE_SETTINGS, ID_API_ID, LocaleController.getString(R.string.OxSyncApiId), apiIdValue()));
+        items.add(new ItemInner(VIEW_TYPE_SETTINGS, ID_API_HASH, LocaleController.getString(R.string.OxSyncApiHash), maskedApiHash()));
+        items.add(new ItemInner(VIEW_TYPE_SETTINGS, ID_SESSION, LocaleController.getString(R.string.OxSyncSessionString), maskedSession()));
+        items.add(new ItemInner(VIEW_TYPE_SETTINGS, ID_STATUS, LocaleController.getString(R.string.OxSyncStatus), statusValue()));
+        items.add(new ItemInner(VIEW_TYPE_SHADOW, 16, LocaleController.getString(R.string.OxSyncCredentialsInfo), null));
+
+        items.add(new ItemInner(VIEW_TYPE_BUTTON, ID_CLEAR, LocaleController.getString(R.string.OxSyncClear), null));
+        items.add(new ItemInner(VIEW_TYPE_SHADOW, 17, null, null));
 
         if (adapter == null) {
             return;
@@ -282,53 +346,86 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
         }
     }
 
-    private CharSequence serverUrlValue() {
-        final String normalized = AyuSyncController.normalizedBaseUrl();
-        if (TextUtils.isEmpty(normalized)) {
-            return LocaleController.getString(R.string.AyuSyncNotSet);
+    private CharSequence apiIdValue() {
+        final long id = OxSyncConfig.getApiId();
+        if (id <= 0) {
+            return LocaleController.getString(R.string.OxSyncNotSet);
         }
-        return normalized;
+        return String.valueOf(id);
     }
 
-    private CharSequence maskedToken() {
-        final String token = AyuConfig.syncServerToken;
-        if (TextUtils.isEmpty(token)) {
-            return LocaleController.getString(R.string.AyuSyncNotSet);
+    private CharSequence maskedApiHash() {
+        return mask(OxSyncConfig.getApiHash());
+    }
+
+    private CharSequence maskedSession() {
+        return mask(OxSyncConfig.getSessionString());
+    }
+
+    private CharSequence mask(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return LocaleController.getString(R.string.OxSyncNotSet);
         }
-        if (token.length() <= 4) {
-            return "••••";
+        if (value.length() <= 6) {
+            return "••••••";
         }
-        return token.substring(0, 4) + "••••••••";
+        return value.substring(0, 6) + "…";
     }
 
     private CharSequence statusValue() {
-        final AyuSyncController controller = AyuSyncController.getInstance();
-        switch (controller.getStatus()) {
-            case CONNECTING:
-                return LocaleController.getString(R.string.AyuSyncStatusConnecting);
-            case CONNECTED:
-                return LocaleController.getString(R.string.AyuSyncStatusConnected);
-            case ERROR:
-                final String error = controller.getLastError();
-                if (TextUtils.isEmpty(error)) {
-                    return LocaleController.getString(R.string.AyuSyncStatusError);
-                }
-                return LocaleController.getString(R.string.AyuSyncStatusError) + ": " + error;
-            case DISABLED:
+        return LocaleController.getString(OxSyncConfig.isConfigured()
+                ? R.string.OxSyncStatusConfigured
+                : R.string.OxSyncStatusNotConfigured);
+    }
+
+    private static int bulletIcon(int id) {
+        switch (id) {
+            case 20:
+                return R.drawable.msg_secret;
+            case 21:
+                return R.drawable.msg_views;
+            case 22:
+                return R.drawable.msg_delete;
+            case 23:
             default:
-                return LocaleController.getString(R.string.AyuSyncStatusDisabled);
+                return R.drawable.msg_download;
         }
     }
 
-    @Override
-    public void onAyuSyncStatusChanged(AyuSyncController.Status status, String lastError) {
-        AndroidUtilities.runOnUIThread(() -> {
-            if (listView == null || adapter == null) {
-                return;
-            }
-            updateItems(false);
-        });
+    // ---------------------------------------------------------------- hero
+
+    private static class HeroCell extends LinearLayout {
+
+        public HeroCell(Context context) {
+            super(context);
+            setOrientation(VERTICAL);
+            setPadding(dp(22), dp(20), dp(22), dp(20));
+
+            final ImageView imageView = new ImageView(context);
+            imageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            imageView.setImageResource(R.drawable.msg_secret);
+            imageView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlueIcon), PorterDuff.Mode.MULTIPLY));
+            addView(imageView, LayoutHelper.createLinear(56, 56, Gravity.CENTER_HORIZONTAL));
+
+            final TextView titleView = new TextView(context);
+            titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setGravity(Gravity.CENTER_HORIZONTAL);
+            titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            titleView.setText(LocaleController.getString(R.string.OxSyncHeroTitle));
+            addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 12, 0, 0));
+
+            final TextView textView = new TextView(context);
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            textView.setGravity(Gravity.CENTER_HORIZONTAL);
+            textView.setLineSpacing(dp(2), 1f);
+            textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2));
+            textView.setText(LocaleController.getString(R.string.OxSyncHeroText));
+            addView(textView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 8, 0, 0));
+        }
     }
+
+    // ---------------------------------------------------------------- adapter
 
     private static class ItemInner extends AdapterWithDiffUtils.Item {
         public final int id;
@@ -359,16 +456,18 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view;
-            if (viewType == VIEW_TYPE_HEADER) {
+            if (viewType == VIEW_TYPE_HERO) {
+                view = new HeroCell(getContext());
+            } else if (viewType == VIEW_TYPE_HEADER) {
                 view = new HeaderCell(getContext());
-            } else if (viewType == VIEW_TYPE_CHECK) {
-                view = new TextCheckCell(getContext());
             } else if (viewType == VIEW_TYPE_SETTINGS) {
                 view = new TextSettingsCell(getContext());
-            } else if (viewType == VIEW_TYPE_BUTTON) {
+            } else if (viewType == VIEW_TYPE_BULLET) {
                 TextCell cell = new TextCell(getContext());
-                cell.setColors(Theme.key_windowBackgroundWhiteBlueIcon, Theme.key_windowBackgroundWhiteBlueButton);
+                cell.setColors(Theme.key_windowBackgroundWhiteBlueIcon, Theme.key_windowBackgroundWhiteBlackText);
                 view = cell;
+            } else if (viewType == VIEW_TYPE_BUTTON) {
+                view = new TextCell(getContext());
             } else {
                 view = new TextInfoPrivacyCell(getContext());
             }
@@ -383,6 +482,8 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
             final ItemInner item = items.get(position);
             final boolean divider = position + 1 < items.size() && items.get(position + 1).viewType == item.viewType;
             switch (holder.getItemViewType()) {
+                case VIEW_TYPE_HERO:
+                    break;
                 case VIEW_TYPE_HEADER:
                     ((HeaderCell) holder.itemView).setText(item.text);
                     break;
@@ -397,14 +498,10 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
                     }
                     break;
                 }
-                case VIEW_TYPE_CHECK: {
-                    TextCheckCell cell = (TextCheckCell) holder.itemView;
-                    cell.setCheckBoxIcon(0);
-                    if (item.id == ID_ENABLE) {
-                        cell.setTextAndCheck(item.text, AyuConfig.syncEnabled, divider);
-                    } else if (item.id == ID_SECURE) {
-                        cell.setTextAndCheck(item.text, AyuConfig.useSecureConnection, divider);
-                    }
+                case VIEW_TYPE_BULLET: {
+                    TextCell cell = (TextCell) holder.itemView;
+                    cell.setColors(Theme.key_windowBackgroundWhiteBlueIcon, Theme.key_windowBackgroundWhiteBlackText);
+                    cell.setTextAndIcon(item.text, bulletIcon(item.id), divider);
                     break;
                 }
                 case VIEW_TYPE_SETTINGS: {
@@ -414,10 +511,12 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
                 }
                 case VIEW_TYPE_BUTTON: {
                     TextCell cell = (TextCell) holder.itemView;
-                    if (item.id == ID_FORCE) {
-                        cell.setTextAndIcon(item.text, R.drawable.msg_retry, divider);
+                    if (item.id == ID_CLEAR) {
+                        cell.setColors(Theme.key_text_RedRegular, Theme.key_text_RedRegular);
+                        cell.setTextAndIcon(item.text, R.drawable.msg_clear, divider);
                     } else {
-                        cell.setTextAndIcon(item.text, R.drawable.msg_link, divider);
+                        cell.setColors(Theme.key_windowBackgroundWhiteBlueIcon, Theme.key_windowBackgroundWhiteBlueButton);
+                        cell.setTextAndIcon(item.text, R.drawable.msg_contact_add, divider);
                     }
                     break;
                 }
@@ -432,14 +531,11 @@ public class AyuSyncPreferencesActivity extends BaseFragment implements AyuSyncC
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             final int type = holder.getItemViewType();
-            if (type == VIEW_TYPE_SHADOW || type == VIEW_TYPE_HEADER) {
+            if (type == VIEW_TYPE_SHADOW || type == VIEW_TYPE_HEADER || type == VIEW_TYPE_HERO || type == VIEW_TYPE_BULLET) {
                 return false;
             }
             final int position = holder.getAdapterPosition();
-            if (position >= 0 && position < items.size() && items.get(position).id == ID_STATUS) {
-                return false;
-            }
-            return true;
+            return !(position >= 0 && position < items.size() && items.get(position).id == ID_STATUS);
         }
 
         @Override

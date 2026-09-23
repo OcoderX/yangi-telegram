@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxChannelPromptTitle">Ox-gram</string>
+    <string name="OxChannelPromptText">Ox-gram yangilanishlari va yangiliklaridan birinchi bo\'lib xabardor bo\'lish uchun %1$s kanaliga a\'zo bo\'ling. A\'zo bo\'lasizmi?</string>
+    <string name="OxChannelPromptJoin">A\'zo bo\'lish</string>
+    <string name="OxChannelPromptLater">Keyinroq</string>
+    <string name="OxChannelPromptJoined">%1$s kanaliga a\'zo bo\'ldingiz</string>
+    <string name="OxTabOcoderX">OcoderX</string>
+</resources>

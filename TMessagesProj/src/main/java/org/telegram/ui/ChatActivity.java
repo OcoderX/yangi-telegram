@@ -1253,6 +1253,18 @@ public class ChatActivity extends BaseFragment implements
     public final static int OPTION_AYU_MESSAGE_DETAILS = 201;
     public final static int OPTION_AYU_DELETE_LOCALLY = 202;
     public final static int OPTION_AYU_LONG_SCREENSHOT = 203;
+    /** ayu: ghost mode - send the read receipt for this dialog up to the selected message */
+    public final static int OPTION_AYU_READ_MESSAGE = 204;
+    /** ox: open the message text in a selectable sheet so a part of it can be copied */
+    public final static int OPTION_AYU_COPY_PIECE = 205;
+    /** ox: LLM helpers for the selected message */
+    public final static int OPTION_AYU_AI_TOOLS = 206;
+    /** ox: use the photo of this message as chat background */
+    public final static int OPTION_AYU_SET_BACKGROUND = 207;
+    /** ox: forward with explicit drop_author / drop_media_captions / silent flags */
+    public final static int OPTION_AYU_SPECIAL_FORWARD = 208;
+    /** ox: local bookmark on this message */
+    public final static int OPTION_AYU_MARK_MESSAGE = 209;
 
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
             NotificationCenter.messagesRead,
@@ -1686,6 +1698,9 @@ public class ChatActivity extends BaseFragment implements
     /** ayu: per-chat opt-out of the AyuGram deleted-message archive */
     private final static int ayu_dont_save_here = 76;
 
+    /** ox: "Marked messages" overflow entry */
+    private final static int ayu_marked_messages = 77;
+
     private final static int id_chat_compose_panel = 1000;
 
     RecyclerListView.OnItemLongClickListenerExtended onItemLongClickListener = new RecyclerListView.OnItemLongClickListenerExtended() {
@@ -1881,6 +1896,16 @@ public class ChatActivity extends BaseFragment implements
                     }
                     return;
                 }
+            }
+            //ox: "Menu on single tap" - a tap on the bubble body runs the very same call the long
+            // press uses. Taps on links, media, buttons, reactions and avatars are consumed by
+            // ChatMessageCell and never reach this listener, and selection mode returned above.
+            if (AyuConfig.contextMenuOnTap
+                    && view instanceof ChatMessageCell
+                    && ((ChatMessageCell) view).getMessageObject() != null
+                    && ((ChatMessageCell) view).isInsideBackground(x, y)) {
+                createMenu(view, false, true, x, y, true);
+                return;
             }
             createMenu(view, true, false, x, y, false);
         }
@@ -3836,6 +3861,9 @@ public class ChatActivity extends BaseFragment implements
                     }
                     BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.chats_infotip,
                         LocaleController.getString(excluded ? R.string.AyuDontSaveHereEnabled : R.string.AyuDontSaveHereDisabled)).show();
+                } else if (id == ayu_marked_messages) {
+                    //ox: open the local bookmark list of this chat
+                    ayuOpenMarkedMessages();
                 } else if (id == clear_history || id == delete_chat || id == auto_delete_timer) {
                     if (getParentActivity() == null) {
                         return;
@@ -4450,6 +4478,11 @@ public class ChatActivity extends BaseFragment implements
                 ayuDontSaveHereItem = headerItem.lazilyAddSubItem(ayu_dont_save_here, R.drawable.msg_clearcache,
                     LocaleController.getString(org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.isExcluded(dialog_id)
                         ? R.string.AyuSaveHere : R.string.AyuDontSaveHere));
+            }
+            //ox: local bookmarks of this chat
+            if (dialog_id != 0 && chatMode == 0 && AyuConfig.markedMessagesEnabled) {
+                headerItem.lazilyAddSubItem(ayu_marked_messages, R.drawable.menu_browser_bookmarks,
+                    LocaleController.getString(R.string.AyuMarkedMessages));
             }
             boolean addedSettings = false;
             if (!isTopic) {
@@ -12182,6 +12215,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void openForward(boolean fromActionBar) {
+        ayuSpecialForwardPending = false; //ox: drop a stale "special forward" choice
         if (isPeerNoForwards() || hasSelectedNoforwardsMessage()) {
             // We should update text if user changed locale without re-opening chat activity
             String str;
@@ -20916,7 +20950,7 @@ public class ChatActivity extends BaseFragment implements
             Collections.reverse(messArr);
         }
         //ayu: mix locally stored deleted messages into the loaded page (messArr is newest -> oldest here)
-        count += ayuMergeDeletedMessages(messArr, loadIndex, load_type);
+        count += ayuMergeDeletedMessages(messArr, loadIndex, load_type, count, isCache);
         if (currentEncryptedChat == null && chatMode != MODE_QUICK_REPLIES) {
             getMediaDataController().loadReplyMessagesForMessages(messArr, dialog_id, chatMode, 0, null, classGuid, null);
         }
@@ -26336,8 +26370,8 @@ public class ChatActivity extends BaseFragment implements
      * Returns how many messages were inserted (the caller bumps {@code count} so that the
      * "did we reach the end of the history" checks keep comparing against the server page size).
      */
-    private int ayuMergeDeletedMessages(ArrayList<MessageObject> messArr, int loadIndex, int load_type) {
-        if (messArr == null || messArr.isEmpty() || loadIndex != 0 || !ayuCanKeepDeletedMessages()) {
+    private int ayuMergeDeletedMessages(ArrayList<MessageObject> messArr, int loadIndex, int load_type, int count, boolean isCache) {
+        if (messArr == null || loadIndex != 0 || !ayuCanKeepDeletedMessages()) {
             return 0;
         }
         if (isThreadChat() && !isTopic) {
@@ -26362,15 +26396,44 @@ public class ChatActivity extends BaseFragment implements
                     minId = id;
                 }
             }
-            if (maxId == Integer.MIN_VALUE) {
+            final boolean emptyPage = maxId == Integer.MIN_VALUE;
+            if (emptyPage && (isCache || load_type == 3 || load_type == 4)) {
+                // an empty cache page is always followed by a server page: merge there, once the bounds are known
                 return 0;
             }
-            if (load_type == 0 && forwardEndReached[0]) {
-                maxId = Integer.MAX_VALUE;
+            // The archived ids this page has to cover, as (lower, upper]. The bounds can't be taken from
+            // the page itself: a message deleted after the newest surviving one (the usual "sent, then
+            // deleted" case) or before the oldest one lies outside the page, and the first page of a chat
+            // is loaded with load_type 2/3/4 (0 is only "load older"), so it has to be extended to the
+            // end of the history whenever this page reaches it. forwardEndReached / endReached are
+            // updated only while the page is processed (after this call) - mirror those rules here.
+            int lower;
+            int upper;
+            if (load_type == 0) {
+                // older page: from this page's oldest message up to the oldest message already on screen
+                // (for a non-secret chat maxMessageId[0] holds the smallest id loaded so far)
+                final boolean oldestLoaded = maxMessageId[0] != Integer.MAX_VALUE && maxMessageId[0] > 0;
+                upper = oldestLoaded ? maxMessageId[0] - 1 : maxId;
+                lower = emptyPage || endReached[0] ? 0 : Math.max(0, minId - 1);
+            } else if (load_type == 1) {
+                // newer page: from the newest message already on screen up to this page's newest message
+                // (minMessageId[0] holds the largest id loaded so far)
+                final boolean newestLoaded = minMessageId[0] != Integer.MIN_VALUE && minMessageId[0] > 0;
+                lower = newestLoaded ? minMessageId[0] : Math.max(0, minId - 1);
+                final boolean forwardEnd = emptyPage || !chatWasReset && messArr.size() != count && (!isCache || forwardEndReached[0]);
+                upper = forwardEnd ? Integer.MAX_VALUE : maxId;
+            } else {
+                // first page (2 = from unread / bottom, 3 and 4 = around a message)
+                final boolean forwardEnd = emptyPage || forwardEndReached[0]
+                        || !chatWasReset && last_message_id != 0 && existing.contains(last_message_id);
+                upper = forwardEnd ? Integer.MAX_VALUE : maxId;
+                lower = emptyPage || endReached[0] ? 0 : Math.max(0, minId - 1);
             }
-            final int fromId = endReached[0] ? 0 : Math.max(0, minId - 1);
+            if (upper <= 0 || upper != Integer.MAX_VALUE && upper <= lower) {
+                return 0;
+            }
             final ArrayList<TLRPC.Message> stored = AyuMessagesController.getInstance()
-                    .getDeletedMessagesAsObjects(currentAccount, dialog_id, getTopicId(), fromId, maxId, 100);
+                    .getDeletedMessagesAsObjects(currentAccount, dialog_id, getTopicId(), lower, upper, 300);
             if (stored == null || stored.isEmpty()) {
                 return 0;
             }
@@ -33466,9 +33529,61 @@ public class ChatActivity extends BaseFragment implements
                 selectedObjectGroup = null;
                 break;
             }
+            case OPTION_AYU_READ_MESSAGE: {
+                ayuReadMessage(selectedObject);
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
             case OPTION_AYU_LONG_SCREENSHOT: {
                 //ayu: capture this message and everything loaded after it
                 org.telegram.ui.ayu.screenshot.LongScreenshotBuilder.startFromMessage(this, selectedObject);
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
+            case OPTION_AYU_COPY_PIECE: {
+                //ox: open the text in a selectable sheet
+                org.telegram.ui.ayu.menu.AyuCopyPieceSheet.show(this, ayuGetMenuText(selectedObject));
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
+            case OPTION_AYU_AI_TOOLS: {
+                //ox: LLM helpers for this message
+                final CharSequence aiText = ayuGetMenuText(selectedObject);
+                org.telegram.ui.ayu.menu.AyuAiToolsSheet.show(this, aiText, text -> {
+                    if (chatActivityEnterView != null && text != null) {
+                        chatActivityEnterView.setFieldText(text.toString());
+                    }
+                });
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
+            case OPTION_AYU_SET_BACKGROUND: {
+                //ox: use the photo of this message as the chat background
+                ayuSetAsBackground(selectedObject);
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
+            case OPTION_AYU_SPECIAL_FORWARD: {
+                //ox: ask for the forward flags, then open the usual chat chooser
+                ayuStartSpecialForward(selectedObject, selectedObjectGroup);
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
+            case OPTION_AYU_MARK_MESSAGE: {
+                //ox: local bookmark
+                ayuToggleMark(selectedObject);
                 selectedObject = null;
                 selectedObjectToEditCaption = null;
                 selectedObjectGroup = null;
@@ -33482,6 +33597,7 @@ public class ChatActivity extends BaseFragment implements
                     selectedObjectGroup = null;
                     return;
                 }
+                ayuSpecialForwardPending = false; //ox: drop a stale "special forward" choice
                 forwardingMessage = selectedObject;
                 forwardingMessageGroup = selectedObjectGroup;
                 Bundle args = new Bundle();
@@ -34526,6 +34642,11 @@ public class ChatActivity extends BaseFragment implements
                     }
                 }
             }
+        }
+
+        //ox: "Special forward" bypasses the forward preview and applies the chosen flags directly
+        if (ayuHandleSpecialForward(fragment, dids, fmessages, scheduleDate, scheduleRepeatPeriod)) {
+            return true;
         }
 
         if (!fragment.isQuote && (dids.size() > 1 || dids.get(0).dialogId == getUserConfig().getClientUserId() || message != null || scheduleDate != 0 || !notify)) {
@@ -46290,10 +46411,299 @@ public class ChatActivity extends BaseFragment implements
         fillAyuMessageMenu(message, ayuDeletedMessage, icons, items, options);
     }
 
-    /** ayu: "Edit history" / "Message details" / "Delete locally" context menu entries */
+    /**
+     * ayu: ghost mode "Read message" - marks the dialog as read up to the given message and lets exactly
+     * this read receipt reach the server although "Don't send read packets" is on.
+     */
+    private void ayuReadMessage(MessageObject message) {
+        if (message == null || message.messageOwner == null || message.getId() <= 0) {
+            return;
+        }
+        final long did = dialog_id;
+        final int mid = message.getId();
+        final int date = message.messageOwner.date;
+        final long threadId = getThreadId();
+        // 1. local state: the dialog is marked as read up to this message. The queued read task is
+        //    still suppressed by ghost mode, that is fine - step 2 sends the receipt itself.
+        org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, true, false);
+        try {
+            getMessagesController().markDialogAsRead(did, mid, mid, date, false, threadId, 0, true, 0);
+        } finally {
+            org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, false, false);
+        }
+        // 2. the actual receipt: messages.readHistory / channels.readHistory / readDiscussion,
+        //    sent directly so it cannot be swallowed by the ghost-mode guard in completeReadTask()
+        getMessagesController().ayuSendReadHistoryNow(did, threadId, mid, date);
+        // 3. mentions / reactions / unread content of this very message
+        if (message.messageOwner.mentioned && message.messageOwner.media_unread) {
+            getMessagesController().ayuSendReadMentionsNow(did, threadId);
+        }
+        if (hasUnreadReactions(message)) {
+            getMessagesController().ayuSendReadReactionsNow(did, threadId);
+        }
+        if (message.isContentUnread() && !message.isOutOwner()) {
+            getMessagesController().ayuSendReadMessageContentsNow(did, mid);
+        }
+        if (getParentActivity() != null) {
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.AyuReadMessageDone)).show();
+        }
+    }
+
+    /** ayu: true when the message carries a reaction the user has not seen yet */
+    private boolean hasUnreadReactions(MessageObject message) {
+        if (message == null || message.messageOwner == null || message.messageOwner.reactions == null) {
+            return false;
+        }
+        ArrayList<TLRPC.MessagePeerReaction> recent = message.messageOwner.reactions.recent_reactions;
+        if (recent == null) {
+            return false;
+        }
+        for (int a = 0; a < recent.size(); a++) {
+            if (recent.get(a).unread) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ---------------------------------------------------------------- ox: message menu extras
+
+    /** ox: pending "special forward" flags, consumed by {@link #didSelectDialogs} */
+    private boolean ayuSpecialForwardPending;
+    private boolean ayuSpecialForwardHideSender;
+    private boolean ayuSpecialForwardHideCaption;
+    private boolean ayuSpecialForwardWithoutSound;
+
+    /** ox: "Set background" - re-encode the photo of the message and open the stock wallpaper preview */
+    private void ayuSetAsBackground(MessageObject message) {
+        if (message == null || message.messageOwner == null || getParentActivity() == null) {
+            return;
+        }
+        File file = null;
+        if (!TextUtils.isEmpty(message.messageOwner.attachPath)) {
+            File attach = new File(message.messageOwner.attachPath);
+            if (attach.exists()) {
+                file = attach;
+            }
+        }
+        if (file == null) {
+            file = getFileLoader().getPathToMessage(message.messageOwner);
+        }
+        if (file == null || !file.exists()) {
+            BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.AyuSetBackgroundFailed)).show();
+            return;
+        }
+        try {
+            final android.graphics.Point screenSize = AndroidUtilities.getRealScreenSize();
+            final Bitmap bitmap = ImageLoader.loadBitmap(file.getAbsolutePath(), null, screenSize.x, screenSize.y, true);
+            if (bitmap == null) {
+                BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.AyuSetBackgroundFailed)).show();
+                return;
+            }
+            final File wallpaper = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), Utilities.random.nextInt() + ".jpg");
+            try (FileOutputStream stream = new FileOutputStream(wallpaper)) {
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 87, stream);
+            }
+            ThemePreviewActivity preview = new ThemePreviewActivity(new WallpapersListActivity.FileWallpaper("", wallpaper, wallpaper), bitmap);
+            preview.setDialogId(dialog_id);
+            presentFragment(preview);
+        } catch (Throwable e) {
+            FileLog.e(e);
+            BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.AyuSetBackgroundFailed)).show();
+        }
+    }
+
+    /** ox: "Special forward" - pick the flags, then open the usual chat chooser */
+    private void ayuStartSpecialForward(MessageObject message, MessageObject.GroupedMessages group) {
+        if (message == null || getParentActivity() == null) {
+            return;
+        }
+        final MessageObject forwardMessage = message;
+        final MessageObject.GroupedMessages forwardGroup = group;
+        final boolean canHideCaption = !TextUtils.isEmpty(message.caption) || message.getDocument() != null || message.isPhoto();
+        org.telegram.ui.ayu.menu.AyuSpecialForwardSheet.show(this, canHideCaption, (hideSenderName, hideCaption, withoutSound) -> {
+            if (getMessagesController().isFrozen()) {
+                AccountFrozenAlert.show(currentAccount);
+                return;
+            }
+            ayuSpecialForwardPending = true;
+            ayuSpecialForwardHideSender = hideSenderName;
+            ayuSpecialForwardHideCaption = hideCaption;
+            ayuSpecialForwardWithoutSound = withoutSound;
+            forwardingMessage = forwardMessage;
+            forwardingMessageGroup = forwardGroup;
+            Bundle args = new Bundle();
+            args.putBoolean("onlySelect", true);
+            args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
+            args.putInt("messagesCount", 1);
+            args.putInt("hasPoll", forwardMessage.isTodo() ? 3 : forwardMessage.isPoll() ? (forwardMessage.isPublicPoll() ? 2 : 1) : 0);
+            args.putBoolean("hasInvoice", forwardMessage.isInvoice());
+            args.putBoolean("canSelectTopics", true);
+            DialogsActivity fragment = new DialogsActivity(args);
+            fragment.setDelegate(ChatActivity.this);
+            presentFragment(fragment);
+        });
+    }
+
+    /**
+     * ox: consumes the pending "special forward" state - sends the messages straight away with the
+     * chosen drop_author / drop_media_captions / silent flags instead of opening the forward preview.
+     */
+    private boolean ayuHandleSpecialForward(DialogsActivity fragment, ArrayList<MessagesStorage.TopicKey> dids, ArrayList<MessageObject> fmessages, int scheduleDate, int scheduleRepeatPeriod) {
+        if (!ayuSpecialForwardPending || fmessages == null || fmessages.isEmpty() || dids == null || dids.isEmpty()) {
+            return false;
+        }
+        final boolean fromMyName = ayuSpecialForwardHideSender;
+        final boolean hideCaption = ayuSpecialForwardHideCaption;
+        final boolean notify = !ayuSpecialForwardWithoutSound;
+        ayuSpecialForwardPending = false;
+        forwardingMessage = null;
+        forwardingMessageGroup = null;
+        messagePreviewParams = null;
+        hideFieldPanel(false);
+        for (int a = 0; a < dids.size(); a++) {
+            final long did = dids.get(a).dialogId;
+            if (org.telegram.messenger.ayu.AyuForwarder.needsAyuForward(fmessages)) {
+                org.telegram.messenger.ayu.AyuForwarder.forwardMessages(currentAccount, fmessages, did, (MessageObject) null, notify, scheduleDate, null);
+            } else {
+                getSendMessagesHelper().sendMessage(fmessages, did, fromMyName, hideCaption, notify, scheduleDate, scheduleRepeatPeriod, null, -1, 0, 0, null);
+            }
+        }
+        if (fragment != null) {
+            fragment.finishFragment();
+        }
+        try {
+            if (dids.size() == 1) {
+                BulletinFactory.of(this).showForwardedBulletinWithTag(dids.get(0).dialogId, fmessages.size());
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+        return true;
+    }
+
+    /** ox: "Marking message" - toggles the local bookmark and refreshes the bubble */
+    private void ayuToggleMark(MessageObject message) {
+        if (message == null || message.getId() == 0 || dialog_id == 0) {
+            return;
+        }
+        final boolean marked = org.telegram.messenger.ayu.AyuMarkedMessages.toggle(currentAccount, dialog_id, message.getId());
+        updateVisibleRows();
+        if (getParentActivity() != null) {
+            BulletinFactory.of(this)
+                    .createSimpleBulletin(marked ? R.raw.contact_check : R.raw.info,
+                            LocaleController.getString(marked ? R.string.AyuMessageMarked : R.string.AyuMessageUnmarked))
+                    .show();
+        }
+    }
+
+    /** ox: "Marked messages" from the chat overflow menu */
+    private void ayuOpenMarkedMessages() {
+        if (dialog_id == 0) {
+            return;
+        }
+        presentFragment(new org.telegram.ui.ayu.menu.MarkedMessagesActivity(dialog_id,
+                messageId -> scrollToMessageId(messageId, 0, true, 0, true, 0)));
+    }
+
+    /**
+     * ox: inserts a menu entry right after {@code anchorOption}. When the anchor is not part of the
+     * menu the entry is appended, so the Graph-Messenger-like order survives every menu variant.
+     */
+    private void ayuInsertMenuItem(ArrayList<Integer> icons, ArrayList<CharSequence> items, ArrayList<Integer> options,
+                                   int anchorOption, int newOption, CharSequence text, int icon) {
+        int index = options.indexOf(anchorOption);
+        if (index < 0 || index + 1 > options.size()) {
+            items.add(text);
+            options.add(newOption);
+            icons.add(icon);
+            return;
+        }
+        items.add(index + 1, text);
+        options.add(index + 1, newOption);
+        icons.add(index + 1, icon);
+    }
+
+    /** ox: the text that "Copy piece of text" / "AI Tools" work on, null when the message has none */
+    private CharSequence ayuGetMenuText(MessageObject message) {
+        if (message == null) {
+            return null;
+        }
+        if (!TextUtils.isEmpty(message.caption)) {
+            return message.caption;
+        }
+        if (!TextUtils.isEmpty(message.messageText) && message.messageOwner != null && !TextUtils.isEmpty(message.messageOwner.message)) {
+            return message.messageOwner.message;
+        }
+        if (message.messageOwner != null && !TextUtils.isEmpty(message.messageOwner.message)) {
+            return message.messageOwner.message;
+        }
+        return null;
+    }
+
+    /** ox: true when the message carries a photo that can become a chat background */
+    private boolean ayuCanSetAsBackground(MessageObject message) {
+        if (message == null || message.messageOwner == null || message.isSecretMedia()) {
+            return false;
+        }
+        if (message.isPhoto()) {
+            return true;
+        }
+        TLRPC.Document document = message.getDocument();
+        if (document != null && document.mime_type != null && document.mime_type.startsWith("image/")
+                && !message.isVideo() && !message.isGif() && !message.isSticker()) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * ayu/ox: every AyuGram + Ox-gram entry of the message context menu. The Graph-Messenger order is
+     * rebuilt by inserting each entry after its stock anchor (copy, translate, save, forward, delete),
+     * the remaining AyuGram entries are appended after "Message details".
+     */
     private void fillAyuMessageMenu(MessageObject message, boolean ayuDeletedMessage, ArrayList<Integer> icons, ArrayList<CharSequence> items, ArrayList<Integer> options) {
         if (message == null || message.messageOwner == null || message.isSponsored() || chatMode == MODE_SCHEDULED) {
             return;
+        }
+        final CharSequence menuText = ayuGetMenuText(message);
+        final boolean noforwards = getMessagesController().isChatNoForwards(currentChat)
+                || message.messageOwner.noforwards;
+
+        // Copy -> Copy piece of text
+        if (!TextUtils.isEmpty(menuText) && !noforwards) {
+            ayuInsertMenuItem(icons, items, options, OPTION_COPY, OPTION_AYU_COPY_PIECE,
+                    LocaleController.getString(R.string.AyuCopyPiece), R.drawable.msg_copy);
+        }
+        // Translate -> AI Tools
+        if (!TextUtils.isEmpty(menuText) && AyuConfig.aiToolsEnabled) {
+            ayuInsertMenuItem(icons, items, options, OPTION_TRANSLATE, OPTION_AYU_AI_TOOLS,
+                    LocaleController.getString(R.string.AyuAiTools), R.drawable.msg_bot);
+        }
+        // Save to gallery -> Set background
+        if (ayuCanSetAsBackground(message)) {
+            int anchor = options.contains(OPTION_SAVE_TO_GALLERY) ? OPTION_SAVE_TO_GALLERY : OPTION_SAVE_TO_GALLERY2;
+            ayuInsertMenuItem(icons, items, options, anchor, OPTION_AYU_SET_BACKGROUND,
+                    LocaleController.getString(R.string.AyuSetBackground), R.drawable.msg_background);
+        }
+        // Forward -> Special forward
+        if (options.contains(OPTION_FORWARD)) {
+            ayuInsertMenuItem(icons, items, options, OPTION_FORWARD, OPTION_AYU_SPECIAL_FORWARD,
+                    LocaleController.getString(R.string.AyuSpecialForward), R.drawable.msg_forward);
+        }
+        // Delete -> Marking message
+        if (AyuConfig.markedMessagesEnabled && message.getId() > 0 && chatMode == 0 && dialog_id != 0) {
+            final boolean marked = org.telegram.messenger.ayu.AyuMarkedMessages.isMarked(currentAccount, dialog_id, message.getId());
+            ayuInsertMenuItem(icons, items, options, OPTION_DELETE, OPTION_AYU_MARK_MESSAGE,
+                    LocaleController.getString(marked ? R.string.AyuUnmarkMessage : R.string.AyuMarkMessage),
+                    R.drawable.menu_browser_bookmarks);
+        }
+
+        // ---- appended after everything else, "Message details" first ----
+        if (AyuConfig.showMessageDetails) {
+            items.add(LocaleController.getString(R.string.AyuMessageDetails));
+            options.add(OPTION_AYU_MESSAGE_DETAILS);
+            icons.add(R.drawable.msg_info);
         }
         boolean hasRevisions = false;
         if (message.getId() > 0 && (message.messageOwner.edit_date != 0 || message.messageOwner.ayuEditedCount > 0)) {
@@ -46308,11 +46718,6 @@ public class ChatActivity extends BaseFragment implements
             options.add(OPTION_AYU_EDIT_HISTORY);
             icons.add(R.drawable.msg_edit);
         }
-        if (AyuConfig.showMessageDetails) {
-            items.add(LocaleController.getString(R.string.AyuMessageDetails));
-            options.add(OPTION_AYU_MESSAGE_DETAILS);
-            icons.add(R.drawable.msg_info);
-        }
         if (ayuDeletedMessage) {
             items.add(LocaleController.getString(R.string.AyuDeleteLocally));
             options.add(OPTION_AYU_DELETE_LOCALLY);
@@ -46322,6 +46727,12 @@ public class ChatActivity extends BaseFragment implements
             items.add(LocaleController.getString(R.string.AyuLongScreenshotFromHere));
             options.add(OPTION_AYU_LONG_SCREENSHOT);
             icons.add(R.drawable.msg_photos);
+        }
+        if (!AyuConfig.sendReadPackets && !ayuDeletedMessage && message.getId() > 0 && !message.isOutOwner()
+                && currentEncryptedChat == null && chatMode == 0) {
+            items.add(LocaleController.getString(R.string.AyuReadMessage));
+            options.add(OPTION_AYU_READ_MESSAGE);
+            icons.add(R.drawable.msg_seen);
         }
     }
 

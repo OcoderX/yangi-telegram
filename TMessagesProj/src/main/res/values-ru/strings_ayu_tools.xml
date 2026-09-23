@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX-gram: пункты главного меню -->
+    <string name="OxMenuScreenLight">Экран-фонарик</string>
+    <string name="OxMenuIdFinder">Поиск ID</string>
+
+    <!-- OcoderX-gram: Экран-фонарик -->
+    <string name="OxToolsScreenLightBrightness">Яркость</string>
+
+    <!-- OcoderX-gram: Поиск ID -->
+    <string name="OxToolsIdFinderTitle">Поиск ID</string>
+    <string name="OxToolsIdFinderHint">@username, телефон или ссылка t.me</string>
+    <string name="OxToolsIdFinderFind">Найти</string>
+    <string name="OxToolsIdFinderPickChat">Выбрать чат</string>
+    <string name="OxToolsIdFinderMyId">Мой ID</string>
+    <string name="OxToolsIdFinderResult">Результат</string>
+    <string name="OxToolsIdFinderRecent">Недавние</string>
+    <string name="OxToolsIdFinderNotFound">Не найдено</string>
+    <string name="OxToolsIdFinderCopyHint">Нажмите на значение, чтобы скопировать его.</string>
+
+    <string name="OxToolsResultType">Тип</string>
+    <string name="OxToolsResultId">ID</string>
+    <string name="OxToolsResultChatId">ID чата</string>
+    <string name="OxToolsResultUsername">Username</string>
+    <string name="OxToolsResultDc">Дата-центр</string>
+
+    <string name="OxToolsTypeUser">Пользователь</string>
+    <string name="OxToolsTypeBot">Бот</string>
+    <string name="OxToolsTypeGroup">Группа</string>
+    <string name="OxToolsTypeSupergroup">Супергруппа</string>
+    <string name="OxToolsTypeChannel">Канал</string>
+
+    <string name="OxToolsCopied">Скопировано</string>
+</resources>

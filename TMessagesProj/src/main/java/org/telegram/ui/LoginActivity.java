@@ -475,6 +475,15 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         newAccount = true;
     }
 
+    private boolean startWithBotToken;
+
+    /** Opens straight on the bot token page (used by "Add bot account"). */
+    public LoginActivity startWithBotToken() {
+        startWithBotToken = true;
+        currentViewNum = VIEW_BOT_TOKEN;
+        return this;
+    }
+
     public LoginActivity changeEmail(Runnable onFinishCallback) {
         activityMode = MODE_CHANGE_LOGIN_EMAIL;
         currentViewNum = VIEW_ADD_EMAIL;
@@ -726,6 +735,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     clearCurrentState();
                 }
             }
+        }
+        if (startWithBotToken && activityMode == MODE_LOGIN) {
+            // a stale saved login state must not override the explicit request
+            currentViewNum = VIEW_BOT_TOKEN;
         }
 
         floatingButton = new FragmentFloatingButton(context, resourceProvider);
@@ -10349,9 +10362,11 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         private final TextView subtitleView;
         private final OutlineTextContainerView tokenOutlineView;
         private final EditTextBoldCursor tokenField;
+        private final ImageView showTokenButton;
         private final TextView pasteView;
         private final TextView infoView;
 
+        private boolean tokenVisible;
         private boolean requesting;
 
         public LoginActivityBotTokenView(Context context) {
@@ -10383,7 +10398,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             tokenField.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
             tokenField.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
             tokenField.setMaxLines(1);
-            tokenField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+            tokenField.setSingleLine(true);
+            tokenField.setTypeface(Typeface.MONOSPACE);
+            applyTokenVisibility();
             tokenField.setOnFocusChangeListener((v, hasFocus) -> tokenOutlineView.animateSelection(hasFocus ? 1f : 0f));
             tokenField.setBackground(null);
             tokenField.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -10394,9 +10411,40 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 }
                 return false;
             });
+            tokenField.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
 
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    // a token pasted with the surrounding "token:" label or whitespace still works
+                    updatePasteButton();
+                }
+            });
+
+            LinearLayout fieldLayout = new LinearLayout(context);
+            fieldLayout.setOrientation(HORIZONTAL);
+            fieldLayout.setGravity(Gravity.CENTER_VERTICAL);
+            fieldLayout.addView(tokenField, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
+
+            showTokenButton = new ImageView(context);
+            showTokenButton.setImageResource(R.drawable.msg_message);
+            showTokenButton.setScaleType(ImageView.ScaleType.CENTER);
+            showTokenButton.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), Theme.RIPPLE_MASK_CIRCLE_20DP));
+            showTokenButton.setContentDescription(getString(R.string.AyuBotLoginShowToken));
+            showTokenButton.setOnClickListener(v -> {
+                tokenVisible = !tokenVisible;
+                applyTokenVisibility();
+            });
+            fieldLayout.addView(showTokenButton, LayoutHelper.createLinearRelatively(24, 24, 0, 0, 0, 14, 0));
+
+            tokenOutlineView.addView(fieldLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
             tokenOutlineView.attachEditText(tokenField);
-            tokenOutlineView.addView(tokenField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
             addView(tokenOutlineView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 58, 16, 24, 16, 0));
 
             pasteView = new TextView(context);
@@ -10404,6 +10452,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             pasteView.setGravity(Gravity.CENTER);
             pasteView.setText(getString(R.string.AyuBotLoginPaste));
             pasteView.setPadding(dp(16), dp(12), dp(16), dp(12));
+            pasteView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), Theme.RIPPLE_MASK_ROUNDRECT_6DP));
             pasteView.setOnClickListener(v -> pasteFromClipboard());
             addView(pasteView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 16, 4, 16, 0));
 
@@ -10418,23 +10467,69 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             addView(space, LayoutHelper.createLinear(0, 0, 1f));
         }
 
-        private void pasteFromClipboard() {
+        private void applyTokenVisibility() {
+            int selectionStart = tokenField.getSelectionStart(), selectionEnd = tokenField.getSelectionEnd();
+            tokenField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
+                    (tokenVisible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_PASSWORD));
+            tokenField.setTypeface(Typeface.MONOSPACE);
+            if (selectionStart >= 0 && selectionEnd >= 0) {
+                tokenField.setSelection(Math.min(selectionStart, tokenField.length()), Math.min(selectionEnd, tokenField.length()));
+            }
+            if (showTokenButton != null) {
+                showTokenButton.setContentDescription(getString(tokenVisible ? R.string.AyuBotLoginHideToken : R.string.AyuBotLoginShowToken));
+                showTokenButton.setColorFilter(Theme.getColor(tokenVisible ? Theme.key_windowBackgroundWhiteInputFieldActivated : Theme.key_windowBackgroundWhiteHintText));
+            }
+        }
+
+        /** Whatever is on the clipboard right now, or null when it is empty or not text. */
+        private String clipboardText() {
             try {
                 ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
                 if (clipboard != null && clipboard.hasPrimaryClip() && clipboard.getPrimaryClip() != null && clipboard.getPrimaryClip().getItemCount() > 0) {
                     CharSequence text = clipboard.getPrimaryClip().getItemAt(0).coerceToText(getContext());
                     if (!TextUtils.isEmpty(text)) {
-                        tokenField.setText(text.toString().trim());
-                        tokenField.setSelection(tokenField.length());
+                        return text.toString();
                     }
                 }
             } catch (Exception e) {
                 FileLog.e(e);
             }
+            return null;
+        }
+
+        private void pasteFromClipboard() {
+            String text = clipboardText();
+            if (TextUtils.isEmpty(text)) {
+                return;
+            }
+            String token = extractToken(text);
+            tokenField.setText(token != null ? token : text.trim());
+            tokenField.setSelection(tokenField.length());
+        }
+
+        /** The clipboard button is highlighted while the clipboard holds something token-shaped. */
+        private void updatePasteButton() {
+            if (pasteView == null) {
+                return;
+            }
+            final boolean hasToken = TextUtils.isEmpty(tokenField.getText()) && extractToken(clipboardText()) != null;
+            pasteView.setText(getString(hasToken ? R.string.AyuBotLoginPasteDetected : R.string.AyuBotLoginPaste));
+            pasteView.setTypeface(hasToken ? AndroidUtilities.bold() : null);
+        }
+
+        private final java.util.regex.Pattern tokenPattern = java.util.regex.Pattern.compile("\\d{5,}:[A-Za-z0-9_-]{20,}");
+
+        /** Finds a bot token inside arbitrary text, e.g. a whole @BotFather message. */
+        private String extractToken(String text) {
+            if (text == null) {
+                return null;
+            }
+            java.util.regex.Matcher matcher = tokenPattern.matcher(text);
+            return matcher.find() ? matcher.group() : null;
         }
 
         private boolean looksLikeBotToken(String token) {
-            return token != null && token.matches("\\d{3,}:[A-Za-z0-9_\\-]{10,}");
+            return token != null && tokenPattern.matcher(token).matches();
         }
 
         @Override
@@ -10444,6 +10539,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             infoView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
             pasteView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
             tokenField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            tokenField.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated));
+            showTokenButton.setColorFilter(Theme.getColor(tokenVisible ? Theme.key_windowBackgroundWhiteInputFieldActivated : Theme.key_windowBackgroundWhiteHintText));
+            tokenOutlineView.updateColor();
             tokenOutlineView.invalidate();
         }
 
@@ -10460,12 +10558,32 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         @Override
         public void onShow() {
             super.onShow();
+            updateColors();
             AndroidUtilities.runOnUIThread(() -> {
                 if (tokenField != null) {
                     tokenField.requestFocus();
                     AndroidUtilities.showKeyboard(tokenField);
                 }
+                updatePasteButton();
             }, SHOW_DELAY);
+        }
+
+        @Override
+        public void onHide() {
+            super.onHide();
+            if (tokenField != null) {
+                AndroidUtilities.hideKeyboard(tokenField);
+            }
+        }
+
+        @Override
+        public boolean onBackPressed(boolean force) {
+            if (requesting) {
+                // drop the in-flight importBotAuthorization; the token is kept in the field
+                needHideProgress(true);
+                requesting = false;
+            }
+            return true;
         }
 
         @Override
@@ -10494,7 +10612,16 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             if (requesting || getParentActivity() == null) {
                 return;
             }
-            final String token = tokenField.getText().toString().trim();
+            String token = tokenField.getText().toString().trim();
+            if (!looksLikeBotToken(token)) {
+                // be forgiving: "token: 123:ABC" or a copied @BotFather message still contain it
+                String extracted = extractToken(token);
+                if (extracted != null) {
+                    token = extracted;
+                    tokenField.setText(token);
+                    tokenField.setSelection(tokenField.length());
+                }
+            }
             if (!looksLikeBotToken(token)) {
                 onFieldError(tokenOutlineView, true);
                 needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString(R.string.AyuBotLoginInvalid));
@@ -10512,6 +10639,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             final boolean testBackend = ConnectionsManager.getInstance(currentAccount).isTestBackend();
             final int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                if (!requesting) {
+                    // cancelled with the back button while the request was in flight
+                    return;
+                }
                 requesting = false;
                 needHideProgress(false);
 
@@ -10536,6 +10667,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                             continue;
                         }
                         if (userConfig.getClientUserId() == auth.user.id && ConnectionsManager.getInstance(a).isTestBackend() == testBackend) {
+                            // this bot is already logged in: just switch to it
                             if (UserConfig.selectedAccount != a) {
                                 ((LaunchActivity) getParentActivity()).switchToAccount(a, true);
                             }
@@ -10544,6 +10676,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         }
                     }
                 }
+                // a bot has no phone book to sync, and the contacts permission prompt would be noise
+                syncContacts = false;
+                auth.user.bot = true;
+                tokenField.setText("");
                 onAuthSuccess(auth);
             }), ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin |
                     ConnectionsManager.RequestFlagTryDifferentDc | ConnectionsManager.RequestFlagEnableUnauthorized);
@@ -10554,16 +10690,23 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             if (error == null || error.text == null) {
                 return getString(R.string.ErrorOccurred);
             }
-            if (error.text.contains("ACCESS_TOKEN_INVALID") || error.text.contains("AUTH_TOKEN_INVALID")) {
+            final String text = error.text;
+            if (text.contains("ACCESS_TOKEN_INVALID") || text.contains("AUTH_TOKEN_INVALID") || text.contains("BOT_TOKEN_INVALID")) {
                 return getString(R.string.AyuBotLoginErrorInvalid);
             }
-            if (error.text.contains("ACCESS_TOKEN_EXPIRED")) {
+            if (text.contains("ACCESS_TOKEN_EXPIRED")) {
                 return getString(R.string.AyuBotLoginErrorExpired);
             }
-            if (error.text.contains("FLOOD_WAIT")) {
+            if (text.contains("API_ID_INVALID") || text.contains("API_ID_PUBLISHED_FLOOD")) {
+                return getString(R.string.AyuBotLoginErrorApiId);
+            }
+            if (text.contains("FLOOD_WAIT")) {
                 return getString(R.string.FloodWait);
             }
-            return error.text;
+            if (error.code == -1 || text.contains("NETWORK") || text.contains("TIMEOUT")) {
+                return getString(R.string.AyuBotLoginErrorNetwork);
+            }
+            return LocaleController.formatString(R.string.AyuBotLoginErrorGeneric, text);
         }
     }
 

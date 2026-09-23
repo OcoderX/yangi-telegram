@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ox-gram: message context menu -->
+
+    <!-- Copy piece of text -->
+    <string name="AyuCopyPiece">Copy piece of text</string>
+    <string name="AyuCopyPieceHint">Select the part you want and tap Copy.</string>
+
+    <!-- AI Tools -->
+    <string name="AyuAiTools">AI Tools</string>
+    <string name="AyuAiSummarize">Summarize</string>
+    <string name="AyuAiExplain">Explain</string>
+    <string name="AyuAiRephrase">Rephrase</string>
+    <string name="AyuAiTranslate">Translate to app language</string>
+    <string name="AyuAiReplySuggestions">Reply suggestions</string>
+    <string name="AyuAiAsk">Ask about this message</string>
+    <string name="AyuAiAskHint">What do you want to know?</string>
+    <string name="AyuAiInsert">Insert into input field</string>
+    <string name="AyuAiError">Request failed: %1$s</string>
+    <string name="AyuAiNotConfigured">Add an API key to use AI Tools.</string>
+    <string name="AyuAiEnable">Enable AI Tools</string>
+    <string name="AyuAiEnableInfo">Adds an \"AI Tools\" entry to the message context menu. Selected messages are sent to the provider you configure below.</string>
+    <string name="AyuAiProvider">Provider</string>
+    <string name="AyuAiProviderClaude">Claude API</string>
+    <string name="AyuAiProviderOpenAi">OpenAI-compatible</string>
+    <string name="AyuAiProviderInfo">The key is stored on this device only and is sent to the configured endpoint over HTTPS.</string>
+    <string name="AyuAiApiKey">API key</string>
+    <string name="AyuAiApiKeyNotSet">Not set</string>
+    <string name="AyuAiModel">Model</string>
+    <string name="AyuAiBaseUrl">Base URL</string>
+
+    <!-- Set background -->
+    <string name="AyuSetBackground">Set background</string>
+    <string name="AyuSetBackgroundFailed">Couldn\'t open this image.</string>
+
+    <!-- Special forward -->
+    <string name="AyuSpecialForward">Special forward</string>
+    <string name="AyuSpecialForwardHideSender">Hide sender name</string>
+    <string name="AyuSpecialForwardHideCaption">Hide caption</string>
+    <string name="AyuSpecialForwardNoSound">Forward without sound</string>
+    <string name="AyuSpecialForwardInfo">Hiding the sender name sends the message as a copy, without the forward header.</string>
+
+    <!-- Marking message -->
+    <string name="AyuMarkMessage">Marking message</string>
+    <string name="AyuUnmarkMessage">Remove mark</string>
+    <string name="AyuMessageMarked">Message marked</string>
+    <string name="AyuMessageUnmarked">Mark removed</string>
+    <string name="AyuMarkedMessages">Marked messages</string>
+    <string name="AyuMarkedMessagesEmpty">No marked messages in this chat yet.</string>
+    <string name="AyuMarkedMessagesClear">Remove all marks</string>
+    <string name="AyuMarkedMessagesInfo">Marks are stored on this device only. Hold a row to remove a single mark.</string>
+    <string name="AyuMarkedMessageNoText">Media message</string>
+    <string name="AyuMarkedMessageNotLoaded">Message is not cached</string>
+
+    <!-- Menu settings -->
+    <string name="AyuMessageMenu">Message menu</string>
+    <string name="AyuMessageMenuInfo">Extra entries for the long-press menu of a message.</string>
+    <string name="AyuContextMenuOnTap">Menu on single tap</string>
+    <string name="AyuContextMenuOnTapInfo">A single tap on a message bubble opens the context menu.</string>
+    <string name="AyuMarkedMessagesEnable">Marking messages</string>
+</resources>

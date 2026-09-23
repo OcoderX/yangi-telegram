@@ -669,6 +669,8 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
     public ProfileGiftsContainer giftsContainer;
     public ProfileStoriesCollectionTabs storiesContainer;
     private ChatUsersAdapter chatUsersAdapter;
+    /* OcoderX-gram: members filter, see ProfileActivity.MEMBERS_FILTER_* */
+    private int membersFilter = ProfileActivity.MEMBERS_FILTER_ALL;
     private ItemTouchHelper storiesReorder;
     private StoriesAdapter storiesAdapter;
     private StoriesAdapter animationSupportingStoriesAdapter;
@@ -2320,6 +2322,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         if (topicId == 0) {
             chatUsersAdapter.sortedUsers = sortedUsers;
             chatUsersAdapter.chatInfo = initialTab == TAB_GROUPUSERS ? chatInfo : null;
+            chatUsersAdapter.updateFilteredUsers();
         }
         storiesAdapter = new StoriesAdapter(context, false) {
             @Override
@@ -3174,15 +3177,8 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             mediaPages[a].listView.setOnItemClickListener((view, position, x, y) -> {
                 if (mediaPage.selectedType == TAB_GROUPUSERS) {
                     if (view instanceof UserCell) {
-                        TLRPC.ChatParticipant participant;
-                        final int i;
-                        if (!chatUsersAdapter.sortedUsers.isEmpty()) {
-                            i = chatUsersAdapter.sortedUsers.get(position);
-                        } else {
-                            i = position;
-                        }
-                        participant = chatUsersAdapter.chatInfo.participants.participants.get(i);
-                        if (i < 0 || i >= chatUsersAdapter.chatInfo.participants.participants.size()) {
+                        final TLRPC.ChatParticipant participant = chatUsersAdapter.getParticipant(position);
+                        if (participant == null) {
                             return;
                         }
                         onMemberClick(participant, false, view);
@@ -3524,18 +3520,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                         return true;
                     }
                     if (mediaPage.selectedType == TAB_GROUPUSERS && view instanceof UserCell) {
-                        final TLRPC.ChatParticipant participant;
-                        int index = position;
-                        if (!chatUsersAdapter.sortedUsers.isEmpty()) {
-                            if (position >= chatUsersAdapter.sortedUsers.size()) {
-                                return false;
-                            }
-                            index = chatUsersAdapter.sortedUsers.get(position);
-                        }
-                        if (index < 0 || index >= chatUsersAdapter.chatInfo.participants.participants.size()) {
+                        final TLRPC.ChatParticipant participant = chatUsersAdapter.getParticipant(position);
+                        if (participant == null) {
                             return false;
                         }
-                        participant = chatUsersAdapter.chatInfo.participants.participants.get(index);
                         RecyclerListView listView = (RecyclerListView) view.getParent();
                         for (int i = 0; i < listView.getChildCount(); ++i) {
                             View child = listView.getChildAt(i);
@@ -6779,10 +6767,27 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         if (topicId == 0) {
             chatUsersAdapter.chatInfo = chatInfo;
             chatUsersAdapter.sortedUsers = sortedUsers;
+            chatUsersAdapter.updateFilteredUsers();
         }
         updateTabs(true);
         for (int a = 0; a < mediaPages.length; a++) {
             if (mediaPages[a].selectedType == TAB_GROUPUSERS && mediaPages[a].listView.getAdapter() != null) {
+                AndroidUtilities.notifyDataSetChanged(mediaPages[a].listView);
+            }
+        }
+    }
+
+    /* OcoderX-gram: members filter */
+    public void setMembersFilter(int filter) {
+        if (membersFilter == filter) {
+            return;
+        }
+        membersFilter = filter;
+        if (chatUsersAdapter != null) {
+            chatUsersAdapter.updateFilteredUsers();
+        }
+        for (int a = 0; a < mediaPages.length; a++) {
+            if (mediaPages[a] != null && mediaPages[a].selectedType == TAB_GROUPUSERS && mediaPages[a].listView != null && mediaPages[a].listView.getAdapter() != null) {
                 AndroidUtilities.notifyDataSetChanged(mediaPages[a].listView);
             }
         }
@@ -10931,9 +10936,51 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         private Context mContext;
         private TLRPC.ChatFull chatInfo;
         private ArrayList<Integer> sortedUsers;
+        /* OcoderX-gram: indices into chatInfo.participants.participants that pass the members filter, in display order */
+        private final ArrayList<Integer> displayUsers = new ArrayList<>();
 
         public ChatUsersAdapter(Context context) {
             mContext = context;
+        }
+
+        public void updateFilteredUsers() {
+            displayUsers.clear();
+            if (chatInfo == null || chatInfo.participants == null || chatInfo.participants.participants == null) {
+                return;
+            }
+            final ArrayList<TLRPC.ChatParticipant> participants = chatInfo.participants.participants;
+            final int account = profileActivity != null ? profileActivity.getCurrentAccount() : UserConfig.selectedAccount;
+            if (sortedUsers != null && !sortedUsers.isEmpty()) {
+                for (int a = 0; a < sortedUsers.size(); a++) {
+                    final int index = sortedUsers.get(a);
+                    if (index < 0 || index >= participants.size()) {
+                        continue;
+                    }
+                    if (ProfileActivity.matchesMembersFilter(account, membersFilter, participants.get(index))) {
+                        displayUsers.add(index);
+                    }
+                }
+            } else {
+                for (int a = 0; a < participants.size(); a++) {
+                    if (ProfileActivity.matchesMembersFilter(account, membersFilter, participants.get(a))) {
+                        displayUsers.add(a);
+                    }
+                }
+            }
+        }
+
+        public TLRPC.ChatParticipant getParticipant(int position) {
+            if (chatInfo == null || chatInfo.participants == null || chatInfo.participants.participants == null) {
+                return null;
+            }
+            if (position < 0 || position >= displayUsers.size()) {
+                return null;
+            }
+            final int index = displayUsers.get(position);
+            if (index < 0 || index >= chatInfo.participants.participants.size()) {
+                return null;
+            }
+            return chatInfo.participants.participants.get(index);
         }
 
         @Override
@@ -10943,10 +10990,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
 
         @Override
         public int getItemCount() {
-            if (chatInfo != null && chatInfo.participants.participants.isEmpty()) {
-                return 1;
+            if (chatInfo == null) {
+                return 0;
             }
-            return chatInfo != null ? chatInfo.participants.participants.size() : 0;
+            return displayUsers.isEmpty() ? 1 : displayUsers.size();
         }
 
         public void updateRank(long userId, String rank) {
@@ -10976,12 +11023,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 return;
             }
             UserCell userCell = (UserCell) holder.itemView;
-            TLRPC.ChatParticipant part;
-            if (!sortedUsers.isEmpty()) {
-                part = chatInfo.participants.participants.get(sortedUsers.get(position));
-            } else {
-                part = chatInfo.participants.participants.get(position);
-            }
+            TLRPC.ChatParticipant part = getParticipant(position);
             if (part != null) {
                 String role;
                 final boolean isAdmin, isOwner, canEditAdmin;
@@ -11027,13 +11069,13 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 userCell.setAdminRole(role, isAdmin, isOwner, showAddTag, v -> {
                     TagEditCell.showInfoSheet(getContext(), profileActivity.getCurrentAccount(), dialog_id, user, finalRole, isAdmin, isOwner, canEditAdmin, resourcesProvider);
                 });
-                userCell.setData(user, null, null, 0, position != chatInfo.participants.participants.size() - 1);
+                userCell.setData(user, null, null, 0, position != displayUsers.size() - 1);
             }
         }
 
         @Override
         public int getItemViewType(int i) {
-            if (chatInfo != null && chatInfo.participants.participants.isEmpty()) {
+            if (chatInfo != null && displayUsers.isEmpty()) {
                 return VIEW_TYPE_GROUPUSER_EMPTY;
             }
             return VIEW_TYPE_GROUPUSER;

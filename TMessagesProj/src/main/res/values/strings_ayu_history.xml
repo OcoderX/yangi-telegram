@@ -13,6 +13,8 @@
     <string name="AyuCopiedToClipboard">Copied to clipboard</string>
 
     <string name="AyuDeleteLocally">Delete locally</string>
+    <string name="AyuReadMessage">Read message</string>
+    <string name="AyuReadMessageDone">Read receipt sent</string>
     <string name="AyuDeleteLocallyTitle">Delete locally</string>
     <string name="AyuDeleteLocallyMessage">This message was already deleted on the server. Remove the local copy as well?</string>
 

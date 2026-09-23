@@ -19,6 +19,8 @@
     <string name="AyuCopiedToClipboard">Vaqtinchalik xotiraga nusxalandi</string>
 
     <string name="AyuDeleteLocally">Lokal o\'chirish</string>
+    <string name="AyuReadMessage">Xabarni o\'qish</string>
+    <string name="AyuReadMessageDone">O\'qilganlik belgisi yuborildi</string>
     <string name="AyuDeleteLocallyTitle">Lokal o\'chirish</string>
     <string name="AyuDeleteLocallyMessage">Bu xabar serverda allaqachon o\'chirilgan. Lokal nusxasi ham o\'chirilsinmi?</string>
 
@@ -203,7 +205,7 @@
     <string name="AyuCustomizationInfo">Ghost tugmasi va yopish tugmasi chatlar ro\'yxatidagi amallar panelida ko\'rsatiladi.</string>
 
     <!-- Sinxronlash -->
-    <string name="AyuSyncInfo">OcoderX-gram sozlamalarini qurilmalaringiz o\'rtasida sinxronlash.</string>
+    <string name="AyuSyncInfo">O\'chib ketadigan media, bir marta ko\'riladigan rasmlar va o\'chirilgan xabarlarni telefoningiz internetsiz bo\'lsa ham saqlab qoladigan 24/7 OcoderX server xizmati.</string>
     <string name="AyuEnabled">Yoqilgan</string>
     <string name="AyuDisabled">O\'chirilgan</string>
 
@@ -228,7 +230,7 @@
     <string name="AyuPeerIdCopied">ID vaqtinchalik xotiraga nusxalandi</string>
 
     <!-- AyuGram: AyuSync -->
-    <string name="AyuSyncScreenTitle">OcoderX-gram Sync</string>
+    <string name="AyuSyncScreenTitle">OcoderX-sync</string>
     <string name="AyuSyncEnable">OcoderX-gram Sync\'ni yoqish</string>
     <string name="AyuSyncEnableInfo">Ghost rejimi, o\'qilganlik belgilari va o\'chirilgan/tahrirlangan xabarlar tarixini OcoderX-gram Sync serveri orqali OcoderX-gram qurilmalaringiz o\'rtasida sinxronlab turadi.</string>
     <string name="AyuSyncServerSection">Server</string>
@@ -277,7 +279,7 @@
     <string name="AyuBotLoginTitle">Bot tokeni</string>
     <string name="AyuBotLoginHeader">Bot sifatida kirish</string>
     <string name="AyuBotLoginSubtitle">@BotFather bergan tokenni joylashtiring. Bot alohida akkaunt sifatida qo\'shiladi.</string>
-    <string name="AyuBotLoginField">Bot tokeni</string>
+    <string name="AyuBotLoginField">@BotFather bergan bot tokeni</string>
     <string name="AyuBotLoginPaste">Buferdan joylashtirish</string>
     <string name="AyuBotLoginInfo">Telegram botga chatlar ro\'yxatini, kontaktlarni va eski yozishmalarni yuklab olishga ruxsat bermaydi. Chatlar xabar kelgan sari shu yerda paydo bo\'ladi va qurilmada saqlanadi.</string>
     <string name="AyuBotLoginLink">Bot tokeni bilan kirish</string>
@@ -308,4 +310,77 @@
     <string name="AyuTurboIslandBadge">Turbo</string>
     <string name="AyuTurboKeepPartial">Qisman fayllarni saqlash</string>
     <string name="AyuTurboKeepPartialInfo">Yuklab olish bekor qilinganda yoki uzilganda allaqachon yuklangan qismni saqlab qolish; keyingi urinishda fayl boshidan emas, o\'sha joydan davom etadi.</string>
+
+    <!-- Members filter -->
+    <string name="OxMembersFilter">A\'zolar filtri</string>
+    <string name="OxMembersFilterAll">Barchasi</string>
+    <string name="OxMembersFilterAdmins">Administratorlar</string>
+    <string name="OxMembersFilterBots">Botlar</string>
+    <string name="OxMembersFilterContacts">Kontaktlar</string>
+    <string name="OxMembersFilterMutual">O\'zaro kontaktlar</string>
+    <string name="OxMembersFilterDeleted">O\'chirilgan akkauntlar</string>
+    <string name="OxMembersFilterPremium">Premium foydalanuvchilar</string>
+    <string name="OxMembersFilterNonPremium">Premium bo\'lmagan foydalanuvchilar</string>
+    <string name="AyuBotLoginShowToken">Tokenni ko\'rsatish</string>
+    <string name="AyuBotLoginHideToken">Tokenni yashirish</string>
+    <string name="AyuBotLoginPasteDetected">Buferdagi tokenni joylashtirish</string>
+    <string name="AyuBotLoginErrorApiId">Telegram bu ilovaning API ID sini rad etdi. Keyinroq qayta urinib ko\'ring.</string>
+    <string name="AyuBotLoginErrorNetwork">Telegram bilan bog\'lanib bo\'lmadi. Internetni tekshirib, qayta urinib ko\'ring.</string>
+    <string name="AyuBotLoginErrorGeneric">Kirish amalga oshmadi: %1$s</string>
+    <string name="AyuBotAccountBadge">bot</string>
+    <string name="AyuBotAddAccount">Bot akkaunt qo\'shish</string>
+    <string name="AyuBotFatherHint">Botning nomi, username, tavsifi va rasmi bu yerda emas, @BotFather orqali o\'zgartiriladi.</string>
+    <string name="AyuBotFatherOpen">@BotFather ni ochish</string>
+
+    <!-- Ox-gram: xabar kontekst menyusi -->
+    <string name="AyuCopyPiece">Matn bo\'lagini nusxalash</string>
+    <string name="AyuCopyPieceHint">Kerakli qismni belgilang va \"Nusxalash\"ni bosing.</string>
+
+    <string name="AyuAiTools">AI vositalari</string>
+    <string name="AyuAiSummarize">Qisqacha bayon</string>
+    <string name="AyuAiExplain">Tushuntirish</string>
+    <string name="AyuAiRephrase">Qayta yozish</string>
+    <string name="AyuAiTranslate">Ilova tiliga tarjima qilish</string>
+    <string name="AyuAiReplySuggestions">Javob variantlari</string>
+    <string name="AyuAiAsk">Xabar haqida so\'rash</string>
+    <string name="AyuAiAskHint">Nimani bilmoqchisiz?</string>
+    <string name="AyuAiInsert">Kiritish maydoniga qo\'yish</string>
+    <string name="AyuAiError">So\'rov bajarilmadi: %1$s</string>
+    <string name="AyuAiNotConfigured">AI vositalaridan foydalanish uchun API kalitini qo\'shing.</string>
+    <string name="AyuAiEnable">AI vositalarini yoqish</string>
+    <string name="AyuAiEnableInfo">Xabar kontekst menyusiga \"AI vositalari\" bandini qo\'shadi. Tanlangan xabar siz sozlagan provayderga yuboriladi.</string>
+    <string name="AyuAiProvider">Provayder</string>
+    <string name="AyuAiProviderClaude">Claude API</string>
+    <string name="AyuAiProviderOpenAi">OpenAI bilan mos</string>
+    <string name="AyuAiProviderInfo">Kalit faqat shu qurilmada saqlanadi va HTTPS orqali sozlangan manzilga yuboriladi.</string>
+    <string name="AyuAiApiKey">API kaliti</string>
+    <string name="AyuAiApiKeyNotSet">Sozlanmagan</string>
+    <string name="AyuAiModel">Model</string>
+    <string name="AyuAiBaseUrl">Asosiy URL</string>
+
+    <string name="AyuSetBackground">Fon qilib qo\'yish</string>
+    <string name="AyuSetBackgroundFailed">Bu rasmni ochib bo\'lmadi.</string>
+
+    <string name="AyuSpecialForward">Maxsus yo\'naltirish</string>
+    <string name="AyuSpecialForwardHideSender">Jo\'natuvchi nomini yashirish</string>
+    <string name="AyuSpecialForwardHideCaption">Izohni yashirish</string>
+    <string name="AyuSpecialForwardNoSound">Ovozsiz yo\'naltirish</string>
+    <string name="AyuSpecialForwardInfo">Jo\'natuvchi nomi yashirilsa, xabar yo\'naltirish sarlavhasisiz, nusxa sifatida yuboriladi.</string>
+
+    <string name="AyuMarkMessage">Xabarni belgilash</string>
+    <string name="AyuUnmarkMessage">Belgini olib tashlash</string>
+    <string name="AyuMessageMarked">Xabar belgilandi</string>
+    <string name="AyuMessageUnmarked">Belgi olib tashlandi</string>
+    <string name="AyuMarkedMessages">Belgilangan xabarlar</string>
+    <string name="AyuMarkedMessagesEmpty">Bu suhbatda hali belgilangan xabar yo\'q.</string>
+    <string name="AyuMarkedMessagesClear">Barcha belgilarni olib tashlash</string>
+    <string name="AyuMarkedMessagesInfo">Belgilar faqat shu qurilmada saqlanadi. Bitta belgini olib tashlash uchun qatorni bosib turing.</string>
+    <string name="AyuMarkedMessageNoText">Media xabar</string>
+    <string name="AyuMarkedMessageNotLoaded">Xabar keshda yo\'q</string>
+
+    <string name="AyuMessageMenu">Xabar menyusi</string>
+    <string name="AyuMessageMenuInfo">Xabarni bosib turganda chiqadigan menyu uchun qo\'shimcha bandlar.</string>
+    <string name="AyuContextMenuOnTap">Bir marta bosishda menyu</string>
+    <string name="AyuContextMenuOnTapInfo">Xabar pufagiga bir marta bosilganda kontekst menyusi ochiladi.</string>
+    <string name="AyuMarkedMessagesEnable">Xabarlarni belgilash</string>
 </resources>

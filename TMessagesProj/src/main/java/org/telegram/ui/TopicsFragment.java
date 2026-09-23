@@ -401,8 +401,10 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
 
     @Override
     public View createView(Context context) {
-        additionNavigationBarHeight = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        // the main tabs bar sits at the top now: reserve space above the list instead of below it
+        additionNavigationBarHeight = 0;
+        additionFloatingButtonOffset = 0;
+        additionTopHeight = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
 
         fragmentView = contentView = new SizeNotifierFrameLayout(context) {
             {
@@ -1588,7 +1590,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
     }
 
     public void checkUi_listViewPadding() {
-        float top = 0;
+        float top = additionTopHeight;
         if (parentDialogsActivity != null) {
             top += parentDialogsActivity.getTopPanelAnimatedHeight();
             if (topPanelLayout != null) {
@@ -4188,6 +4190,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
 
     private int additionNavigationBarHeight;
     private int additionFloatingButtonOffset;
+    private int additionTopHeight;
     private int navigationBarHeight;
 
     @NonNull

@@ -60,6 +60,11 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
     // ---- filters ----
     private static final int REGEX_FILTERS = 20;
 
+    // ox: message context menu section
+    private static final int AI_TOOLS = 80;
+    private static final int MENU_MARKED_MESSAGES = 81;
+    private static final int MENU_ON_TAP = 82;
+
     // ---- qol ----
     private static final int QOL_KEEP_ALIVE = 30;
     private static final int QOL_DISABLE_ADS = 31;
@@ -81,6 +86,9 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
     private static final int CUSTOM_MESSAGE_DETAILS = 46;
     private static final int CUSTOM_MESSAGE_SHADOW = 47;
     private static final int CUSTOM_SIMPLE_QUOTES = 48;
+    private static final int CUSTOM_COLORED_STATUS = 49;
+    private static final int CUSTOM_CARD_CHAT_LIST = 51;
+    private static final int CUSTOM_COLLAPSE_LONG_MESSAGES = 52;
 
     // ---- sync ----
     private static final int SYNC = 50;
@@ -219,6 +227,16 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
                 getString(AyuConfig.regexFiltersEnabled ? R.string.AyuEnabled : R.string.AyuDisabled)));
         items.add(UItem.asShadow(getString(R.string.AyuRegexFiltersInfo)));
 
+        // ------------- message menu (ox) -------------
+        items.add(UItem.asHeader(getString(R.string.AyuMessageMenu)));
+        items.add(UItem.asSettingsCell(AI_TOOLS, 0, getString(R.string.AyuAiTools),
+                getString(AyuConfig.aiToolsEnabled ? R.string.AyuEnabled : R.string.AyuDisabled)));
+        items.add(UItem.asCheck(MENU_MARKED_MESSAGES, getString(R.string.AyuMarkedMessagesEnable))
+                .setChecked(AyuConfig.markedMessagesEnabled));
+        items.add(UItem.asCheck(MENU_ON_TAP, getString(R.string.AyuContextMenuOnTap))
+                .setChecked(AyuConfig.contextMenuOnTap));
+        items.add(UItem.asShadow(getString(R.string.AyuContextMenuOnTapInfo)));
+
         // ------------- mention radar -------------
         final int radarUnread = org.telegram.messenger.ayu.radar.MentionRadar.getInstance(currentAccount).getUnreadCount();
         items.add(UItem.asHeader(getString(R.string.RadarTitle)));
@@ -253,6 +271,18 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
         items.add(UItem.asCheck(CUSTOM_SIMPLE_QUOTES, getString(R.string.AyuSimpleQuotesAndReplies)).setChecked(AyuConfig.simpleQuotesAndReplies));
         items.add(UItem.asShadow(getString(R.string.AyuCustomizationInfo)));
 
+        // ------------- colored message status -------------
+        items.add(UItem.asCheck(CUSTOM_COLORED_STATUS, getString(R.string.AyuColoredStatus)).setChecked(AyuConfig.coloredMessageStatus));
+        items.add(UItem.asShadow(getString(R.string.AyuColoredStatusInfo)));
+
+        // ------------- card chat list -------------
+        items.add(UItem.asCheck(CUSTOM_CARD_CHAT_LIST, getString(R.string.AyuCardChatList)).setChecked(AyuConfig.cardChatList));
+        items.add(UItem.asShadow(getString(R.string.AyuCardChatListInfo)));
+
+        // ------------- collapse long messages -------------
+        items.add(UItem.asCheck(CUSTOM_COLLAPSE_LONG_MESSAGES, getString(R.string.OxCollapseLongMessages)).setChecked(org.telegram.messenger.ayu.OxChatConfig.isCollapseLongMessages()));
+        items.add(UItem.asShadow(getString(R.string.OxCollapseLongMessagesInfo)));
+
         // ------------- dynamic island -------------
         items.add(UItem.asHeader(getString(R.string.AyuDynamicIsland)));
         items.add(UItem.asSettingsCell(DYNAMIC_ISLAND, 0, getString(R.string.AyuDynamicIsland),
@@ -282,7 +312,7 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
         // ------------- sync -------------
         items.add(UItem.asHeader(getString(R.string.AyuSyncScreenTitle)));
         items.add(UItem.asSettingsCell(SYNC, 0, getString(R.string.AyuSyncScreenTitle),
-                getString(AyuConfig.syncEnabled ? R.string.AyuEnabled : R.string.AyuDisabled)));
+                getString(org.telegram.messenger.ayu.OxSyncConfig.isConfigured() ? R.string.OxSyncStatusConfigured : R.string.OxSyncStatusNotConfigured)));
         items.add(UItem.asShadow(getString(R.string.AyuSyncInfo)));
 
         // ------------- personal firewall -------------
@@ -350,6 +380,18 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
 
             case REGEX_FILTERS:
                 presentFragment(new org.telegram.ui.ayu.RegexFiltersActivity());
+                break;
+
+            case AI_TOOLS:
+                presentFragment(new org.telegram.ui.ayu.AiToolsPreferencesActivity());
+                break;
+            case MENU_MARKED_MESSAGES:
+                AyuConfig.setMarkedMessagesEnabled(!AyuConfig.markedMessagesEnabled);
+                toggleSwitch(view, AyuConfig.markedMessagesEnabled);
+                break;
+            case MENU_ON_TAP:
+                AyuConfig.setContextMenuOnTap(!AyuConfig.contextMenuOnTap);
+                toggleSwitch(view, AyuConfig.contextMenuOnTap);
                 break;
 
             case QOL_KEEP_ALIVE:
@@ -424,6 +466,21 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
             case CUSTOM_SIMPLE_QUOTES:
                 AyuConfig.setSimpleQuotesAndReplies(!AyuConfig.simpleQuotesAndReplies);
                 toggleSwitch(view, AyuConfig.simpleQuotesAndReplies);
+                break;
+            case CUSTOM_COLORED_STATUS:
+                AyuConfig.setColoredMessageStatus(!AyuConfig.coloredMessageStatus);
+                toggleSwitch(view, AyuConfig.coloredMessageStatus);
+                // re-applies applyDialogsTheme()/applyChatTheme() and posts didSetNewTheme
+                Theme.refreshThemeColors();
+                break;
+            case CUSTOM_CARD_CHAT_LIST:
+                // the setter already posts dialogsNeedReload so the chat list re-measures its cells
+                AyuConfig.setCardChatList(!AyuConfig.cardChatList);
+                toggleSwitch(view, AyuConfig.cardChatList);
+                break;
+            case CUSTOM_COLLAPSE_LONG_MESSAGES:
+                org.telegram.messenger.ayu.OxChatConfig.toggleCollapseLongMessages();
+                toggleSwitch(view, org.telegram.messenger.ayu.OxChatConfig.isCollapseLongMessages());
                 break;
 
             case SYNC:

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX: Contacts Changes (local history of contacts' profile changes) -->
+    <string name="OxMenuContactsChanges">Contacts Changes</string>
+    <string name="OxContactChangesTitle">Contacts Changes</string>
+    <string name="OxContactChangesTrack">Track changes</string>
+    <string name="OxContactChangesTrackEnabled">Tracking contact changes</string>
+    <string name="OxContactChangesTrackDisabled">Tracking is off</string>
+    <string name="OxContactChangesClear">Clear history</string>
+    <string name="OxContactChangesClearConfirm">Delete every recorded contact change from this device? This cannot be undone.</string>
+    <string name="OxContactChangesCleared">History cleared</string>
+    <string name="OxContactChangesName">Name changed</string>
+    <string name="OxContactChangesUsername">Username changed</string>
+    <string name="OxContactChangesPhone">Phone number changed</string>
+    <string name="OxContactChangesPhoto">Profile photo changed</string>
+    <string name="OxContactChangesBio">Bio changed</string>
+    <string name="OxContactChangesEmpty">No changes recorded yet. When a contact changes their name, username, phone, photo or bio, it will appear here.</string>
+    <string name="OxContactChangesToday">Today</string>
+    <string name="OxContactChangesYesterday">Yesterday</string>
+</resources>

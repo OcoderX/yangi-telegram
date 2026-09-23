@@ -87,7 +87,7 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
             RadarConfig.load();
             for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
                 try {
-                    if (UserConfig.getInstance(a).isClientActivated()) {
+                    if (UserConfig.getInstance(a).isClientActivated() && !UserConfig.getInstance(a).isBotAccount()) {
                         getInstance(a).start();
                     }
                 } catch (Throwable e) {
@@ -713,6 +713,11 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
      */
     public void startScan(int modes) {
         if (isScanning()) {
+            return;
+        }
+        if (UserConfig.getInstance(currentAccount).isBotAccount()) {
+            // messages.search / searchGlobal are bot-forbidden: nothing to scan
+            notifyScanFinished(0, true, null);
             return;
         }
         scan = new HistoryScan(modes, buildContext());

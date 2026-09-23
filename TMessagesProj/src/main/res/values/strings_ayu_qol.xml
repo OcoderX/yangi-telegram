@@ -10,4 +10,8 @@
     <string name="AyuAllowScreenshotsInSecretChats">Allow screenshots in secret chats</string>
     <string name="AyuDisableEmulatorDetection">Disable emulator detection</string>
     <string name="AyuShowExpireButton">Show \"Expire\" button</string>
+    <string name="AyuColoredStatus">Colored message status</string>
+    <string name="AyuColoredStatusInfo">Read ticks are green, delivered ticks are red, the sending clock is yellow</string>
+    <string name="AyuCardChatList">Chat list cards</string>
+    <string name="AyuCardChatListInfo">Every chat in the main list is drawn as a separate rounded card with a compact gap between the cards.</string>
 </resources>

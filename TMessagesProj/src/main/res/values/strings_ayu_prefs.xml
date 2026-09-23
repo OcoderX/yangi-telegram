@@ -70,7 +70,7 @@
     <string name="AyuCustomizationInfo">The ghost toggle and the kill button are shown in the chats list action bar.</string>
 
     <!-- Sync -->
-    <string name="AyuSyncInfo">Synchronize OcoderX-gram settings between your devices.</string>
+    <string name="AyuSyncInfo">A 24/7 OcoderX server service that keeps self-destructing media, view-once photos and deleted messages safe even when your phone is offline.</string>
     <string name="AyuEnabled">Enabled</string>
     <string name="AyuDisabled">Disabled</string>
 
@@ -89,4 +89,15 @@
     <string name="AyuKillAppTitle">Kill app</string>
     <string name="AyuKillAppMessage">The app process will be terminated immediately. Continue?</string>
     <string name="AyuFooter">OcoderX-gram features integrated · v%1$s</string>
+
+    <!-- Members filter -->
+    <string name="OxMembersFilter">Members filter</string>
+    <string name="OxMembersFilterAll">All</string>
+    <string name="OxMembersFilterAdmins">Administrators</string>
+    <string name="OxMembersFilterBots">Bots</string>
+    <string name="OxMembersFilterContacts">Contacts</string>
+    <string name="OxMembersFilterMutual">Mutual Contacts</string>
+    <string name="OxMembersFilterDeleted">Deleted Accounts</string>
+    <string name="OxMembersFilterPremium">Premium Users</string>
+    <string name="OxMembersFilterNonPremium">Non Premium Users</string>
 </resources>

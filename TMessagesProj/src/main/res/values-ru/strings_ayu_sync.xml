@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Ox-gram: экран сервиса OcoderX-sync -->
+    <string name="OxSyncHeroTitle">Что такое OcoderX-sync?</string>
+    <string name="OxSyncHeroText">Это платный сервис на сервере OcoderX. Он работает для вас круглосуточно и сохраняет копию того, что Telegram обычно удаляет, — чтобы ничего не терялось.</string>
+    <string name="OxSyncWhatHeader">Что сохраняется</string>
+    <string name="OxSyncBulletDestruct">Исчезающие фото и видео</string>
+    <string name="OxSyncBulletOnce">Медиа «для одного просмотра» и с таймером</string>
+    <string name="OxSyncBulletDeleted">Удалённые и изменённые сообщения</string>
+    <string name="OxSyncBulletOffline">Работает, даже когда телефон офлайн</string>
+    <string name="OxSyncWhatInfo">Сервер продолжает работать, даже если на телефоне нет интернета или приложение закрыто, поэтому ничего не пропадёт.</string>
+    <string name="OxSyncOrder">Заказать сервис</string>
+    <string name="OxSyncOrderInfo">После заказа OcoderX пришлёт вам API ID, API hash и строку сессии. Введите их ниже, и юзербот начнёт работать.</string>
+    <string name="OxSyncCredentialsSection">Данные юзербота</string>
+    <string name="OxSyncApiId">API ID</string>
+    <string name="OxSyncApiIdInvalid">API ID должен быть числом.</string>
+    <string name="OxSyncApiHash">API hash</string>
+    <string name="OxSyncSessionString">Строка сессии</string>
+    <string name="OxSyncSessionHint">Вставьте строку сессии</string>
+    <string name="OxSyncNotSet">Не указано</string>
+    <string name="OxSyncStatus">Статус</string>
+    <string name="OxSyncStatusNotConfigured">Не настроено</string>
+    <string name="OxSyncStatusConfigured">Настроено — ожидается активация</string>
+    <string name="OxSyncCredentialsInfo">Эти данные хранятся только на этом телефоне. Никому их не передавайте: они дают полный доступ к вашему аккаунту.</string>
+    <string name="OxSyncSaved">Сохранено</string>
+    <string name="OxSyncClear">Очистить данные</string>
+    <string name="OxSyncClearTitle">Очистить данные?</string>
+    <string name="OxSyncClearText">API ID, API hash и строка сессии будут удалены с этого телефона.</string>
+    <string name="OxSyncClearButton">Очистить</string>
+    <string name="OxSyncCleared">Данные очищены</string>
+</resources>

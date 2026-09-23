@@ -872,7 +872,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 h += storiesHeight * (1f - searchAnimationProgress) * (1f - rightSlidingProgress) * (1f - progressToActionMode);
             }
             h += storiesOverscroll;
-            h += dp(SEARCH_FIELD_HEIGHT) * (1f - progressToActionMode) * (1f - searchAnimationProgress) * (1f - rightSlidingProgress);
+            h += topSlotCollapsibleHeight() * (1f - progressToActionMode) * (1f - searchAnimationProgress) * (1f - rightSlidingProgress);
+            // the main tabs bar only goes away while searching
+            h += mainTabsSlotHeight() * (1f - searchAnimationProgress) * (1f - rightSlidingProgress);
 
             return (int) h;
         }
@@ -1050,8 +1052,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             tabsYOffset = 0;
             storiesYOffset = 0;
             tabsYOffset -= Math.min(
-                dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + dp(SEARCH_FIELD_HEIGHT) + scrollYOffset,
-                progressToActionMode * (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + dp(SEARCH_FIELD_HEIGHT))
+                dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight() + scrollYOffset,
+                progressToActionMode * (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight())
             );
             storiesYOffset = tabsYOffset;
             if ((rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment())) {
@@ -1077,7 +1079,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (hasStories) {
                     addH += dp(DialogStoriesCell.HEIGHT_IN_DP);
                 }
-                addH += dp(SEARCH_FIELD_HEIGHT);
+                addH += topSlotHeight();
                 addH *= rightSlidingDialogContainer.openedProgress;
 
                 viewPages[0].setTranslationY(rightFragmentOffset - addH);
@@ -1176,7 +1178,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         if (hasStories) {
                             h += dp(DialogStoriesCell.HEIGHT_IN_DP);
                         }
-                        h += dp(SEARCH_FIELD_HEIGHT);
+                        h += topSlotHeight();
                     }
                     h += actionModeAdditionalHeight;
                     if (actionBarColorAnimator == null) {
@@ -1289,6 +1291,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                 if (child == fragmentSearchField || child == searchTabsAndFiltersLayout || child == dialogStoriesCell) {
                     childTop = actionBar.getMeasuredHeight();
+                    if (child == dialogStoriesCell) {
+                        // the main tabs bar is pinned right below the action bar, stories go under it
+                        childTop += mainTabsSlotHeight();
+                    }
                     if (child != fragmentSearchField && child != dialogStoriesCell && child != searchTabsAndFiltersLayout) {
                         childTop += dp(SEARCH_FIELD_HEIGHT);
                     }
@@ -1315,7 +1321,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     childTop = 0;
                 } else if (child == topPanelLayout || child == topBubblesFadeView || child == filterTabsView) {
                     childTop += actionBar.getMeasuredHeight();
-                    childTop += dp(SEARCH_FIELD_HEIGHT);
+                    childTop += topSlotHeight();
                 } else if (dialogStoriesCell != null && dialogStoriesCell.getPremiumHint() == child) {
                     continue;
                 }
@@ -2071,7 +2077,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 t += dp(DialogStoriesCell.HEIGHT_IN_DP);
             }
             if (!actionModeFullyShowed) {
-                t += dp(SEARCH_FIELD_HEIGHT);
+                t += topSlotHeight();
+            } else {
+                // the main tabs bar stays pinned even in action mode
+                t += mainTabsSlotHeight();
             }
             additionalPadding = 0;
 
@@ -2251,7 +2260,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     int pTop = getPaddingTop();
                     DialogCell view = findArchiveDialogCell(parentPage);
                     if (view != null) {
-                        int height = (int) (dp(SharedConfig.useThreeLinesLayout ? 76 : 70) * PullForegroundDrawable.SNAP_HEIGHT);
+                        int height = (int) ((dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(parentPage.dialogsType)) * PullForegroundDrawable.SNAP_HEIGHT);
                         int diff = (view.getTop() - pTop) + view.getMeasuredHeight();
 
                         long pullingTime = System.currentTimeMillis() - startArchivePullingTime;
@@ -2382,7 +2391,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         offset += dp(DialogStoriesCell.HEIGHT_IN_DP);
                     }
                     if (backward) {
-                        offset += dp(SEARCH_FIELD_HEIGHT);
+                        offset += topSlotHeight();
                         // offset += canShowFilterTabsView ? dp(50) : 0;
                     }
                     if (p >= 0) {
@@ -2577,7 +2586,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                     parentPage.updateList(true);
                                     if (!SharedConfig.archiveHidden && parentPage.layoutManager.findFirstVisibleItemPosition() == 0) {
                                         disableActionBarScrolling = true;
-                                        parentPage.listView.smoothScrollBy(0, -dp(SharedConfig.useThreeLinesLayout ? 76 : 70));
+                                        parentPage.listView.smoothScrollBy(0, -(dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(parentPage.dialogsType)));
                                     }
                                 }
                                 ArrayList<TLRPC.Dialog> dialogs = getDialogsArray(currentAccount, parentPage.dialogsType, folderId, false);
@@ -2985,8 +2994,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         BirthdayController.getInstance(currentAccount).check();
-        additionNavigationBarHeight = hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        // the main tabs bar lives at the top now, so nothing has to be reserved at the bottom
+        additionNavigationBarHeight = 0;
+        additionFloatingButtonOffset = 0;
 
         return true;
     }
@@ -3259,7 +3269,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (initialDialogsType == DIALOGS_TYPE_ADD_USERS_TO || isArchive() && getDialogsArray(currentAccount, initialDialogsType, folderId, false).isEmpty()) {
             searchItem.setVisibility(View.GONE);
         }
-        searchItem.setVisibility(View.GONE);
 
         if (!onlySelect && searchString == null && folderId == 0 && communityId == 0) {
             doneItem = new ActionBarMenuItem(context, null, getThemedColor(Theme.key_actionBarDefaultSelector), getThemedColor(Theme.key_actionBarDefaultIcon), true);
@@ -3294,6 +3303,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             ayuKillItem.setContentDescription(getString(R.string.AyuKillApp));
             ayuKillItem.setOnClickListener(v -> org.telegram.ui.ayu.AyuPreferencesActivity.killApplication(getParentActivity()));
             updateAyuMenuItems();
+
+            // the magnifier must sit immediately to the left of the ghost icon
+            if (searchItem != null && searchItem.getParent() == menu) {
+                final int ghostIndex = menu.indexOfChild(ayuGhostItem);
+                if (ghostIndex >= 0) {
+                    menu.removeView(searchItem);
+                    menu.addView(searchItem, menu.indexOfChild(ayuGhostItem));
+                }
+            }
 
             updateProxyButton(false, false);
         }
@@ -4230,13 +4248,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 }
                                 int canScrollDy = -(view.getTop() - pTop) + viewsH;
                                 if (!rightSlidingDialogContainer.hasFragment() && !(actionBar != null && actionBar.isActionModeShowed())) {
-                                    canScrollDy -= dp(SEARCH_FIELD_HEIGHT);
+                                    canScrollDy -= topSlotCollapsibleHeight();
                                 }
                                 if (hasStories && (viewPage.scroller.isRunning() || dialogStoriesCell.isExpanded()) && !rightSlidingDialogContainer.hasFragment() && !fixScrollYAfterArchiveOpened) {
                                     canScrollDy += dp(DialogStoriesCell.HEIGHT_IN_DP);
                                 }
                                 if ((viewPage.scroller.isRunning() || dialogStoriesCell.isExpanded()) && !rightSlidingDialogContainer.hasFragment() && !fixScrollYAfterArchiveOpened && !(actionBar != null && actionBar.isActionModeShowed())) {
-                                    canScrollDy += dp(SEARCH_FIELD_HEIGHT);
+                                    canScrollDy += topSlotCollapsibleHeight();
                                 }
                                 int positiveDy = Math.abs(dy);
                                 if (canScrollDy < positiveDy) {
@@ -4599,7 +4617,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         if (applyScrollY) {
                             int maxScrollYOffset = getMaxScrollYOffset();
                             if (!(filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && animatorFilterTabsVisible.getValue())) {
-                                maxScrollYOffset = dp(SEARCH_FIELD_HEIGHT);
+                                maxScrollYOffset = topSlotCollapsibleHeight();
                             }
                             if (newTranslation < -maxScrollYOffset) {
                                 newTranslation = -maxScrollYOffset;
@@ -5762,7 +5780,29 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return false;
     }
 
+    // Total height of the slot reserved right below the action bar, above the stories row.
+    // Normally it holds the big "Search Chats" field; when this fragment is a page of
+    // MainTabsActivity the (never collapsing) main tabs bar is drawn there instead and the
+    // search field is only shown while searching.
+    private int topSlotHeight() {
+        return mainTabsSlotHeight() + topSlotCollapsibleHeight();
+    }
+
+    // Fixed slot of the main tabs bar (0 when there are no main tabs).
+    private int mainTabsSlotHeight() {
+        return hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+    }
+
+    // Part of the top slot that collapses away (the search field). The main tabs bar never collapses.
+    private int topSlotCollapsibleHeight() {
+        return hasMainTabs ? 0 : dp(SEARCH_FIELD_HEIGHT);
+    }
+
     private int getMaxScrollYOffsetWithoutSearch() {
+        if (hasMainTabs) {
+            // the main tabs bar is pinned below the action bar, nothing above the list may slide under it
+            return 0;
+        }
         if (hasStories) {
             return dp(DialogStoriesCell.HEIGHT_IN_DP);
         } else {
@@ -5771,10 +5811,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getMaxScrollYOffset() {
+        if (hasMainTabs) {
+            return 0;
+        }
         if (hasStories) {
-            return dp(DialogStoriesCell.HEIGHT_IN_DP) + dp(SEARCH_FIELD_HEIGHT);
+            return dp(DialogStoriesCell.HEIGHT_IN_DP) + topSlotCollapsibleHeight();
         } else {
-            return dp(SEARCH_FIELD_HEIGHT);
+            return topSlotCollapsibleHeight();
         }
     }
 
@@ -7074,7 +7117,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             Activity activity = getParentActivity();
             if (activity != null) {
                 checkPermission = false;
-                boolean hasNotContactsPermission = activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED;
+                boolean hasNotContactsPermission = !getUserConfig().isBotAccount() && activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED;
                 boolean hasNotStoragePermission = (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE) && activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED;
                 boolean hasNotNotificationsPermission = Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED;
                 AndroidUtilities.runOnUIThread(() -> {
@@ -7203,7 +7246,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE ? filterTabsView.getMeasuredHeight() : 0) +
                     (topPanelLayout != null ? topPanelLayout.getHeight() : 0) +
                     (dialogStoriesCell != null && dialogStoriesCellVisible ? (int) ((1f - dialogStoriesCell.getCollapsedProgress()) * dp(DialogStoriesCell.HEIGHT_IN_DP)) : 0) +
-                    (dp(SEARCH_FIELD_HEIGHT))
+                    (topSlotHeight())
                 );
             }
 
@@ -9058,7 +9101,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 viewPages[i].listView.cancelClickRunnables(true);
             }
         }
-        translateListHeight = Math.max(0, dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) + scrollYOffset);
+        translateListHeight = Math.max(0, (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) + scrollYOffset);
         float finalTranslateListHeight = translateListHeight;
         actionBarColorAnimator = ValueAnimator.ofFloat(progressToActionMode, 0);
         actionBarColorAnimator.addUpdateListener(valueAnimator -> {
@@ -9084,7 +9127,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 invalidateScrollY = true;
                 fixScrollYAfterArchiveOpened = true;
                 fragmentView.invalidate();
-                scrollAdditionalOffset = -(dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight);
+                scrollAdditionalOffset = -((dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) - finalTranslateListHeight);
                 viewPages[0].setTranslationY(0);
                 for (int i = 0; i < viewPages.length; i++) {
                     if (viewPages[i] != null) {
@@ -9589,9 +9632,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             getMessagesController().markAllTopicsAsRead(did);
         }
 
+        // ghost mode: an explicit "mark as read" chosen by the user is always delivered to the server,
+        // so allow the receipt up-front (mentions + history) and flush whatever was suppressed before
+        if (!org.telegram.messenger.ayu.AyuConfig.sendReadPackets) {
+            org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, true, false);
+        }
         getMessagesController().markMentionsAsRead(did, 0);
         getMessagesController().markDialogAsRead(did, dialog.top_message, dialog.top_message, dialog.last_message_date, false, 0, 0, true, 0);
-        // ghost mode: an explicit "mark as read" chosen by the user is always delivered to the server
         org.telegram.messenger.ayu.AyuGhostHelper.onManualMarkAsRead(currentAccount, did);
 
         if (selectedDialogIndex >= 0) {
@@ -9617,8 +9664,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (getMessagesController().isForum(did) || getMessagesController().isMonoForumWithManageRights(did)) {
                 getMessagesController().markAllTopicsAsRead(did);
             }
+            if (!org.telegram.messenger.ayu.AyuConfig.sendReadPackets) {
+                org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, true, false);
+            }
             getMessagesController().markMentionsAsRead(did, 0);
             getMessagesController().markDialogAsRead(did, dialog.top_message, dialog.top_message, dialog.last_message_date, false, 0, 0, true, 0);
+            org.telegram.messenger.ayu.AyuGhostHelper.onManualMarkAsRead(currentAccount, did);
         }
         if (selectedDialogIndex >= 0) {
             frozenDialogsList.remove(selectedDialogIndex);
@@ -10074,7 +10125,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     viewPages[i].listView.cancelClickRunnables(true);
                 }
             }
-            translateListHeight = Math.max(0, dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) + scrollYOffset);
+            translateListHeight = Math.max(0, (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) + scrollYOffset);
             if (translateListHeight != 0) {
                 actionModeAdditionalHeight = (int) translateListHeight;
                 fragmentView.requestLayout();
@@ -10101,7 +10152,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     actionBarColorAnimator = null;
                     actionModeAdditionalHeight = 0;
                     actionModeFullyShowed = true;
-                    scrollAdditionalOffset = dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight;
+                    scrollAdditionalOffset = (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) - finalTranslateListHeight;
                     viewPages[0].setTranslationY(0);
                     for (int i = 0; i < viewPages.length; i++) {
                         if (viewPages[i] != null) {
@@ -10347,8 +10398,25 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 org.telegram.messenger.ayu.AyuConfig::setKeepAliveService);
 
         io.addGap();
+        io.add(R.drawable.msg_download, getString(R.string.OxMenuDownloadManager), () -> {
+            showSearch(true, true, true);
+            fragmentSearchFieldWatcher.toggleSearch(true);
+        });
         io.add(R.drawable.msg_folders, getString(R.string.AyuDrawerFileExplorer),
                 () -> presentFragment(new org.telegram.ui.ayu.explorer.FileExplorerActivity()));
+        io.add(R.drawable.msg_brightness_high, getString(R.string.OxMenuScreenLight),
+                () -> presentFragment(new org.telegram.ui.ayu.tools.ScreenLightActivity()));
+        io.addGap();
+        io.add(R.drawable.msg_mention, getString(R.string.OxMenuIdFinder),
+                () -> presentFragment(new org.telegram.ui.ayu.tools.IdFinderActivity()));
+        io.add(R.drawable.msg_online, getString(R.string.OxMenuOnlineContacts),
+                () -> presentFragment(new org.telegram.ui.ayu.contacts.OnlineContactsActivity()));
+        io.add(R.drawable.msg_fave, getString(R.string.OxMenuSpecialContact),
+                () -> presentFragment(new org.telegram.ui.ayu.contacts.SpecialContactsActivity()));
+        io.add(R.drawable.msg_recent, getString(R.string.OxMenuContactTracker),
+                () -> presentFragment(new org.telegram.ui.ayu.contacts.ContactTrackerActivity()));
+        io.add(R.drawable.msg_contacts, getString(R.string.OxMenuContactsChanges),
+                () -> presentFragment(new org.telegram.ui.ayu.contactchanges.ContactChangesActivity()));
         io.add(R.drawable.msg_copy, getString(R.string.AyuDrawerDuplicates),
                 () -> presentFragment(new org.telegram.ui.ayu.duplicates.DuplicateCleanerActivity()));
         io.add(R.drawable.msg_retry, getString(R.string.AyuDrawerSync),
@@ -13894,7 +13962,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void showItemOptions() {
-        ItemOptions io = ItemOptions.makeOptions(this, optionsItem);
+        showMainMenu(optionsItem);
+    }
+
+    // The main "..." menu of the chats screen. Also opened from the OcoderX tab of MainTabsActivity.
+    public void showMainMenu(View anchor) {
+        if (getContext() == null || getParentActivity() == null) {
+            return;
+        }
+        if (anchor == null) {
+            anchor = optionsItem;
+        }
+        if (anchor == null) {
+            return;
+        }
+        final View anchorView = anchor;
+        ItemOptions io = ItemOptions.makeOptions(this, anchorView);
         io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));
         io.setDimAlpha(0x08);
 
@@ -13987,15 +14070,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             });
         });
         io.addGap();
-        io.add(R.drawable.outline_groups_24, getString(R.string.NewGroup), () -> {
-            Bundle args = new Bundle();
-            presentFragment(new GroupCreateActivity(args));
-        });
-        io.add(R.drawable.outline_saved_24, getString(R.string.SavedMessages), () -> {
-            Bundle args = new Bundle();
-            args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
-            presentFragment(new ChatActivity(args));
-        });
+        if (!getUserConfig().isBotAccount()) {
+            // a bot can neither create a group nor write to itself
+            io.add(R.drawable.outline_groups_24, getString(R.string.NewGroup), () -> {
+                Bundle args = new Bundle();
+                presentFragment(new GroupCreateActivity(args));
+            });
+            io.add(R.drawable.outline_saved_24, getString(R.string.SavedMessages), () -> {
+                Bundle args = new Bundle();
+                args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
+                presentFragment(new ChatActivity(args));
+            });
+        }
         if (ApplicationLoader.applicationLoaderInstance != null) {
             ApplicationLoader.applicationLoaderInstance.addItemOptions(io);
         }
@@ -14025,7 +14111,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             }
         }
-        if (getUserConfig().showCallsTab) {
+        if (getUserConfig().showCallsTab && !getUserConfig().isBotAccount()) {
             io.add(R.drawable.msg_settings_old, getString(R.string.Settings), () -> {
                 presentFragment(new SettingsActivity());
             });
@@ -14053,7 +14139,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         io.show();
-        io.setTranslationY(-dp(64));
+        if (anchorView == optionsItem) {
+            io.setTranslationY(-dp(64));
+        }
     }
 
     @Override
@@ -14310,7 +14398,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         final float factor0 = isSupportSearch() ? 1 : 0;
         final float factor1 = (1f - actionModeVisible) * (1f - animatorDoneButtonVisible.getFloatValue());
-        final float factor2 = Math.max(searchFieldVisible, alphaByScrollOffset * (1f - getRightSlidingProgress()));
+        final float factor2 = hasMainTabs ?
+            searchFieldVisible :
+            Math.max(searchFieldVisible, alphaByScrollOffset * (1f - getRightSlidingProgress()));
 
         final float alpha = factor0 * factor1 * factor2;
 
@@ -14437,11 +14527,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         final int additionalList = dp(48);
-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
+        final int mainTabTop = actionBar.getMeasuredHeight();
+        final int mainTabBottom = mainTabTop + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
 
         final int actionBarHeight = actionBar.getMeasuredHeight()
-            + dp(DialogsActivity.SEARCH_FIELD_HEIGHT)
+            + topSlotHeight()
             + dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0)
             + (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE ? filterTabsView.getMeasuredHeight() : 0)
             + (topPanelLayout != null && topPanelLayout.getVisibility() == View.VISIBLE ? topPanelLayout.getSumHeightOfAllVisibleChild() : 0)
@@ -14625,7 +14715,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         final TextView textView = new TextView(getContext());
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         textView.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
-        textView.setText(UserObject.getUserName(user));
+        textView.setText(org.telegram.messenger.bot.BotAccountHelper.accountName(account, user, getThemedColor(Theme.key_dialogTextGray2)));
         textView.setMaxLines(2);
         textView.setEllipsize(TextUtils.TruncateAt.END);
         btn.addView(textView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 13, 0, 14, 0));

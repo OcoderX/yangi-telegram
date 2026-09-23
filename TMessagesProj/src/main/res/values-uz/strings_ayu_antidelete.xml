@@ -16,6 +16,9 @@
     <string name="AyuRestoreMediaToCache">Saqlangan mediani tiklash</string>
     <string name="AyuRestoreMediaToCacheInfo">Saqlangan rasmlarni Telegram qidiradigan joyga qaytaradi, shunda o\'chirilgan rasm to\'liq hajmda ochiladi.</string>
 
+    <string name="AyuDimDeletedMessages">O\'chirilgan xabarlarni xiralashtirish</string>
+    <string name="AyuDimDeletedMessagesInfo">Yuboruvchi o\'chirgandan keyin saqlab qolingan xabarlar 60% shaffoflikda ko\'rsatiladi, shunda ular suhbatning qolgan qismidan ajralib turadi.</string>
+
     <string name="AyuExcludedChats">Saqlashdan chiqarilgan suhbatlar</string>
     <string name="AyuExcludedChatsInfo">Bu suhbatlar uchun hech nima saqlanmaydi. Qo\'shish uchun suhbat menyusidagi \"Bu yerda saqlanmasin\" tugmasidan foydalaning.</string>
     <string name="AyuExcludedChatsEmpty">Chiqarilgan suhbatlar yo\'q</string>

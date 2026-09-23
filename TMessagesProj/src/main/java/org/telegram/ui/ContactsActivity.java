@@ -252,8 +252,10 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         getContactsController().checkInviteText();
         getContactsController().reloadContactsStatusesMaybe(false);
 
-        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        // the main tabs bar sits at the top now: reserve space above the list instead of below it
+        additionNavigationBarHeight = 0;
+        additionFloatingButtonOffset = 0;
+        additionTopHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
 
         return true;
     }
@@ -1565,6 +1567,7 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
 
     private int additionNavigationBarHeight;
     private int additionFloatingButtonOffset;
+    private int additionTopHeight;
     private float additionalFloatingTranslation;
     private int navigationBarHeight;
     private int imeInsetAnimatedHeight;
@@ -1609,7 +1612,7 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
     private void checkUi_listViewPadding() {
         listView.setPadding(
             0,
-            dp(ADDITIONAL_LIST_HEIGHT_DP + 44) + actionBar.getMeasuredHeight(),
+            dp(ADDITIONAL_LIST_HEIGHT_DP + 44) + actionBar.getMeasuredHeight() + additionTopHeight,
             0,
             dp(ADDITIONAL_LIST_HEIGHT_DP) + navigationBarHeight + additionNavigationBarHeight
         );
@@ -1698,8 +1701,8 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         final int additionalList = dp(48);
         final int additionalSearch = dp(DialogsActivity.SEARCH_FIELD_HEIGHT);
 
-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
+        final int mainTabTop = actionBar.getMeasuredHeight();
+        final int mainTabBottom = mainTabTop + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
 
         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList + additionalSearch );
         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);

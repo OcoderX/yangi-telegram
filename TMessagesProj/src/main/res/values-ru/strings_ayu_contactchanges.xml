@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX: изменения контактов (локальная история изменений профилей контактов) -->
+    <string name="OxMenuContactsChanges">Изменения контактов</string>
+    <string name="OxContactChangesTitle">Изменения контактов</string>
+    <string name="OxContactChangesTrack">Отслеживать изменения</string>
+    <string name="OxContactChangesTrackEnabled">Изменения контактов отслеживаются</string>
+    <string name="OxContactChangesTrackDisabled">Отслеживание выключено</string>
+    <string name="OxContactChangesClear">Очистить историю</string>
+    <string name="OxContactChangesClearConfirm">Удалить все записанные изменения контактов с этого устройства? Действие нельзя отменить.</string>
+    <string name="OxContactChangesCleared">История очищена</string>
+    <string name="OxContactChangesName">Имя изменено</string>
+    <string name="OxContactChangesUsername">Имя пользователя изменено</string>
+    <string name="OxContactChangesPhone">Номер телефона изменён</string>
+    <string name="OxContactChangesPhoto">Фото профиля изменено</string>
+    <string name="OxContactChangesBio">Описание изменено</string>
+    <string name="OxContactChangesEmpty">Пока ничего не записано. Когда контакт изменит имя, имя пользователя, телефон, фото или описание, это появится здесь.</string>
+    <string name="OxContactChangesToday">Сегодня</string>
+    <string name="OxContactChangesYesterday">Вчера</string>
+</resources>

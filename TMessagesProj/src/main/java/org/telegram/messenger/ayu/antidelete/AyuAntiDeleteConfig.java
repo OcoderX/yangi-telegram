@@ -30,6 +30,10 @@ public class AyuAntiDeleteConfig {
 
     /** draw the localized "deleted by author" label next to the deleted mark instead of the mark alone */
     public static boolean showDeletedLabel = true;
+    /** render the whole bubble at {@link #DELETED_MESSAGE_ALPHA} opacity for messages kept via anti-delete */
+    public static boolean dimDeletedMessages = true;
+    /** opacity applied to a bubble when {@link #dimDeletedMessages} is on */
+    public static final float DELETED_MESSAGE_ALPHA = 0.6f;
     /** keep the tail of a dialog when its history is cleared ("clear history") */
     public static boolean keepOnClearHistory = true;
     /** keep the tail of a dialog when the whole dialog is deleted / left */
@@ -51,6 +55,7 @@ public class AyuAntiDeleteConfig {
         try {
             preferences = ApplicationLoader.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             showDeletedLabel = preferences.getBoolean("showDeletedLabel", true);
+            dimDeletedMessages = preferences.getBoolean("dimDeletedMessages", true);
             keepOnClearHistory = preferences.getBoolean("keepOnClearHistory", true);
             keepOnDeleteDialog = preferences.getBoolean("keepOnDeleteDialog", true);
             restoreMediaToCache = preferences.getBoolean("restoreMediaToCache", true);
@@ -107,6 +112,11 @@ public class AyuAntiDeleteConfig {
     public static void setShowDeletedLabel(boolean v) {
         showDeletedLabel = v;
         putBoolean("showDeletedLabel", v);
+    }
+
+    public static void setDimDeletedMessages(boolean v) {
+        dimDeletedMessages = v;
+        putBoolean("dimDeletedMessages", v);
     }
 
     public static void setKeepOnClearHistory(boolean v) {

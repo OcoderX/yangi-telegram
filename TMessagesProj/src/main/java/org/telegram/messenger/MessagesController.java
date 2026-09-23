@@ -2414,6 +2414,9 @@ public class MessagesController extends BaseController implements NotificationCe
         if (loadingSuggestedFilters) {
             return;
         }
+        if (getUserConfig().isBotAccount()) {
+            return;
+        }
         loadingSuggestedFilters = true;
 
         TLRPC.TL_messages_getSuggestedDialogFilters req = new TLRPC.TL_messages_getSuggestedDialogFilters();
@@ -2438,6 +2441,17 @@ public class MessagesController extends BaseController implements NotificationCe
             onLoadedRemoteFilters = whenDone;
         }
         if (loadingRemoteFilters || !getUserConfig().isClientActivated() || !force && getUserConfig().filtersLoaded) {
+            return;
+        }
+        if (getUserConfig().isBotAccount()) {
+            // messages.getDialogFilters is bot-forbidden: a bot has no folders
+            getUserConfig().filtersLoaded = true;
+            getUserConfig().saveConfig(false);
+            if (onLoadedRemoteFilters != null) {
+                final Utilities.Callback<Boolean> callback = onLoadedRemoteFilters;
+                onLoadedRemoteFilters = null;
+                AndroidUtilities.runOnUIThread(() -> callback.run(false));
+            }
             return;
         }
         if (force) {
@@ -6896,6 +6910,7 @@ public class MessagesController extends BaseController implements NotificationCe
             if (oldUser != null) {
                 if (!fromCache) {
                     getUserNameResolver().update(oldUser, user);
+                    org.telegram.messenger.ayu.contactchanges.ContactChangesController.getInstance(currentAccount).onUserUpdated(oldUser, user);
                     if (user.bot) {
                         if (user.username != null) {
                             oldUser.username = user.username;
@@ -6926,6 +6941,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     getUserConfig().saveConfig(true);
                 }
                 getUserNameResolver().update(oldUser, user);
+                org.telegram.messenger.ayu.contactchanges.ContactChangesController.getInstance(currentAccount).onUserUpdated(oldUser, user);
                 if (oldUser != null && user.status != null && oldUser.status != null && user.status.expires != oldUser.status.expires) {
                     return true;
                 }
@@ -10549,7 +10565,9 @@ public class MessagesController extends BaseController implements NotificationCe
         checkReadTasks();
 
         if (getUserConfig().isClientActivated()) {
-            if (!ignoreSetOnline && getConnectionsManager().getPauseTime() == 0 && ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
+            if (getUserConfig().isBotAccount()) {
+                // a bot has no online status: account.updateStatus is refused by the server
+            } else if (!ignoreSetOnline && getConnectionsManager().getPauseTime() == 0 && ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
                 if (ApplicationLoader.mainInterfacePausedStageQueueTime != 0 && Math.abs(ApplicationLoader.mainInterfacePausedStageQueueTime - System.currentTimeMillis()) > 1000) {
                     if (AyuConfig.sendOnlinePackets && statusSettingState != 1 && (lastStatusUpdateTime == 0 || Math.abs(System.currentTimeMillis() - lastStatusUpdateTime) >= 55000 || offlineSent)) {
                         statusSettingState = 1;
@@ -10876,7 +10894,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     private void checkTosUpdate() {
-        if (nextTosCheckTime > getConnectionsManager().getCurrentTime() || checkingTosUpdate || !getUserConfig().isClientActivated()) {
+        if (nextTosCheckTime > getConnectionsManager().getCurrentTime() || checkingTosUpdate || !getUserConfig().isClientActivated() || getUserConfig().isBotAccount()) {
             return;
         }
         checkingTosUpdate = true;
@@ -10904,6 +10922,11 @@ public class MessagesController extends BaseController implements NotificationCe
     private long lastCheckPromoInfoTime;
 
     private void checkPromoInfoInternal(boolean reset) {
+        if (getUserConfig().isBotAccount()) {
+            // help.getPromoData is bot-forbidden and a bot never gets a promo dialog anyway
+            checkingPromoInfo = false;
+            return;
+        }
         if (org.telegram.messenger.ayu.AyuConfig.disableProxySponsor) {
             checkingPromoInfo = false;
             if (checkingPromoInfoRequestId != 0) {
@@ -11755,7 +11778,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 });
                 getConnectionsManager().bindRequestToGuid(reqId, classGuid);
             } else {
-                if (!ChatObject.isMonoForum(chat) && loadDialog && (load_type == LOAD_AROUND_MESSAGE || load_type == LOAD_FROM_UNREAD) && last_message_id == 0) {
+                if (!getUserConfig().isBotAccount() && !ChatObject.isMonoForum(chat) && loadDialog && (load_type == LOAD_AROUND_MESSAGE || load_type == LOAD_FROM_UNREAD) && last_message_id == 0) {
                     TLRPC.TL_messages_getPeerDialogs req = new TLRPC.TL_messages_getPeerDialogs();
                     TLRPC.InputPeer inputPeer = getInputPeer(dialogId);
                     TLRPC.TL_inputDialogPeer inputDialogPeer = new TLRPC.TL_inputDialogPeer();
@@ -11828,13 +11851,26 @@ public class MessagesController extends BaseController implements NotificationCe
                             }
                         }
                         processLoadedMessages(res, res.messages.size(), dialogId, mergeDialogId, count, mid, offset_date, false, classGuid, first_unread, last_message_id, unread_count, last_date, load_type, false, mode, threadMessageId, loadIndex, queryFromServer, mentionsCount, processMessages, isTopic, null);
-                    } else {
+                    } else if (!handleBotHistoryError(error, dialogId, mergeDialogId, count, max_id, offset_date, classGuid, first_unread, last_message_id, unread_count, last_date, load_type, mode, threadMessageId, loadIndex, queryFromServer, mentionsCount, processMessages, isTopic)) {
                         AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.loadingMessagesFailed, classGuid, req, error));
                     }
                 });
                 getConnectionsManager().bindRequestToGuid(reqId, classGuid);
             }
         }
+    }
+
+    /**
+     * A bot cannot load history from the server. When a history request comes back with
+     * BOT_METHOD_INVALID the cached messages are all there is, so the chat is told that the end
+     * was reached instead of being left with a spinner and a failed request it would retry.
+     */
+    private boolean handleBotHistoryError(TLRPC.TL_error error, long dialogId, long mergeDialogId, int count, int max_id, int offset_date, int classGuid, int first_unread, int last_message_id, int unread_count, int last_date, int load_type, int mode, long threadMessageId, int loadIndex, boolean queryFromServer, int mentionsCount, boolean processMessages, boolean isTopic) {
+        if (!getUserConfig().isBotAccount() || !org.telegram.messenger.bot.BotAccountHelper.isBotMethodInvalid(error)) {
+            return false;
+        }
+        processLoadedMessages(new TLRPC.TL_messages_messages(), 0, dialogId, mergeDialogId, count, max_id, offset_date, false, classGuid, first_unread, last_message_id, unread_count, last_date, load_type, true, mode, threadMessageId, loadIndex, queryFromServer, mentionsCount, processMessages, isTopic, null);
+        return true;
     }
 
     public void reloadWebPages(final long dialogId, HashMap<String, ArrayList<MessageObject>> webpagesToReload, int mode) {
@@ -12263,7 +12299,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void loadHintDialogs() {
-        if (!hintDialogs.isEmpty() || TextUtils.isEmpty(installReferer)) {
+        if (!hintDialogs.isEmpty() || TextUtils.isEmpty(installReferer) || getUserConfig().isBotAccount()) {
             return;
         }
         TLRPC.TL_help_getRecentMeUrls req = new TLRPC.TL_help_getRecentMeUrls();
@@ -12587,6 +12623,13 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void loadGlobalNotificationsSettings() {
+        if (getUserConfig().isBotAccount()) {
+            if (!getUserConfig().notificationsSettingsLoaded) {
+                getUserConfig().notificationsSettingsLoaded = true;
+                getUserConfig().saveConfig(false);
+            }
+            return;
+        }
         if (loadingNotificationSettings == 0 && !getUserConfig().notificationsSettingsLoaded) {
             SharedPreferences preferences = MessagesController.getNotificationsSettings(currentAccount);
             SharedPreferences.Editor editor1 = null;
@@ -12742,6 +12785,13 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void loadSignUpNotificationsSettings() {
+        if (getUserConfig().isBotAccount()) {
+            if (!getUserConfig().notificationsSignUpSettingsLoaded) {
+                getUserConfig().notificationsSignUpSettingsLoaded = true;
+                getUserConfig().saveConfig(false);
+            }
+            return;
+        }
         if (!loadingNotificationSignUpSettings) {
             loadingNotificationSignUpSettings = true;
             TL_account.getContactSignUpNotification req = new TL_account.getContactSignUpNotification();
@@ -14607,6 +14657,10 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     private void completeReadTask(ReadTask task) {
+        if (getUserConfig().isBotAccount()) {
+            // messages.readHistory & co. are bot-forbidden; the dialog is already read locally
+            return;
+        }
         if (!AyuState.isAllowReadPacket(task.dialogId)) {
             // ghost mode: the dialog is already marked as read locally, remember the receipt in case
             // "mark read after send" / "read on interact" wants to replay it later
@@ -14760,6 +14814,133 @@ public class MessagesController extends BaseController implements NotificationCe
                 AyuState.setAllowReadPacket(dialogId, false, true);
             }
         });
+    }
+
+    /**
+     * ayu: "Read message" from the message context menu. Builds and sends the read receipt itself
+     * (messages.readHistory / channels.readHistory / messages.readDiscussion / readSavedHistory)
+     * so the ghost-mode guard in {@link #completeReadTask} cannot swallow it. This is an explicit
+     * per-message action, it never changes the global ghost mode flags.
+     */
+    public void ayuSendReadHistoryNow(long dialogId, long threadId, int maxId, int maxDate) {
+        if (dialogId == 0) {
+            return;
+        }
+        if (DialogObject.isEncryptedDialog(dialogId)) {
+            TLRPC.EncryptedChat chat = getEncryptedChat(DialogObject.getEncryptedChatId(dialogId));
+            if (chat != null && chat.auth_key != null && chat.auth_key.length > 1 && chat instanceof TLRPC.TL_encryptedChat && maxDate != 0) {
+                TLRPC.TL_messages_readEncryptedHistory req = new TLRPC.TL_messages_readEncryptedHistory();
+                req.peer = new TLRPC.TL_inputEncryptedChat();
+                req.peer.chat_id = chat.id;
+                req.peer.access_hash = chat.access_hash;
+                req.max_date = maxDate;
+                getConnectionsManager().sendRequest(req, (response, error) -> {
+                });
+            }
+            return;
+        }
+        if (maxId <= 0) {
+            return;
+        }
+        final long monoForumPeerId = getMessagesStorage().isMonoForum(dialogId) ? threadId : 0;
+        final TLObject req;
+        if (threadId != 0 && monoForumPeerId == 0) {
+            TLRPC.TL_messages_readDiscussion request = new TLRPC.TL_messages_readDiscussion();
+            request.msg_id = (int) threadId;
+            request.peer = getInputPeer(dialogId);
+            request.read_max_id = maxId;
+            req = request;
+        } else if (monoForumPeerId != 0) {
+            TLRPC.TL_messages_readSavedHistory request = new TLRPC.TL_messages_readSavedHistory();
+            request.parent_peer = getInputPeer(dialogId);
+            request.peer = getInputPeer(monoForumPeerId);
+            request.max_id = maxId;
+            req = request;
+        } else {
+            TLRPC.InputPeer inputPeer = getInputPeer(dialogId);
+            if (inputPeer instanceof TLRPC.TL_inputPeerChannel) {
+                TLRPC.TL_channels_readHistory request = new TLRPC.TL_channels_readHistory();
+                request.channel = getInputChannel(-dialogId);
+                request.max_id = maxId;
+                req = request;
+            } else {
+                TLRPC.TL_messages_readHistory request = new TLRPC.TL_messages_readHistory();
+                request.peer = inputPeer;
+                request.max_id = maxId;
+                req = request;
+            }
+        }
+        if (req == null) {
+            return;
+        }
+        // the receipt is not queued anywhere, so a suppressed read of the same dialog must not replay it
+        AyuState.clearSuppressedReads(dialogId, threadId);
+        getConnectionsManager().sendRequest(req, (response, error) -> {
+            if (error == null && response instanceof TLRPC.TL_messages_affectedMessages) {
+                TLRPC.TL_messages_affectedMessages res = (TLRPC.TL_messages_affectedMessages) response;
+                processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
+            }
+        });
+    }
+
+    /** ayu: messages.readMentions for one dialog, ignoring the ghost-mode suppression */
+    public void ayuSendReadMentionsNow(long dialogId, long topicId) {
+        if (dialogId == 0 || DialogObject.isEncryptedDialog(dialogId) || dialogId == getUserConfig().getClientUserId()) {
+            return;
+        }
+        TLRPC.TL_messages_readMentions req = new TLRPC.TL_messages_readMentions();
+        req.peer = getInputPeer(dialogId);
+        if (topicId != 0) {
+            req.top_msg_id = (int) topicId;
+            req.flags |= 1;
+        }
+        getConnectionsManager().sendRequest(req, null);
+    }
+
+    /** ayu: messages.readReactions for one dialog, ignoring the ghost-mode suppression */
+    public void ayuSendReadReactionsNow(long dialogId, long topicId) {
+        if (dialogId == 0 || DialogObject.isEncryptedDialog(dialogId)) {
+            return;
+        }
+        TLRPC.TL_messages_readReactions req = new TLRPC.TL_messages_readReactions();
+        req.peer = getInputPeer(dialogId);
+        if (topicId != 0) {
+            if (isMonoForum(dialogId)) {
+                req.saved_peer_id = getInputPeer(topicId);
+                req.flags |= 2;
+            } else {
+                req.top_msg_id = (int) topicId;
+                req.flags |= 1;
+            }
+        }
+        getConnectionsManager().sendRequest(req, (response, error) -> {
+        });
+    }
+
+    /** ayu: readMessageContents for a single message, ignoring the ghost-mode suppression */
+    public void ayuSendReadMessageContentsNow(long dialogId, int messageId) {
+        if (dialogId == 0 || messageId <= 0 || DialogObject.isEncryptedDialog(dialogId)) {
+            return;
+        }
+        if (DialogObject.isChatDialog(dialogId) && ChatObject.isChannel(getChat(-dialogId))) {
+            TLRPC.TL_channels_readMessageContents req = new TLRPC.TL_channels_readMessageContents();
+            req.channel = getInputChannel(-dialogId);
+            if (req.channel == null) {
+                return;
+            }
+            req.id.add(messageId);
+            getConnectionsManager().sendRequest(req, (response, error) -> {
+            });
+        } else {
+            TLRPC.TL_messages_readMessageContents req = new TLRPC.TL_messages_readMessageContents();
+            req.id.add(messageId);
+            getConnectionsManager().sendRequest(req, (response, error) -> {
+                if (error == null && response instanceof TLRPC.TL_messages_affectedMessages) {
+                    TLRPC.TL_messages_affectedMessages res = (TLRPC.TL_messages_affectedMessages) response;
+                    processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
+                }
+            });
+        }
     }
 
     public void markMentionsAsRead(long dialogId, long topicId) {
@@ -16227,7 +16408,7 @@ public class MessagesController extends BaseController implements NotificationCe
             req.token_type = SharedConfig.pushType;
             for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
                 UserConfig userConfig = UserConfig.getInstance(a);
-                if (a != currentAccount && userConfig.isClientActivated()) {
+                if (a != currentAccount && userConfig.isClientActivated() && !userConfig.isBotAccount()) {
                     req.other_uids.add(userConfig.getClientUserId());
                 }
             }
@@ -16254,6 +16435,7 @@ public class MessagesController extends BaseController implements NotificationCe
         } else {
             getConnectionsManager().cleanup(type == 2);
         }
+        org.telegram.messenger.bot.BotAccountHelper.onLogout(currentAccount);
         getUserConfig().clearConfig();
         SharedPrefsHelper.cleanupAccount(currentAccount);
 
@@ -16292,7 +16474,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void registerForPush(@PushListenerController.PushType int pushType, String regid) {
-        if (TextUtils.isEmpty(regid) || registeringForPush || getUserConfig().getClientUserId() == 0) {
+        if (TextUtils.isEmpty(regid) || registeringForPush || getUserConfig().getClientUserId() == 0 || getUserConfig().isBotAccount()) {
             return;
         }
         if (getUserConfig().registeredForPush && regid.equals(SharedConfig.pushString)) {
@@ -16312,7 +16494,7 @@ public class MessagesController extends BaseController implements NotificationCe
         req.secret = SharedConfig.pushAuthKey;
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             UserConfig userConfig = UserConfig.getInstance(a);
-            if (a != currentAccount && userConfig.isClientActivated()) {
+            if (a != currentAccount && userConfig.isClientActivated() && !userConfig.isBotAccount()) {
                 long uid = userConfig.getClientUserId();
                 req.other_uids.add(uid);
                 if (BuildVars.LOGS_ENABLED) {
@@ -17336,6 +17518,11 @@ public class MessagesController extends BaseController implements NotificationCe
         if (loadingUnreadDialogs || getUserConfig().unreadDialogsLoaded) {
             return;
         }
+        if (getUserConfig().isBotAccount()) {
+            getUserConfig().unreadDialogsLoaded = true;
+            getUserConfig().saveConfig(false);
+            return;
+        }
         loadingUnreadDialogs = true;
         TLRPC.TL_messages_getDialogUnreadMarks req = new TLRPC.TL_messages_getDialogUnreadMarks();
         getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
@@ -17518,6 +17705,10 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public void loadPinnedDialogs(final int folderId, long newDialogId, ArrayList<Long> order) {
         if (loadingPinnedDialogs.indexOfKey(folderId) >= 0 || getUserConfig().isPinnedDialogsLoaded(folderId)) {
+            return;
+        }
+        if (getUserConfig().isBotAccount()) {
+            getUserConfig().setPinnedDialogsLoaded(folderId, true);
             return;
         }
         loadingPinnedDialogs.put(folderId, 1);

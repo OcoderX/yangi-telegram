@@ -199,6 +199,7 @@ import org.telegram.ui.Cells.GraySectionCell;
 import org.telegram.ui.Cells.HeaderCell;
 import org.telegram.ui.Cells.NotificationsCheckCell;
 import org.telegram.ui.Cells.ProfileChannelCell;
+import org.telegram.ui.Cells.RadioColorCell;
 import org.telegram.ui.Cells.SettingsSearchCell;
 import org.telegram.ui.Cells.SettingsSuggestionCell;
 import org.telegram.ui.Cells.ShadowSectionCell;
@@ -483,6 +484,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private boolean loadingUsers;
     private LongSparseArray<TLRPC.ChatParticipant> participantsMap = new LongSparseArray<>();
     private boolean usersEndReached;
+    private int recentParticipantsOffset;
 
     private long banFromGroup;
     private float backwardTransitionFromExtraHeight;
@@ -701,6 +703,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private int membersStartRow;
     private int membersEndRow;
     private int addMemberRow;
+    private int membersFilterRow;
     private int subscribersRow;
     private int subscribersRequestsRow;
     private int administratorsRow;
@@ -727,6 +730,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private final ArrayList<TLRPC.ChatParticipant> visibleChatParticipants = new ArrayList<>();
     private final ArrayList<Integer> visibleSortedUsers = new ArrayList<>();
     private int usersForceShowingIn = 0;
+
+    /* OcoderX-gram: members filter */
+    public static final int MEMBERS_FILTER_ALL = 0;
+    public static final int MEMBERS_FILTER_ADMINS = 1;
+    public static final int MEMBERS_FILTER_BOTS = 2;
+    public static final int MEMBERS_FILTER_CONTACTS = 3;
+    public static final int MEMBERS_FILTER_MUTUAL = 4;
+    public static final int MEMBERS_FILTER_DELETED = 5;
+    public static final int MEMBERS_FILTER_PREMIUM = 6;
+    public static final int MEMBERS_FILTER_NON_PREMIUM = 7;
+    private int membersFilter = MEMBERS_FILTER_ALL;
+    private final HashSet<Integer> requestedMembersFilters = new HashSet<>();
 
     private boolean firstLayout = true;
     private boolean invalidateScroll = true;
@@ -2289,8 +2304,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
         setActionsMode();
 
-        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        // the main tabs bar sits at the top now (see getHeaderOnlyExtraHeight), nothing to reserve below
+        additionNavigationBarHeight = 0;
+        additionFloatingButtonOffset = 0;
 
         return true;
     }
@@ -4442,14 +4458,16 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 ReportBottomSheet.openChat(ProfileActivity.this, getDialogId());
             } else if (position >= membersStartRow && position < membersEndRow) {
                 TLRPC.ChatParticipant participant;
-                if (!sortedUsers.isEmpty()) {
-                    participant = chatInfo.participants.participants.get(sortedUsers.get(position - membersStartRow));
+                if (!visibleSortedUsers.isEmpty()) {
+                    participant = visibleChatParticipants.get(visibleSortedUsers.get(position - membersStartRow));
                 } else {
-                    participant = chatInfo.participants.participants.get(position - membersStartRow);
+                    participant = visibleChatParticipants.get(position - membersStartRow);
                 }
                 onMemberClick(participant, false, view);
             } else if (position == addMemberRow) {
                 openAddMember();
+            } else if (position == membersFilterRow) {
+                showMembersFilterSheet();
             } else if (position == peerIdRow) {
                 copyPeerId();
             } else if (position == usernameRow) {
@@ -4552,9 +4570,17 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             } else if (position == languageRow) {
                 presentFragment(new LanguageSelectActivity());
             } else if (position == setUsernameRow) {
-                presentFragment(new ChangeUsernameActivity());
+                if (getUserConfig().isBotAccount()) {
+                    showBotFatherHint();
+                } else {
+                    presentFragment(new ChangeUsernameActivity());
+                }
             } else if (position == bioRow) {
-                presentFragment(new UserInfoActivity());
+                if (getUserConfig().isBotAccount()) {
+                    showBotFatherHint();
+                } else {
+                    presentFragment(new UserInfoActivity());
+                }
             } else if (position == numberRow) {
                 presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER));
             } else if (position == setAvatarRow) {
@@ -4995,8 +5021,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     return true;
                 } else if (position >= membersStartRow && position < membersEndRow) {
                     final TLRPC.ChatParticipant participant;
-                    if (!sortedUsers.isEmpty()) {
-                        participant = visibleChatParticipants.get(sortedUsers.get(position - membersStartRow));
+                    if (!visibleSortedUsers.isEmpty()) {
+                        participant = visibleChatParticipants.get(visibleSortedUsers.get(position - membersStartRow));
                     } else {
                         participant = visibleChatParticipants.get(position - membersStartRow);
                     }
@@ -6005,10 +6031,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getHeaderOnlyExtraHeight() {
+        // in main tabs mode the tabs bar is drawn right below the action bar, so the profile
+        // header has to start below it
+        final int mainTabs = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
         if (getActionsExtraHeight() == 0) {
-            return dp(168f);
+            return dp(168f) + mainTabs;
         }
-        return dp(152f);
+        return dp(152f) + mainTabs;
     }
 
     private int getActionsExtraHeight() {
@@ -7469,7 +7498,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             o.setScrimViewBackground(listView.getClipBackground(view));
             o.setLongPressSelectionEnabled(false);
             if (position == phoneRow) {
-                if (userInfo != null && userInfo.phone_calls_available) {
+                if (!getUserConfig().isBotAccount() && userInfo != null && userInfo.phone_calls_available) {
                     o.add(R.drawable.msg_calls, getString(R.string.CallViaTelegram), () -> {
                         if (getParentActivity() == null) return;
                         VoIPHelper.startCall(user, false, userInfo != null && userInfo.video_calls_available, getParentActivity(), userInfo, getAccountInstance());
@@ -7698,6 +7727,202 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         });
     }
 
+    /* OcoderX-gram: members filter */
+    public static boolean matchesMembersFilter(int currentAccount, int filter, TLRPC.ChatParticipant participant) {
+        if (filter == MEMBERS_FILTER_ALL) {
+            return true;
+        }
+        if (participant == null) {
+            return false;
+        }
+        if (filter == MEMBERS_FILTER_ADMINS) {
+            if (participant instanceof TLRPC.TL_chatChannelParticipant) {
+                final TLRPC.ChannelParticipant channelParticipant = ((TLRPC.TL_chatChannelParticipant) participant).channelParticipant;
+                return channelParticipant instanceof TLRPC.TL_channelParticipantAdmin || channelParticipant instanceof TLRPC.TL_channelParticipantCreator;
+            }
+            return participant instanceof TLRPC.TL_chatParticipantAdmin || participant instanceof TLRPC.TL_chatParticipantCreator;
+        }
+        final TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(participant.user_id);
+        if (user == null) {
+            return false;
+        }
+        switch (filter) {
+            case MEMBERS_FILTER_BOTS:
+                return user.bot;
+            case MEMBERS_FILTER_CONTACTS:
+                return user.contact;
+            case MEMBERS_FILTER_MUTUAL:
+                return user.mutual_contact;
+            case MEMBERS_FILTER_DELETED:
+                return user.deleted;
+            case MEMBERS_FILTER_PREMIUM:
+                return user.premium;
+            case MEMBERS_FILTER_NON_PREMIUM:
+                return !user.premium && !user.bot && !user.deleted;
+        }
+        return true;
+    }
+
+    public static String getMembersFilterName(int filter) {
+        switch (filter) {
+            case MEMBERS_FILTER_ADMINS:
+                return LocaleController.getString(R.string.OxMembersFilterAdmins);
+            case MEMBERS_FILTER_BOTS:
+                return LocaleController.getString(R.string.OxMembersFilterBots);
+            case MEMBERS_FILTER_CONTACTS:
+                return LocaleController.getString(R.string.OxMembersFilterContacts);
+            case MEMBERS_FILTER_MUTUAL:
+                return LocaleController.getString(R.string.OxMembersFilterMutual);
+            case MEMBERS_FILTER_DELETED:
+                return LocaleController.getString(R.string.OxMembersFilterDeleted);
+            case MEMBERS_FILTER_PREMIUM:
+                return LocaleController.getString(R.string.OxMembersFilterPremium);
+            case MEMBERS_FILTER_NON_PREMIUM:
+                return LocaleController.getString(R.string.OxMembersFilterNonPremium);
+            default:
+                return LocaleController.getString(R.string.OxMembersFilterAll);
+        }
+    }
+
+    private ArrayList<Integer> getFilteredMemberIndices() {
+        final ArrayList<Integer> result = new ArrayList<>();
+        if (chatInfo == null || chatInfo.participants == null || chatInfo.participants.participants == null) {
+            return result;
+        }
+        final ArrayList<TLRPC.ChatParticipant> participants = chatInfo.participants.participants;
+        if (sortedUsers != null && !sortedUsers.isEmpty()) {
+            for (int a = 0; a < sortedUsers.size(); a++) {
+                final int index = sortedUsers.get(a);
+                if (index < 0 || index >= participants.size()) {
+                    continue;
+                }
+                if (matchesMembersFilter(currentAccount, membersFilter, participants.get(index))) {
+                    result.add(index);
+                }
+            }
+        } else {
+            for (int a = 0; a < participants.size(); a++) {
+                if (matchesMembersFilter(currentAccount, membersFilter, participants.get(a))) {
+                    result.add(a);
+                }
+            }
+        }
+        return result;
+    }
+
+    private void showMembersFilterSheet() {
+        final Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        final int[] values = new int[]{
+                MEMBERS_FILTER_ALL,
+                MEMBERS_FILTER_ADMINS,
+                MEMBERS_FILTER_BOTS,
+                MEMBERS_FILTER_CONTACTS,
+                MEMBERS_FILTER_MUTUAL,
+                MEMBERS_FILTER_DELETED,
+                MEMBERS_FILTER_PREMIUM,
+                MEMBERS_FILTER_NON_PREMIUM
+        };
+        final BottomSheet[] sheet = new BottomSheet[1];
+        final LinearLayout linearLayout = new LinearLayout(context);
+        linearLayout.setOrientation(LinearLayout.VERTICAL);
+        for (int a = 0; a < values.length; a++) {
+            final int value = values[a];
+            final RadioColorCell cell = new RadioColorCell(context, resourcesProvider);
+            cell.setPadding(AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4), 0);
+            cell.setCheckColor(getThemedColor(Theme.key_radioBackground), getThemedColor(Theme.key_dialogRadioBackgroundChecked));
+            cell.setTextAndValue(getMembersFilterName(value), membersFilter == value);
+            cell.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 2));
+            linearLayout.addView(cell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 50));
+            cell.setOnClickListener(v -> {
+                if (sheet[0] != null) {
+                    sheet[0].dismiss();
+                }
+                setMembersFilter(value);
+            });
+        }
+        final BottomSheet.Builder builder = new BottomSheet.Builder(context, false, resourcesProvider);
+        builder.setTitle(LocaleController.getString(R.string.OxMembersFilter), false);
+        builder.setCustomView(linearLayout);
+        sheet[0] = builder.create();
+        showDialog(sheet[0]);
+    }
+
+    private void setMembersFilter(int filter) {
+        if (membersFilter == filter) {
+            return;
+        }
+        membersFilter = filter;
+        if (sharedMediaLayout != null) {
+            sharedMediaLayout.setMembersFilter(filter);
+        }
+        loadMembersFilterFromServer(filter);
+        updateListAnimated(false);
+    }
+
+    private void loadMembersFilterFromServer(int filter) {
+        if (chatInfo == null || chatId == 0 || currentChat == null || participantsMap == null || !ChatObject.isChannel(currentChat)) {
+            return;
+        }
+        final TLRPC.ChannelParticipantsFilter participantsFilter;
+        if (filter == MEMBERS_FILTER_ADMINS) {
+            participantsFilter = new TLRPC.TL_channelParticipantsAdmins();
+        } else if (filter == MEMBERS_FILTER_BOTS) {
+            participantsFilter = new TLRPC.TL_channelParticipantsBots();
+        } else if (filter == MEMBERS_FILTER_CONTACTS) {
+            final TLRPC.TL_channelParticipantsContacts contacts = new TLRPC.TL_channelParticipantsContacts();
+            contacts.q = "";
+            participantsFilter = contacts;
+        } else {
+            return;
+        }
+        if (!requestedMembersFilters.add(filter)) {
+            return;
+        }
+        final TLRPC.TL_channels_getParticipants req = new TLRPC.TL_channels_getParticipants();
+        req.channel = getMessagesController().getInputChannel(chatId);
+        req.filter = participantsFilter;
+        req.offset = 0;
+        req.limit = 200;
+        final int reqId = getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+            if (!(response instanceof TLRPC.TL_channels_channelParticipants)) {
+                requestedMembersFilters.remove(filter);
+                return;
+            }
+            final TLRPC.TL_channels_channelParticipants res = (TLRPC.TL_channels_channelParticipants) response;
+            getMessagesController().putUsers(res.users, false);
+            getMessagesController().putChats(res.chats, false);
+            if (chatInfo == null || participantsMap == null) {
+                return;
+            }
+            if (chatInfo.participants == null) {
+                chatInfo.participants = new TLRPC.TL_chatParticipants();
+            }
+            boolean added = false;
+            for (int a = 0; a < res.participants.size(); a++) {
+                final TLRPC.TL_chatChannelParticipant participant = new TLRPC.TL_chatChannelParticipant();
+                participant.channelParticipant = res.participants.get(a);
+                participant.inviter_id = participant.channelParticipant.inviter_id;
+                participant.user_id = MessageObject.getPeerId(participant.channelParticipant.peer);
+                participant.date = participant.channelParticipant.date;
+                if (participant.user_id == 0) {
+                    continue;
+                }
+                if (participantsMap.indexOfKey(participant.user_id) < 0) {
+                    chatInfo.participants.participants.add(participant);
+                    participantsMap.put(participant.user_id, participant);
+                    added = true;
+                }
+            }
+            if (added) {
+                updateListAnimated(true);
+            }
+        }));
+        getConnectionsManager().bindRequestToGuid(reqId, classGuid);
+    }
+
     private void getChannelParticipants(boolean reload) {
         if (loadingUsers || participantsMap == null || chatInfo == null) {
             return;
@@ -7708,7 +7933,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         final TLRPC.TL_channels_getParticipants req = new TLRPC.TL_channels_getParticipants();
         req.channel = getMessagesController().getInputChannel(chatId);
         req.filter = new TLRPC.TL_channelParticipantsRecent();
-        req.offset = reload ? 0 : participantsMap.size();
+        req.offset = reload ? 0 : recentParticipantsOffset;
         req.limit = 200;
         int reqId = getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> getNotificationCenter().doOnIdle(() -> {
             if (error == null) {
@@ -7720,10 +7945,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 }
                 if (req.offset == 0) {
                     participantsMap.clear();
+                    recentParticipantsOffset = 0;
+                    requestedMembersFilters.clear();
                     chatInfo.participants = new TLRPC.TL_chatParticipants();
                     getMessagesStorage().putUsersAndChats(res.users, res.chats, true, true);
                     getMessagesStorage().updateChannelUsers(chatId, res.participants);
                 }
+                recentParticipantsOffset += res.participants.size();
                 for (int a = 0; a < res.participants.size(); a++) {
                     TLRPC.TL_chatChannelParticipant participant = new TLRPC.TL_chatChannelParticipant();
                     participant.channelParticipant = res.participants.get(a);
@@ -10480,6 +10708,22 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         return chatId != 0;
     }
 
+    /**
+     * A bot cannot edit its own name, username, description or photo through the account API;
+     * all of that is done in @BotFather, so point there instead of failing silently.
+     */
+    private void showBotFatherHint() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
+        builder.setTitle(getString(R.string.AyuBotAccount));
+        builder.setMessage(getString(R.string.AyuBotFatherHint));
+        builder.setPositiveButton(getString(R.string.AyuBotFatherOpen), (dialog, which) -> getMessagesController().openByUserName("BotFather", ProfileActivity.this, 1));
+        builder.setNegativeButton(getString(R.string.Cancel), null);
+        showDialog(builder.create());
+    }
+
     private void updateRowsIds() {
         updateNotifications(false);
 
@@ -10581,6 +10825,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         membersStartRow = -1;
         membersEndRow = -1;
         addMemberRow = -1;
+        membersFilterRow = -1;
         subscribersRow = -1;
         subscribersRequestsRow = -1;
         administratorsRow = -1;
@@ -10653,12 +10898,16 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             }
 
             if (UserObject.isUserSelf(user) && !myProfile) {
-                if (avatarBig == null && (user.photo == null || !(user.photo.photo_big instanceof TLRPC.TL_fileLocation_layer97) && !(user.photo.photo_big instanceof TLRPC.TL_fileLocationToBeDeprecated)) && (avatarsViewPager == null || avatarsViewPager.getRealCount() == 0)) {
+                final boolean botSelf = getUserConfig().isBotAccount();
+                if (!botSelf && avatarBig == null && (user.photo == null || !(user.photo.photo_big instanceof TLRPC.TL_fileLocation_layer97) && !(user.photo.photo_big instanceof TLRPC.TL_fileLocationToBeDeprecated)) && (avatarsViewPager == null || avatarsViewPager.getRealCount() == 0)) {
                     setAvatarRow = rowCount++;
                     setAvatarSectionRow = rowCount++;
                 }
                 numberSectionRow = rowCount++;
-                numberRow = rowCount++;
+                if (!botSelf) {
+                    // a bot has no phone number
+                    numberRow = rowCount++;
+                }
                 setUsernameRow = rowCount++;
                 bioRow = rowCount++;
                 if (AyuConfig.showPeerId) {
@@ -10692,7 +10941,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 dataRow = rowCount++;
                 liteModeRow = rowCount++;
 //                stickersRow = rowCount++;
-                if (getMessagesController().filtersEnabled || !getMessagesController().dialogFilters.isEmpty()) {
+                if (!botAccount && (getMessagesController().filtersEnabled || !getMessagesController().dialogFilters.isEmpty())) {
                     filtersRow = rowCount++;
                 }
                 if (!botAccount) {
@@ -11005,31 +11254,34 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     if (!ChatObject.isNotInChat(currentChat) && ChatObject.canAddUsers(currentChat) && chatInfo.participants_count < getMessagesController().maxMegagroupCount) {
                         addMemberRow = rowCount++;
                     }
+                    membersFilterRow = rowCount++;
                     int count = chatInfo.participants.participants.size();
                     if ((count <= 5 || !hasMedia || usersForceShowingIn == 1) && usersForceShowingIn != 2) {
                         if (addMemberRow == -1 && actionsView == null) {
                             membersHeaderRow = rowCount++;
                         }
+                        visibleChatParticipants.addAll(chatInfo.participants.participants);
+                        if (membersFilter != MEMBERS_FILTER_ALL) {
+                            visibleSortedUsers.addAll(getFilteredMemberIndices());
+                            count = visibleSortedUsers.size();
+                        } else if (sortedUsers != null) {
+                            visibleSortedUsers.addAll(sortedUsers);
+                        }
                         membersStartRow = rowCount;
                         rowCount += count;
                         membersEndRow = rowCount;
                         membersSectionRow = rowCount++;
-                        visibleChatParticipants.addAll(chatInfo.participants.participants);
-                        if (sortedUsers != null) {
-                            visibleSortedUsers.addAll(sortedUsers);
-                        }
                         usersForceShowingIn = 1;
                         if (sharedMediaLayout != null) {
                             sharedMediaLayout.setChatUsers(null, null);
                         }
                     } else {
-                        if (addMemberRow != -1) {
-                            membersSectionRow = rowCount++;
-                        }
+                        membersSectionRow = rowCount++;
                         if (sharedMediaLayout != null) {
                             if (!sortedUsers.isEmpty()) {
                                 usersForceShowingIn = 2;
                             }
+                            sharedMediaLayout.setMembersFilter(membersFilter);
                             sharedMediaLayout.setChatUsers(sortedUsers, chatInfo);
                         }
                     }
@@ -11059,27 +11311,30 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     if (ChatObject.canAddUsers(currentChat) || currentChat.default_banned_rights == null || !currentChat.default_banned_rights.invite_users) {
                         addMemberRow = rowCount++;
                     }
+                    membersFilterRow = rowCount++;
                     int count = chatInfo.participants.participants.size();
                     if (count <= 5 || !hasMedia) {
                         if (addMemberRow == -1 && actionsView == null) {
                             membersHeaderRow = rowCount++;
                         }
-                        membersStartRow = rowCount;
-                        rowCount += chatInfo.participants.participants.size();
-                        membersEndRow = rowCount;
-                        membersSectionRow = rowCount++;
                         visibleChatParticipants.addAll(chatInfo.participants.participants);
-                        if (sortedUsers != null) {
+                        if (membersFilter != MEMBERS_FILTER_ALL) {
+                            visibleSortedUsers.addAll(getFilteredMemberIndices());
+                            count = visibleSortedUsers.size();
+                        } else if (sortedUsers != null) {
                             visibleSortedUsers.addAll(sortedUsers);
                         }
+                        membersStartRow = rowCount;
+                        rowCount += count;
+                        membersEndRow = rowCount;
+                        membersSectionRow = rowCount++;
                         if (sharedMediaLayout != null) {
                             sharedMediaLayout.setChatUsers(null, null);
                         }
                     } else {
-                        if (addMemberRow != -1) {
-                            membersSectionRow = rowCount++;
-                        }
+                        membersSectionRow = rowCount++;
                         if (sharedMediaLayout != null) {
+                            sharedMediaLayout.setMembersFilter(membersFilter);
                             sharedMediaLayout.setChatUsers(sortedUsers, chatInfo);
                         }
                     }
@@ -12186,7 +12441,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     editItemVisible = true;
                 }
 
-                if (userInfo != null && userInfo.phone_calls_available) {
+                if (!getUserConfig().isBotAccount() && userInfo != null && userInfo.phone_calls_available) {
                     callItemVisible = true;
                     videoCallItemVisible = userInfo.video_calls_available;
                 }
@@ -13869,7 +14124,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     } else if (position == addMemberRow) {
                         textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
                         boolean isNextPositionMember = position + 1 >= membersStartRow && position + 1 < membersEndRow;
-                        textCell.setTextAndIcon(LocaleController.getString(R.string.AddMember), R.drawable.msg_contact_add, membersSectionRow == -1 || isNextPositionMember);
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.AddMember), R.drawable.msg_contact_add, membersSectionRow == -1 || isNextPositionMember || position + 1 == membersFilterRow);
+                    } else if (position == membersFilterRow) {
+                        textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
+                        boolean lastInSection = membersSectionRow != -1 && position + 1 == membersSectionRow;
+                        textCell.setTextAndValueAndIcon(LocaleController.getString(R.string.OxMembersFilter), getMembersFilterName(membersFilter), R.drawable.outline_groups_24, !lastInSection);
                     } else if (position == sendMessageRow) {
                         textCell.setText(LocaleController.getString(R.string.SendMessageLocation), true);
                     } else if (position == addToContactsRow) {
@@ -14386,7 +14645,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 return VIEW_TYPE_ABOUT_LINK;
             } else if (position == settingsTimerRow || position == settingsKeyRow || position == reportRow || position == reportReactionRow || position == deleteReactionRow ||
                     position == subscribersRow || position == subscribersRequestsRow || position == administratorsRow || position == settingsRow || position == blockedUsersRow ||
-                    position == addMemberRow || position == joinRow || position == unblockRow ||
+                    position == addMemberRow || position == membersFilterRow || position == joinRow || position == unblockRow ||
                     position == sendMessageRow || position == notificationRow || position == privacyRow ||
                     position == languageRow || position == dataRow || position == chatRow ||
                     position == questionRow || position == devicesRow || position == filtersRow || position == stickersRow ||
@@ -15708,7 +15967,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         oldItem = oldChatParticipant.get(oldItemPosition - oldMembersStartRow);
                     }
 
-                    if (!sortedUsers.isEmpty()) {
+                    if (!visibleSortedUsers.isEmpty()) {
                         newItem = visibleChatParticipants.get(visibleSortedUsers.get(newItemPosition - membersStartRow));
                     } else {
                         newItem = visibleChatParticipants.get(newItemPosition - membersStartRow);
@@ -15799,6 +16058,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             put(++pointer, secretSettingsSectionRow, sparseIntArray);
             put(++pointer, membersHeaderRow, sparseIntArray);
             put(++pointer, addMemberRow, sparseIntArray);
+            put(++pointer, membersFilterRow, sparseIntArray);
             put(++pointer, subscribersRow, sparseIntArray);
             put(++pointer, subscribersRequestsRow, sparseIntArray);
             put(++pointer, administratorsRow, sparseIntArray);
@@ -16998,8 +17258,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
 
         final int additionalList = dp(48);
-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
+        final int mainTabTop = actionBar.getMeasuredHeight();
+        final int mainTabBottom = mainTabTop + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
 
         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);

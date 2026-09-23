@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX-gram: main menu labels -->
+    <string name="OxMenuScreenLight">Screen Light</string>
+    <string name="OxMenuIdFinder">ID Finder</string>
+
+    <!-- OcoderX-gram: Screen Light -->
+    <string name="OxToolsScreenLightBrightness">Brightness</string>
+
+    <!-- OcoderX-gram: ID Finder -->
+    <string name="OxToolsIdFinderTitle">ID Finder</string>
+    <string name="OxToolsIdFinderHint">@username, phone or t.me link</string>
+    <string name="OxToolsIdFinderFind">Find</string>
+    <string name="OxToolsIdFinderPickChat">Pick a chat</string>
+    <string name="OxToolsIdFinderMyId">My ID</string>
+    <string name="OxToolsIdFinderResult">Result</string>
+    <string name="OxToolsIdFinderRecent">Recent</string>
+    <string name="OxToolsIdFinderNotFound">Not found</string>
+    <string name="OxToolsIdFinderCopyHint">Tap any value to copy it.</string>
+
+    <string name="OxToolsResultType">Type</string>
+    <string name="OxToolsResultId">ID</string>
+    <string name="OxToolsResultChatId">Chat ID</string>
+    <string name="OxToolsResultUsername">Username</string>
+    <string name="OxToolsResultDc">Data center</string>
+
+    <string name="OxToolsTypeUser">User</string>
+    <string name="OxToolsTypeBot">Bot</string>
+    <string name="OxToolsTypeGroup">Group</string>
+    <string name="OxToolsTypeSupergroup">Supergroup</string>
+    <string name="OxToolsTypeChannel">Channel</string>
+
+    <string name="OxToolsCopied">Copied</string>
+</resources>

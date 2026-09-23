@@ -936,6 +936,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private ImageView mirrorItem;
     private ImageView rotateItem;
     private ImageView tuneItem;
+    // OcoderX: send gallery video as a round video note
+    private ImageView roundVideoItem;
+    private Object roundVideoModeEntry;
+    private int roundVideoSavedCaptionVisibility = -1;
+    private int roundVideoSavedTopCaptionVisibility = -1;
+    private static final long OX_ROUND_VIDEO_MAX_DURATION_MS = 60_000L;
+    private static final long OX_ROUND_VIDEO_MAX_SIZE = 20L * 1024L * 1024L;
     private MuteDrawable muteDrawable;
     private ImageView muteButton;
     private LivePhotoButton livePhotoButton;
@@ -7537,6 +7544,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         pickerView.addView(itemsLayout, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 48, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0, 3, 63, 0));
 
+        // OcoderX: round video (video note) toggle, far left of the editor toolbar
+        roundVideoItem = new ImageView(parentActivity);
+        roundVideoItem.setScaleType(ImageView.ScaleType.CENTER);
+        roundVideoItem.setImageResource(R.drawable.ox_round_video);
+        roundVideoItem.setBackground(Theme.createInsetRoundRectDrawable(0x10FFFFFF, dp(22), dp(4), dp(6)));
+        roundVideoItem.setContentDescription(getString(R.string.OxRoundVideoHint));
+        roundVideoItem.setVisibility(View.GONE);
+        itemsLayout.addView(roundVideoItem, LayoutHelper.createLinear(48, 48));
+        roundVideoItem.setOnClickListener(v -> toggleRoundVideoMode());
+
         cropItem = new ImageView(parentActivity);
         cropItem.setScaleType(ImageView.ScaleType.CENTER);
         cropItem.setImageResource(R.drawable.media_crop);
@@ -8083,10 +8100,19 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 }
             }
             VideoEditedInfo videoEditedInfo = getCurrentVideoEditedInfo();
+            // OcoderX: round videos are limited to 20 MB and cannot carry a caption
+            if (videoEditedInfo != null && videoEditedInfo.roundVideo && videoEditedInfo.estimatedSize > OX_ROUND_VIDEO_MAX_SIZE) {
+                showRoundVideoTooBigAlert();
+                return;
+            }
             if (!imagesArrLocals.isEmpty() && currentIndex >= 0 && currentIndex < imagesArrLocals.size()) {
                 Object entry = imagesArrLocals.get(currentIndex);
                 if (entry instanceof MediaController.MediaEditState) {
                     ((MediaController.MediaEditState) entry).editedInfo = videoEditedInfo;
+                    if (videoEditedInfo != null && videoEditedInfo.roundVideo) {
+                        ((MediaController.MediaEditState) entry).caption = null;
+                        ((MediaController.MediaEditState) entry).entities = null;
+                    }
                 }
             }
             if (parentChatActivity != null && parentChatActivity.getCurrentChat() != null) {
@@ -9722,6 +9748,198 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         return result;
     }
 
+    // region OcoderX: round video (video note) from gallery
+    private boolean canSendAsRoundVideo(Object object) {
+        if (!(object instanceof MediaController.PhotoEntry)) {
+            return false;
+        }
+        if (placeProvider == null || parentChatActivity == null) {
+            return false;
+        }
+        if (setAvatarFor != null || isDocumentsPicker || parentChatActivity.editingMessageObject != null) {
+            return false;
+        }
+        if (sendPhotoTypeIsGif || sendPhotoTypeIsPollMedia || sendPhotoTypeIsPollMediaEdit) {
+            return false;
+        }
+        if (sendPhotoType != 0 && sendPhotoType != 2) {
+            return false;
+        }
+        final MediaController.PhotoEntry entry = (MediaController.PhotoEntry) object;
+        if (!entry.isVideo || entry.isLivePhoto()) {
+            return false;
+        }
+        if (entry.path != null && entry.path.toLowerCase().endsWith(".gif")) {
+            return false;
+        }
+        return true;
+    }
+
+    private Object getCurrentLocalEntry() {
+        if (imagesArrLocals.isEmpty() || currentIndex < 0 || currentIndex >= imagesArrLocals.size()) {
+            return null;
+        }
+        return imagesArrLocals.get(currentIndex);
+    }
+
+    private boolean isRoundVideoMode() {
+        final Object object = getCurrentLocalEntry();
+        return object != null && object == roundVideoModeEntry && videoConvertSupported && canSendAsRoundVideo(object);
+    }
+
+    private void toggleRoundVideoMode() {
+        if (roundVideoItem == null || roundVideoItem.getVisibility() != View.VISIBLE || isCaptionOpen()) {
+            return;
+        }
+        if (!videoConvertSupported || compressionsCount == 0) {
+            return;
+        }
+        final Object object = getCurrentLocalEntry();
+        if (!canSendAsRoundVideo(object)) {
+            return;
+        }
+        final boolean enable = object != roundVideoModeEntry;
+        roundVideoModeEntry = enable ? object : null;
+        if (enable && object instanceof MediaController.MediaEditState) {
+            // round videos cannot carry a caption
+            ((MediaController.MediaEditState) object).caption = null;
+            ((MediaController.MediaEditState) object).entities = null;
+            try {
+                if (captionEdit != null) {
+                    captionEdit.setText("");
+                }
+                if (topCaptionEdit != null) {
+                    topCaptionEdit.setText("");
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+        // keep the stored edit state in sync so the flag survives closing/reopening the editor
+        if (object instanceof MediaController.MediaEditState) {
+            ((MediaController.MediaEditState) object).editedInfo = getCurrentVideoEditedInfo();
+        }
+        updateRoundVideoItem(currentIndex);
+        if (enable && containerView != null) {
+            if (estimatedDuration > OX_ROUND_VIDEO_MAX_DURATION_MS) {
+                BulletinFactory.of(containerView, resourcesProvider).createErrorBulletin(getString(R.string.OxRoundVideoTrimmed)).show();
+            } else {
+                Drawable icon = null;
+                try {
+                    icon = containerView.getContext().getResources().getDrawable(R.drawable.ox_round_video);
+                } catch (Exception ignore) {}
+                if (icon != null) {
+                    BulletinFactory.of(containerView, resourcesProvider).createSimpleBulletin(icon, getString(R.string.OxRoundVideoHint)).show();
+                }
+            }
+        }
+    }
+
+    private void updateRoundVideoItem(int index) {
+        if (roundVideoItem == null) {
+            return;
+        }
+        final Object object = index >= 0 && index < imagesArrLocals.size() ? imagesArrLocals.get(index) : null;
+        final boolean available = canSendAsRoundVideo(object);
+        if (!available && object != null && object == roundVideoModeEntry) {
+            roundVideoModeEntry = null;
+        }
+        if (available && object != roundVideoModeEntry && object instanceof MediaController.MediaEditState) {
+            // restore the flag of an entry that was already marked as a round video
+            final VideoEditedInfo storedInfo = ((MediaController.MediaEditState) object).editedInfo;
+            if (storedInfo != null && storedInfo.roundVideo) {
+                roundVideoModeEntry = object;
+            }
+        }
+        roundVideoItem.setVisibility(available ? View.VISIBLE : View.GONE);
+        final boolean on = available && object == roundVideoModeEntry;
+        roundVideoItem.setColorFilter(on ? new PorterDuffColorFilter(getThemedColor(Theme.key_chat_editMediaButton), PorterDuff.Mode.MULTIPLY) : null);
+        // captions are not supported for round videos
+        if (on) {
+            if (captionEdit != null && roundVideoSavedCaptionVisibility == -1) {
+                roundVideoSavedCaptionVisibility = captionEdit.getVisibility();
+                captionEdit.setVisibility(View.GONE);
+            }
+            if (topCaptionEdit != null && roundVideoSavedTopCaptionVisibility == -1) {
+                roundVideoSavedTopCaptionVisibility = topCaptionEdit.getVisibility();
+                topCaptionEdit.setVisibility(View.GONE);
+            }
+        } else {
+            if (captionEdit != null && roundVideoSavedCaptionVisibility != -1) {
+                captionEdit.setVisibility(roundVideoSavedCaptionVisibility);
+            }
+            if (topCaptionEdit != null && roundVideoSavedTopCaptionVisibility != -1) {
+                topCaptionEdit.setVisibility(roundVideoSavedTopCaptionVisibility);
+            }
+            roundVideoSavedCaptionVisibility = -1;
+            roundVideoSavedTopCaptionVisibility = -1;
+        }
+    }
+
+    /**
+     * Turns the already prepared {@link VideoEditedInfo} into a square video note:
+     * 1:1 centered crop (through the regular cropState machinery), 60s limit, round attribute.
+     */
+    private void applyRoundVideoInfo(VideoEditedInfo videoEditedInfo) {
+        if (videoEditedInfo == null) {
+            return;
+        }
+        videoEditedInfo.roundVideo = true;
+
+        final int baseSize = Math.max(240, MessagesController.getInstance(currentAccount).roundVideoSize);
+        final int minOriginalSide = Math.min(videoEditedInfo.originalWidth, videoEditedInfo.originalHeight);
+        final int size = minOriginalSide >= 1080 ? Math.max(baseSize, 640) : baseSize;
+
+        MediaController.CropState cropState = videoEditedInfo.cropState;
+        if (cropState == null) {
+            cropState = new MediaController.CropState();
+            videoEditedInfo.cropState = cropState;
+        } else {
+            // never mutate the crop the user configured in the editor
+            cropState = cropState.clone();
+            videoEditedInfo.cropState = cropState;
+        }
+        cropState.useMatrix = null;
+        cropState.freeform = false;
+        cropState.lockedAspectRatio = 1f;
+        final float cropWidth = Math.max(1, videoEditedInfo.resultWidth * cropState.cropPw);
+        final float cropHeight = Math.max(1, videoEditedInfo.resultHeight * cropState.cropPh);
+        final float side = Math.min(cropWidth, cropHeight);
+        cropState.cropPw = side / videoEditedInfo.resultWidth;
+        cropState.cropPh = side / videoEditedInfo.resultHeight;
+        cropState.transformWidth = cropState.transformHeight = size;
+
+        videoEditedInfo.bitrate = videoEditedInfo.muted ? -1 : MessagesController.getInstance(currentAccount).roundVideoBitrate * 1024 * (size > 384 ? 2 : 1);
+
+        final long maxDurationUs = OX_ROUND_VIDEO_MAX_DURATION_MS * 1000L;
+        final long start = Math.max(0, videoEditedInfo.startTime);
+        long end = videoEditedInfo.endTime > 0 ? videoEditedInfo.endTime : videoEditedInfo.originalDuration;
+        if (end <= start) {
+            end = start + maxDurationUs;
+        }
+        if (end - start > maxDurationUs) {
+            end = start + maxDurationUs;
+            videoEditedInfo.endTime = end;
+        }
+        videoEditedInfo.estimatedDuration = (end - start) / 1000L;
+
+        final int videoBitrate = videoEditedInfo.bitrate > 0 ? videoEditedInfo.bitrate : 921600;
+        final long audioSize = videoEditedInfo.muted ? 0 : (long) (videoEditedInfo.estimatedDuration / 1000.0f * 16384);
+        videoEditedInfo.estimatedSize = Math.max(1, (long) (audioSize + videoEditedInfo.estimatedDuration / 1000.0f * videoBitrate / 8));
+    }
+
+    private void showRoundVideoTooBigAlert() {
+        if (containerView == null) {
+            return;
+        }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(containerView.getContext());
+        builder.setTitle(getString(R.string.OxRoundVideo));
+        builder.setMessage(getString(R.string.OxRoundVideoTooBig));
+        builder.setPositiveButton(getString(R.string.OK), null);
+        builder.show();
+    }
+    // endregion
+
     private VideoEditedInfo getCurrentVideoEditedInfo() {
         if (!isCurrentVideo && hasAnimatedMediaEntities() && centerImage.getBitmapWidth() > 0) {
             float maxSize = 854;
@@ -9864,6 +10082,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             videoEditedInfo.originalBitrate = originalBitrate;
         }
         videoEditedInfo.muted = muteVideo || sendPhotoType == SELECT_TYPE_AVATAR;
+        if (isRoundVideoMode()) {
+            applyRoundVideoInfo(videoEditedInfo);
+        }
         return videoEditedInfo;
     }
 
@@ -12366,7 +12587,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
                     final Bitmap bitmap = centerImage.getBitmap();
                     if (bitmap != null || isCurrentVideo) {
-                        photoCropView.setBitmap(bitmap, centerImage.getOrientation(), sendPhotoType != SELECT_TYPE_AVATAR, false, paintingOverlay, cropTransform, isCurrentVideo ? (VideoEditTextureView) videoTextureView : null, editState.cropState);
+                        // OcoderX: round video mode uses the avatar-style locked 1:1 circular crop
+                        photoCropView.setBitmap(bitmap, centerImage.getOrientation(), sendPhotoType != SELECT_TYPE_AVATAR && !isRoundVideoMode(), false, paintingOverlay, cropTransform, isCurrentVideo ? (VideoEditTextureView) videoTextureView : null, editState.cropState);
                         photoCropView.onDisappear();
                         int bitmapWidth = centerImage.getBitmapWidth();
                         int bitmapHeight = centerImage.getBitmapHeight();
@@ -14019,6 +14241,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         cropItem.setVisibility(View.GONE);
         tuneItem.setVisibility(View.GONE);
         tuneItem.setTag(null);
+        if (roundVideoItem != null) {
+            roundVideoItem.setVisibility(View.GONE);
+        }
         captionEdit.setTimerVisible(false, false);
         captionEdit.setShowMoveButtonVisible(false, false);
         topCaptionEdit.setTimerVisible(false, false);
@@ -15204,6 +15429,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             menuItem.hideSubItem(gallery_menu_translate);
             menuItem.hideSubItem(gallery_menu_hide_translation);
         }
+        updateRoundVideoItem(index);
         fancyShadows = editing && setAvatarFor == null || sendPhotoType == SELECT_TYPE_STICKER;
         actionBar.setBackgroundColor(sendPhotoTypeIsPollMedia || fancyShadows || setAvatarFor != null ? 0 : Theme.ACTION_BAR_PHOTO_VIEWER_COLOR);
         checkActionBarStyle();
@@ -18691,6 +18917,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         sendPhotoTypeIsPollMedia = false;
         sendPhotoTypeIsPollMediaEdit = false;
         isDocumentsPicker = false;
+        roundVideoModeEntry = null;
+        roundVideoSavedCaptionVisibility = -1;
+        roundVideoSavedTopCaptionVisibility = -1;
         if (currentThumb != null) {
             currentThumb.release();
             currentThumb = null;
@@ -21687,6 +21916,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
                     updateVideoInfo();
                     updateMuteButton();
+                    updateRoundVideoItem(currentIndex);
                 });
             }
         });

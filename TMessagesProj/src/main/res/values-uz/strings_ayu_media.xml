@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OcoderX: galereyadagi videoni yumaloq video sifatida yuborish -->
+    <string name="OxRoundVideo">Yumaloq video</string>
+    <string name="OxRoundVideoHint">Yumaloq video sifatida yuborish</string>
+    <string name="OxRoundVideoTooBig">Yumaloq video hajmi 20 MB dan kichik bo\'lishi kerak. Hajmni kamaytirish uchun video sifatini yoki davomiyligini o\'zgartiring.</string>
+    <string name="OxRoundVideoTrimmed">Yumaloq video 60 soniyadan oshmasligi kerak, video qisqartirildi.</string>
+</resources>

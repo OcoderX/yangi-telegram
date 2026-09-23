@@ -20,6 +20,7 @@
     <string name="AyuDrawerKeepAlive">Фоновая служба</string>
     <string name="AyuDrawerFileExplorer">Файловый менеджер</string>
     <string name="AyuDrawerDuplicates">Очистка дубликатов</string>
-    <string name="AyuDrawerSync">AyuSync</string>
+    <string name="AyuDrawerSync">OcoderX-sync</string>
     <string name="AyuDrawerAllSettings">Все настройки OcoderX</string>
+    <string name="OxMenuDownloadManager">Менеджер загрузок</string>
 </resources>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    OcoderX "Onlayn kontaktlar", "Maxsus kontaktlar" va "Kontakt kuzatuvchi" uchun uzbek (lotin) satrlar.
+-->
+<resources>
+    <!-- ekran sarlavhalari -->
+    <string name="OxContactsOnlineTitle">Onlayn kontaktlar</string>
+    <string name="OxContactsSpecialTitle">Maxsus kontaktlar</string>
+    <string name="OxContactsTrackerTitle">Kontakt kuzatuvchi</string>
+
+    <!-- onlayn kontaktlar -->
+    <string name="OxContactsOnlineOfTotal">%1$d ta onlayn, jami %2$d kontakt</string>
+    <string name="OxContactsOnlineEmpty">Hozir kontaktlaringizdan hech kim onlayn emas.</string>
+    <string name="OxContactsOnline">Onlayn</string>
+    <string name="OxContactsOffline">Oflayn</string>
+    <string name="OxContactsOpenProfile">Profilni ochish</string>
+    <string name="OxContactsMarkSpecial">Maxsus kontakt qilish</string>
+    <string name="OxContactsUnmarkSpecial">Maxsus kontaktlardan olib tashlash</string>
+    <string name="OxContactsAddedToSpecial">%1$s maxsus kontaktlarga qo\'shildi</string>
+    <string name="OxContactsRemovedFromSpecial">%1$s maxsus kontaktlardan olib tashlandi</string>
+
+    <!-- maxsus kontaktlar -->
+    <string name="OxContactsSpecialHeader">Maxsus kontaktlar</string>
+    <string name="OxContactsAdd">Kontakt qo\'shish</string>
+    <string name="OxContactsRemove">O\'chirish</string>
+    <string name="OxContactsSpecialEmpty">Hozircha maxsus kontaktlar yo\'q. Kontakt qo\'shsangiz, ular onlayn bo\'lganda xabar olasiz va faoliyatini kuzatib borasiz.</string>
+    <string name="OxContactsNotify">Onlayn/oflayn bo\'lganda xabar berish</string>
+    <string name="OxContactsNotifyInfo">Maxsus kontakt onlayn yoki oflayn bo\'lganda mahalliy bildirishnoma ko\'rsatiladi. Serverga hech qanday so\'rov yuborilmaydi.</string>
+    <string name="OxContactsIsOnline">%1$s onlayn bo\'ldi</string>
+    <string name="OxContactsWentOffline">%1$s oflayn bo\'ldi</string>
+    <string name="OxContactsManageSpecial">Maxsus kontaktlar</string>
+
+    <!-- kontakt kuzatuvchi -->
+    <string name="OxContactsTrackerEmpty">Onlayn faoliyatini kuzatish uchun maxsus kontakt qo\'shing.</string>
+    <string name="OxContactsSummaryHeader">Xulosa</string>
+    <string name="OxContactsToday">Bugun</string>
+    <string name="OxContactsYesterday">Kecha</string>
+    <string name="OxContactsThisWeek">Bu hafta</string>
+    <string name="OxContactsTotalOnline">Jami onlayn: %1$s</string>
+    <string name="OxContactsNoLog">Hozircha faoliyat yozilmagan.</string>
+    <string name="OxContactsSessionRange">Onlayn %1$s – %2$s (%3$s)</string>
+    <string name="OxContactsSessionOngoing">%1$s dan beri onlayn (%2$s)</string>
+    <string name="OxContactsClearLog">Jurnalni tozalash</string>
+    <string name="OxContactsClearLogMessage">%1$s uchun yozilgan barcha onlayn faoliyat o\'chirilsinmi?</string>
+    <string name="OxContactsClearLogAllMessage">Barcha maxsus kontaktlarning yozilgan faoliyati o\'chirilsinmi?</string>
+    <string name="OxContactsLogCleared">Jurnal tozalandi</string>
+
+    <!-- davomiylik -->
+    <string name="OxContactsDurationSec">%1$d s</string>
+    <string name="OxContactsDurationMin">%1$d daq</string>
+    <string name="OxContactsDurationHour">%1$d soat</string>
+    <string name="OxContactsDurationHourMin">%1$d soat %2$d daq</string>
+
+    <!-- asosiy menyu yozuvlari -->
+    <string name="OxMenuOnlineContacts">Onlayn kontaktlar</string>
+    <string name="OxMenuSpecialContact">Maxsus kontakt</string>
+    <string name="OxMenuContactTracker">Kontakt kuzatuvchi</string>
+</resources>
