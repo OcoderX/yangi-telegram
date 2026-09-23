@@ -265,11 +265,15 @@ public class DownloadController extends BaseController implements NotificationCe
         lowPreset.preloadStories = false;
         mediumPreset = new Preset(preferences.getString("preset1", defaultMedium), defaultMedium);
         highPreset = new Preset(preferences.getString("preset2", defaultHigh), defaultHigh);
+        // Ox-gram: auto-download is disabled by default (enabled flag = 0) on every network type
+        String defaultLowOff = "1_1_1_1_1048576_512000_512000_524288_0_0_0_1_50_0";
+        String defaultMediumOff = "13_13_13_13_1048576_10485760_1048576_524288_1_1_0_0_100_1";
+        String defaultHighOff = "13_13_13_13_1048576_15728640_3145728_524288_1_1_0_0_100_1";
         boolean newConfig;
         if ((newConfig = preferences.contains("newConfig")) || !getUserConfig().isClientActivated()) {
-            mobilePreset = new Preset(preferences.getString("mobilePreset", defaultMedium), defaultMedium);
-            wifiPreset = new Preset(preferences.getString("wifiPreset", defaultHigh), defaultHigh);
-            roamingPreset = new Preset(preferences.getString("roamingPreset", defaultLow), defaultLow);
+            mobilePreset = new Preset(preferences.getString("mobilePreset", defaultMediumOff), defaultMediumOff);
+            wifiPreset = new Preset(preferences.getString("wifiPreset", defaultHighOff), defaultHighOff);
+            roamingPreset = new Preset(preferences.getString("roamingPreset", defaultLowOff), defaultLowOff);
             currentMobilePreset = preferences.getInt("currentMobilePreset", 3);
             currentWifiPreset = preferences.getInt("currentWifiPreset", 3);
             currentRoamingPreset = preferences.getInt("currentRoamingPreset", 3);
@@ -304,7 +308,7 @@ public class DownloadController extends BaseController implements NotificationCe
             roamingMaxFileSize[2] = preferences.getLong("roamingMaxDownloadSize" + 2, lowPreset.sizes[PRESET_SIZE_NUM_VIDEO]);
             roamingMaxFileSize[3] = preferences.getLong("roamingMaxDownloadSize" + 3, lowPreset.sizes[PRESET_SIZE_NUM_DOCUMENT]);
 
-            boolean globalAutodownloadEnabled = preferences.getBoolean("globalAutodownloadEnabled", true);
+            boolean globalAutodownloadEnabled = preferences.getBoolean("globalAutodownloadEnabled", false);
             mobilePreset = new Preset(mobileDataDownloadMask, mediumPreset.sizes[PRESET_SIZE_NUM_PHOTO], mobileMaxFileSize[2], mobileMaxFileSize[3], true, true, globalAutodownloadEnabled, false, 100, false);
             wifiPreset = new Preset(wifiDownloadMask, highPreset.sizes[PRESET_SIZE_NUM_PHOTO], wifiMaxFileSize[2], wifiMaxFileSize[3], true, true, globalAutodownloadEnabled, false, 100, true);
             roamingPreset = new Preset(roamingDownloadMask, lowPreset.sizes[PRESET_SIZE_NUM_PHOTO], roamingMaxFileSize[2], roamingMaxFileSize[3], false, false, globalAutodownloadEnabled, true, 50, true);
@@ -318,6 +322,19 @@ public class DownloadController extends BaseController implements NotificationCe
             editor.putInt("currentWifiPreset", currentWifiPreset = 3);
             editor.putInt("currentRoamingPreset", currentRoamingPreset = 3);
             editor.commit();
+        }
+
+        // Ox-gram: one-time migration so existing installs also start with automatic media download turned off
+        if (!preferences.getBoolean("oxAutoDownloadOffApplied", false)) {
+            mobilePreset.enabled = false;
+            wifiPreset.enabled = false;
+            roamingPreset.enabled = false;
+            preferences.edit()
+                    .putString("mobilePreset", mobilePreset.toString())
+                    .putString("wifiPreset", wifiPreset.toString())
+                    .putString("roamingPreset", roamingPreset.toString())
+                    .putBoolean("oxAutoDownloadOffApplied", true)
+                    .commit();
         }
 
         AndroidUtilities.runOnUIThread(() -> {

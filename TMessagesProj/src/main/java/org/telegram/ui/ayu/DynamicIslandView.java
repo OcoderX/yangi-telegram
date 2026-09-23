@@ -151,6 +151,11 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private int targetMode = MODE_NONE;
     private boolean expanded;
     private boolean idle;
+    /** network pill: stays opaque this long after the last sample that showed a real transfer */
+    private static final long NET_HOLD_MS = 2500;
+    /** whole-app throughput above which the pill counts as "transferring" even without file-loader jobs */
+    private static final long NET_SPEED_THRESHOLD = 48 * 1024;
+    private long netActiveUntil;
     private boolean pressed;
     private float pressX, pressY;
     private int pressedButton;
@@ -225,10 +230,10 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         subPaint.setTextSize(dp(13));
         subPaint.setColor(COLOR_SUBTEXT);
         compactPaint.setTypeface(AndroidUtilities.bold());
-        compactPaint.setTextSize(dp(13));
+        compactPaint.setTextSize(dp(11.5f));
         compactPaint.setColor(COLOR_TEXT);
         rightPaint.setTypeface(AndroidUtilities.bold());
-        rightPaint.setTextSize(dp(13));
+        rightPaint.setTextSize(dp(11.5f));
         rightPaint.setColor(COLOR_TEXT);
         buttonTextPaint.setTypeface(AndroidUtilities.bold());
         buttonTextPaint.setTextSize(dp(14));
@@ -407,9 +412,33 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     @Override
     public void onNetworkSample(NetworkDiagnostics.Sample sample) {
         netSample = sample;
+        if (sample != null && isTransferring(sample)) {
+            netActiveUntil = System.currentTimeMillis() + NET_HOLD_MS;
+            removeCallbacks(netQuietRunnable);
+            postDelayed(netQuietRunnable, NET_HOLD_MS + 32);
+        }
         if (targetMode == MODE_NETWORK || targetMode == MODE_DOWNLOAD) {
             update();
         }
+    }
+
+    private final Runnable netQuietRunnable = this::invalidate;
+
+    /** true while media, files or any noticeable traffic is actually moving */
+    private static boolean isTransferring(NetworkDiagnostics.Sample s) {
+        return s.activeDownloads > 0 || s.activeUploads > 0
+                || s.activeDownSpeed > 0 || s.activeUpSpeed > 0
+                || s.downSpeed >= NET_SPEED_THRESHOLD || s.upSpeed >= NET_SPEED_THRESHOLD;
+    }
+
+    /** the network pill hides itself (fully transparent) while nothing is being transferred */
+    private boolean isNetworkQuiet() {
+        return !expanded && System.currentTimeMillis() > netActiveUntil;
+    }
+
+    /** what the island should currently show once a quiet network pill is folded away */
+    private int effectiveTargetMode() {
+        return targetMode == MODE_NETWORK && isNetworkQuiet() ? MODE_NONE : targetMode;
     }
 
     /** Keeps the sampler's reference count balanced with what the island is actually showing. */
@@ -536,7 +565,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         int newMode = computeMode();
         boolean wasNone = targetMode == MODE_NONE;
         targetMode = newMode;
-        idle = newMode == MODE_NONE && AyuConfig.dynamicIsland && AyuConfig.islandIdle;
+        idle = (newMode == MODE_NONE || newMode == MODE_NETWORK) && AyuConfig.dynamicIsland && AyuConfig.islandIdle;
 
         if (newMode != MODE_CALL) {
             unregisterCallListener();
@@ -707,11 +736,29 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             rightTextColor = COLOR_SUBTEXT;
             return;
         }
-        title = "▼ " + NetworkDiagnostics.formatSpeed(s.downSpeed) + "  ▲ " + NetworkDiagnostics.formatSpeed(s.upSpeed);
+        StringBuilder sb = new StringBuilder();
+        if (NetDiagConfig.islandShowDown) {
+            sb.append("▼ ").append(NetworkDiagnostics.formatSpeed(s.downSpeed));
+        }
+        if (NetDiagConfig.islandShowUp) {
+            if (sb.length() > 0) {
+                sb.append("  ");
+            }
+            sb.append("▲ ").append(NetworkDiagnostics.formatSpeed(s.upSpeed));
+        }
+        if (sb.length() == 0 && !NetDiagConfig.islandShowPing) {
+            sb.append(getString(R.string.AyuNetDiagIslandTitle));
+        }
+        title = sb.toString();
         subtitle = LocaleController.formatString(R.string.AyuNetDiagDc, s.datacenterId)
                 + " · " + NetworkDiagnostics.getStateText(s.connectionState);
-        rightText = NetworkDiagnostics.formatPing(s.ping);
+        rightText = NetDiagConfig.islandShowPing ? NetworkDiagnostics.formatPing(s.ping) : "";
         rightTextColor = netColor(s);
+    }
+
+    /** the compact network pill reserves a left icon slot only when the status dot is on */
+    private static boolean hasLeftIcon(int m) {
+        return m != MODE_NETWORK || NetDiagConfig.islandShowDot;
     }
 
     /** green / amber / red by the sample's severity */
@@ -780,7 +827,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     private float compactHeight() {
-        return dp(34);
+        return dp(26);
     }
 
     private float compactTop() {
@@ -807,7 +854,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     private float measureCompactWidth() {
-        int m = targetMode;
+        int m = effectiveTargetMode();
         if (m == MODE_NONE) {
             return idleRectWidth();
         }
@@ -815,7 +862,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         String text = compactText(m);
         float textW = Math.min(textMax, compactPaint.measureText(text));
         float rightW = measureRightWidth(m);
-        float w = dp(12) + leftIconSize() + dp(8) + textW + (rightW > 0 ? dp(8) + rightW : 0) + dp(12);
+        float iconW = hasLeftIcon(m) ? leftIconSize() + dp(8) : 0;
+        float w = dp(12) + iconW + textW + (rightW > 0 && textW > 0 ? dp(8) : 0) + rightW + dp(12);
         int screen = getMeasuredWidth() > 0 ? getMeasuredWidth() : AndroidUtilities.displaySize.x;
         return Math.min(w, screen - dp(40));
     }
@@ -900,17 +948,18 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
 
         // Content cross-fade when the mode changes.
-        if (targetMode != mode) {
+        final int target = effectiveTargetMode();
+        if (target != mode) {
             float c = contentT.set(0f);
             if (c <= 0.02f || mode == MODE_NONE) {
-                mode = targetMode;
+                mode = target;
                 contentT.set(1f, mode == MODE_NONE);
             }
         } else {
             contentT.set(1f);
         }
 
-        boolean visible = targetMode != MODE_NONE || idle;
+        boolean visible = target != MODE_NONE || idle;
         float show = showT.set(visible);
         if (show <= 0f && !visible) {
             if (mode != MODE_NONE) {
@@ -926,7 +975,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         float cw = widthT.set(measureCompactWidth());
         float ch = compactHeight();
         float ctop = compactTop();
-        if (targetMode == MODE_NONE && idle) {
+        if (target == MODE_NONE && idle) {
             computeIdleRect(compactRect, width);
         } else {
             compactRect.set((width - cw) / 2f, ctop, (width + cw) / 2f, ctop + ch);
@@ -1020,10 +1069,14 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 drawDrawable(canvas, ghostDrawable, x + iconSize / 2f, cy, dp(18), a, COLOR_TEXT);
                 break;
             case MODE_NETWORK:
-                drawStatusDot(canvas, x + iconSize / 2f, cy, dp(5), netColor(netSample), a);
+                if (NetDiagConfig.islandShowDot) {
+                    drawStatusDot(canvas, x + iconSize / 2f, cy, dp(5), netColor(netSample), a);
+                }
                 break;
         }
-        x += iconSize + dp(8);
+        if (hasLeftIcon(mode)) {
+            x += iconSize + dp(8);
+        }
 
         // Right element.
         float rightW = measureRightWidth(mode);
@@ -1476,7 +1529,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     // ------------------------------------------------------------------ touch
 
     private boolean insideIsland(float x, float y) {
-        return showT.get() > 0f && targetMode != MODE_NONE && rect.contains(x, y);
+        return showT.get() > 0f && effectiveTargetMode() != MODE_NONE && rect.contains(x, y);
     }
 
     private IslandButton findButton(float x, float y) {

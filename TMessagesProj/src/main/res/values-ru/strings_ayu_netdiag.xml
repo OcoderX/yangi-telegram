@@ -10,6 +10,12 @@
     <string name="AyuNetDiagIslandToggleInfo">Показывать текущую скорость загрузки и отдачи и пинг до дата-центра в Dynamic Island. Нажмите на островок, чтобы увидеть потери пакетов, пинг прокси и причину замедления.</string>
     <string name="AyuNetDiagIslandWithDownloads">Скорость рядом с загрузками</string>
     <string name="AyuNetDiagIslandWithDownloadsInfo">Также добавлять текущую скорость в строку загрузок островка.</string>
+    <string name="AyuNetDiagIslandElements">Элементы островка</string>
+    <string name="AyuNetDiagIslandShowDown">Скорость загрузки</string>
+    <string name="AyuNetDiagIslandShowUp">Скорость отдачи</string>
+    <string name="AyuNetDiagIslandShowPing">Пинг (мс)</string>
+    <string name="AyuNetDiagIslandShowDot">Точка статуса</string>
+    <string name="AyuNetDiagIslandElementsInfo">Выберите, что показывать в компактном сетевом островке. Чем меньше элементов, тем уже островок.</string>
     <string name="AyuNetDiagOpen">Открыть диагностику</string>
     <string name="AyuNetDiagProxySettings">Настройки прокси</string>
 

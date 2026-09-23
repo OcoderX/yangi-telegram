@@ -10,6 +10,12 @@
     <string name="AyuNetDiagIslandToggleInfo">Show the current download and upload speed and the ping to your datacenter in the Dynamic Island. Tap the pill to see packet loss, the proxy ping and why the connection is slow.</string>
     <string name="AyuNetDiagIslandWithDownloads">Speed next to downloads</string>
     <string name="AyuNetDiagIslandWithDownloadsInfo">Also append the current speed to the downloads row of the island.</string>
+    <string name="AyuNetDiagIslandElements">Island elements</string>
+    <string name="AyuNetDiagIslandShowDown">Download speed</string>
+    <string name="AyuNetDiagIslandShowUp">Upload speed</string>
+    <string name="AyuNetDiagIslandShowPing">Ping (ms)</string>
+    <string name="AyuNetDiagIslandShowDot">Status dot</string>
+    <string name="AyuNetDiagIslandElementsInfo">Choose what the compact network pill shows. The pill stays narrow when fewer elements are on.</string>
     <string name="AyuNetDiagOpen">Open diagnostics</string>
     <string name="AyuNetDiagProxySettings">Proxy settings</string>
 

@@ -29,6 +29,10 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
     private static final int GHOST = 14;
     private static final int NETWORK = 15;
     private static final int NETWORK_WITH_DOWNLOADS = 16;
+    private static final int NETWORK_DOWN = 17;
+    private static final int NETWORK_UP = 18;
+    private static final int NETWORK_PING = 19;
+    private static final int NETWORK_DOT = 21;
     private static final int IDLE = 20;
 
     public DynamicIslandPreferencesActivity() {
@@ -72,6 +76,15 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
                 ? getString(R.string.AyuNetDiagIslandToggleInfo) + "\n\n" + getString(R.string.AyuNetDiagIslandWithDownloadsInfo)
                 : getString(R.string.AyuNetDiagIslandToggleInfo)));
 
+        if (NetDiagConfig.islandNetwork) {
+            items.add(UItem.asHeader(getString(R.string.AyuNetDiagIslandElements)));
+            items.add(UItem.asCheck(NETWORK_DOWN, getString(R.string.AyuNetDiagIslandShowDown)).setChecked(NetDiagConfig.islandShowDown));
+            items.add(UItem.asCheck(NETWORK_UP, getString(R.string.AyuNetDiagIslandShowUp)).setChecked(NetDiagConfig.islandShowUp));
+            items.add(UItem.asCheck(NETWORK_PING, getString(R.string.AyuNetDiagIslandShowPing)).setChecked(NetDiagConfig.islandShowPing));
+            items.add(UItem.asCheck(NETWORK_DOT, getString(R.string.AyuNetDiagIslandShowDot)).setChecked(NetDiagConfig.islandShowDot));
+            items.add(UItem.asShadow(getString(R.string.AyuNetDiagIslandElementsInfo)));
+        }
+
         items.add(UItem.asCheck(IDLE, getString(R.string.AyuIslandIdle)).setChecked(AyuConfig.islandIdle));
         items.add(UItem.asShadow(getString(R.string.AyuIslandIdleInfo)));
     }
@@ -110,6 +123,22 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
             case NETWORK_WITH_DOWNLOADS:
                 NetDiagConfig.setIslandNetworkWithDownloads(!NetDiagConfig.islandNetworkWithDownloads);
                 toggleSwitch(view, NetDiagConfig.islandNetworkWithDownloads);
+                break;
+            case NETWORK_DOWN:
+                NetDiagConfig.setIslandShowDown(!NetDiagConfig.islandShowDown);
+                toggleSwitch(view, NetDiagConfig.islandShowDown);
+                break;
+            case NETWORK_UP:
+                NetDiagConfig.setIslandShowUp(!NetDiagConfig.islandShowUp);
+                toggleSwitch(view, NetDiagConfig.islandShowUp);
+                break;
+            case NETWORK_PING:
+                NetDiagConfig.setIslandShowPing(!NetDiagConfig.islandShowPing);
+                toggleSwitch(view, NetDiagConfig.islandShowPing);
+                break;
+            case NETWORK_DOT:
+                NetDiagConfig.setIslandShowDot(!NetDiagConfig.islandShowDot);
+                toggleSwitch(view, NetDiagConfig.islandShowDot);
                 break;
             case IDLE:
                 AyuConfig.setIslandIdle(!AyuConfig.islandIdle);

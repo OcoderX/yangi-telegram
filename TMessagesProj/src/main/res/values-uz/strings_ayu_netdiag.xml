@@ -10,6 +10,12 @@
     <string name="AyuNetDiagIslandToggleInfo">Dynamic Island\'da joriy yuklab olish va yuklash tezligini hamda data-markazgacha ping\'ni ko\'rsatish. Paket yo\'qotishi, proksi ping\'i va sekinlashuv sababini ko\'rish uchun orolchani bosing.</string>
     <string name="AyuNetDiagIslandWithDownloads">Yuklamalar yonida tezlik</string>
     <string name="AyuNetDiagIslandWithDownloadsInfo">Joriy tezlikni orolchaning yuklamalar qatoriga ham qo\'shish.</string>
+    <string name="AyuNetDiagIslandElements">Orolcha elementlari</string>
+    <string name="AyuNetDiagIslandShowDown">Yuklab olish tezligi</string>
+    <string name="AyuNetDiagIslandShowUp">Yuklash tezligi</string>
+    <string name="AyuNetDiagIslandShowPing">Ping (ms)</string>
+    <string name="AyuNetDiagIslandShowDot">Holat nuqtasi</string>
+    <string name="AyuNetDiagIslandElementsInfo">Ixcham tarmoq orolchasida nimalar ko\'rinishini tanlang. Elementlar kam bo\'lsa orolcha torroq bo\'ladi.</string>
     <string name="AyuNetDiagOpen">Diagnostikani ochish</string>
     <string name="AyuNetDiagProxySettings">Proksi sozlamalari</string>
 

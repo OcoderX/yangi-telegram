@@ -24,6 +24,11 @@ public class NetDiagConfig {
     public static boolean islandNetwork = true;
     /** append the current throughput to the island's download row as secondary text */
     public static boolean islandNetworkWithDownloads = true;
+    /** elements of the compact network pill the user wants to see */
+    public static boolean islandShowDown = true;
+    public static boolean islandShowUp = true;
+    public static boolean islandShowPing = false;
+    public static boolean islandShowDot = false;
 
     /** how often a sample is produced, ms */
     public static int samplingIntervalMs = 1000;
@@ -40,6 +45,10 @@ public class NetDiagConfig {
 
         islandNetwork = preferences.getBoolean("islandNetwork", true);
         islandNetworkWithDownloads = preferences.getBoolean("islandNetworkWithDownloads", true);
+        islandShowDown = preferences.getBoolean("islandShowDown", true);
+        islandShowUp = preferences.getBoolean("islandShowUp", true);
+        islandShowPing = preferences.getBoolean("islandShowPing", false);
+        islandShowDot = preferences.getBoolean("islandShowDot", false);
         samplingIntervalMs = clamp(preferences.getInt("samplingIntervalMs", 1000), 500, 10000);
         probeIntervalMs = clamp(preferences.getInt("probeIntervalMs", 3000), 1000, 60000);
         proxyCheckIntervalMs = clamp(preferences.getInt("proxyCheckIntervalMs", 10000), 5000, 120000);
@@ -75,6 +84,26 @@ public class NetDiagConfig {
     public static void setIslandNetworkWithDownloads(boolean v) {
         islandNetworkWithDownloads = v;
         putBoolean("islandNetworkWithDownloads", v);
+    }
+
+    public static void setIslandShowDown(boolean v) {
+        islandShowDown = v;
+        putBoolean("islandShowDown", v);
+    }
+
+    public static void setIslandShowUp(boolean v) {
+        islandShowUp = v;
+        putBoolean("islandShowUp", v);
+    }
+
+    public static void setIslandShowPing(boolean v) {
+        islandShowPing = v;
+        putBoolean("islandShowPing", v);
+    }
+
+    public static void setIslandShowDot(boolean v) {
+        islandShowDot = v;
+        putBoolean("islandShowDot", v);
     }
 
     public static void setSamplingIntervalMs(int v) {
