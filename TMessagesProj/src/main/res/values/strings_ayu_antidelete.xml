@@ -9,6 +9,9 @@
     <string name="AyuShowDeletedLabel">Show \"deleted by author\" label</string>
     <string name="AyuShowDeletedLabelInfo">When off, only the deleted mark is shown next to the time.</string>
 
+    <string name="AyuKeepOwnDeleted">Keep my own deleted messages</string>
+    <string name="AyuKeepOwnDeletedInfo">When off, a message you wrote yourself disappears for good once it is deleted anywhere, including a \"Delete for everyone\" you did on another device. When on, it stays in the chat marked as deleted.</string>
+
     <string name="AyuKeepOnClearHistory">Keep messages on \"Clear history\"</string>
     <string name="AyuKeepOnDeleteDialog">Keep messages when a chat is deleted</string>
     <string name="AyuKeepOnDeleteInfo">Up to 300 of the most recent messages of the chat are archived locally.</string>

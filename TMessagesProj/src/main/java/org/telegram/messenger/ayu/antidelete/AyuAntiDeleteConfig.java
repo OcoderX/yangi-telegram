@@ -34,10 +34,25 @@ public class AyuAntiDeleteConfig {
     public static boolean dimDeletedMessages = true;
     /** opacity applied to a bubble when {@link #dimDeletedMessages} is on */
     public static final float DELETED_MESSAGE_ALPHA = 0.6f;
-    /** keep the tail of a dialog when its history is cleared ("clear history") */
-    public static boolean keepOnClearHistory = true;
-    /** keep the tail of a dialog when the whole dialog is deleted / left */
-    public static boolean keepOnDeleteDialog = true;
+    /**
+     * keep the tail of a dialog when its history is cleared ("clear history").
+     * <p>
+     * ayu: defaults to <b>off</b>. "Clear history" is always started by the user on this device, so
+     * keeping 300 ghosts of the history the user just wiped is the opposite of what was asked for.
+     * When this is off the already stored rows of the dialog are dropped too, so nothing resurrects.
+     */
+    public static boolean keepOnClearHistory = false;
+    /** keep the tail of a dialog when the whole dialog is deleted / left (ayu: off by default, see above) */
+    public static boolean keepOnDeleteDialog = false;
+    /**
+     * keep our own outgoing messages when they are deleted somewhere else (typically "delete for
+     * everyone" from another device or another client).
+     * <p>
+     * ayu: off by default - a message the user wrote themselves coming back as
+     * "🧹 deleted by author" is confusing and can not be explained by the feature's purpose
+     * (seeing what the <i>other</i> side deleted).
+     */
+    public static boolean keepOwnDeleted = false;
     /**
      * put the saved photo copies back into the place {@code FileLoader} looks at, so a restored photo
      * still opens after Telegram evicted it from its cache. Documents do not need this (they are
@@ -56,8 +71,9 @@ public class AyuAntiDeleteConfig {
             preferences = ApplicationLoader.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             showDeletedLabel = preferences.getBoolean("showDeletedLabel", true);
             dimDeletedMessages = preferences.getBoolean("dimDeletedMessages", true);
-            keepOnClearHistory = preferences.getBoolean("keepOnClearHistory", true);
-            keepOnDeleteDialog = preferences.getBoolean("keepOnDeleteDialog", true);
+            keepOnClearHistory = preferences.getBoolean("keepOnClearHistory", false);
+            keepOnDeleteDialog = preferences.getBoolean("keepOnDeleteDialog", false);
+            keepOwnDeleted = preferences.getBoolean("keepOwnDeleted", false);
             restoreMediaToCache = preferences.getBoolean("restoreMediaToCache", true);
             excludedDialogs = parse(preferences.getString("excludedDialogs", ""));
         } catch (Throwable e) {
@@ -127,6 +143,12 @@ public class AyuAntiDeleteConfig {
     public static void setKeepOnDeleteDialog(boolean v) {
         keepOnDeleteDialog = v;
         putBoolean("keepOnDeleteDialog", v);
+    }
+
+    /** ayu: "also keep my own messages when they are deleted elsewhere" */
+    public static void setKeepOwnDeleted(boolean v) {
+        keepOwnDeleted = v;
+        putBoolean("keepOwnDeleted", v);
     }
 
     public static void setRestoreMediaToCache(boolean v) {

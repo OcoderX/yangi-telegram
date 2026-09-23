@@ -233,6 +233,8 @@ public class NetworkDiagnostics {
     // probes
     private final boolean[] probeWindow = new boolean[LOSS_WINDOW]; // true = lost
     private int probeWindowCount, probeWindowHead;
+    //perf: probes (and proxy checks) only run while a consumer actually shows ping / loss
+    private int probeConsumers;
     private long lastProbeTime;
     private long probeStartTime;
     private boolean probePending;
@@ -252,6 +254,21 @@ public class NetworkDiagnostics {
     private final Runnable tickRunnable = this::tick;
     private ProgressObserver observer;
 
+    //perf: the device / radio state costs 5+ binder IPCs, but it barely ever changes
+    private static final long DEVICE_STATE_TTL = 10000;
+
+    private static class DeviceState {
+        boolean networkOnline = true;
+        boolean metered;
+        boolean dataSaver;
+        boolean powerSave;
+        boolean wifi;
+        int wifiRssi;
+    }
+
+    private volatile DeviceState deviceState;
+    private volatile long deviceStateTime;
+
     private NetworkDiagnostics() {
         NetDiagConfig.load();
     }
@@ -263,6 +280,19 @@ public class NetworkDiagnostics {
      * {@link #stop()}. Safe to call from any thread.
      */
     public void start() {
+        start(true);
+    }
+
+    /**
+     * @param withProbes when false this consumer only wants the passive metrics (speeds, connection
+     *                   state); no {@code help.getNearestDc} round trips are sent on its behalf.
+     *                   Must be mirrored by {@link #stop(boolean)}.
+     */
+    //perf: lightweight consumers (the idle island pill) no longer force network probes
+    public void start(boolean withProbes) {
+        if (withProbes) {
+            addProbeConsumer();
+        }
         boolean begin = false;
         synchronized (lock) {
             refCount++;
@@ -275,12 +305,21 @@ public class NetworkDiagnostics {
             NetDiagConfig.load();
             lastRx = lastTx = -1;
             lastTrafficTime = 0;
+            invalidateDeviceState();
             AndroidUtilities.runOnUIThread(this::bindObserver);
             Utilities.globalQueue.postRunnable(tickRunnable);
         }
     }
 
     public void stop() {
+        stop(true);
+    }
+
+    /** Mirror of {@link #start(boolean)}; pass the same {@code withProbes} value. */
+    public void stop(boolean withProbes) {
+        if (withProbes) {
+            removeProbeConsumer();
+        }
         boolean end = false;
         synchronized (lock) {
             if (refCount > 0) {
@@ -307,6 +346,39 @@ public class NetworkDiagnostics {
 
     public boolean isRunning() {
         return running;
+    }
+
+    /**
+     * Declares that ping / packet-loss numbers are being displayed right now. Reference counted:
+     * probes and proxy checks are only sent while at least one consumer is registered.
+     */
+    //perf: keeps a folded-away island pill from sending a TL request every few seconds
+    public void addProbeConsumer() {
+        synchronized (lock) {
+            probeConsumers++;
+        }
+    }
+
+    public void removeProbeConsumer() {
+        synchronized (lock) {
+            if (probeConsumers > 0) {
+                probeConsumers--;
+            }
+            if (probeConsumers == 0) {
+                // the window would go stale while nobody probes - start fresh next time
+                probePending = false;
+                probeGeneration++;
+                probeWindowCount = 0;
+                probeWindowHead = 0;
+            }
+        }
+    }
+
+    /** true while somebody displays ping / loss, i.e. while probing is worth its traffic */
+    public boolean isProbing() {
+        synchronized (lock) {
+            return probeConsumers > 0;
+        }
     }
 
     public Sample getLastSample() {
@@ -381,7 +453,11 @@ public class NetworkDiagnostics {
                 if (args.length >= 3 && args[0] instanceof String && args[1] instanceof Long) {
                     accumulate(upProgress, (String) args[0], (Long) args[1], false);
                 }
+            } else if (id == NotificationCenter.didUpdateConnectionState) {
+                //perf: the cheap trigger for a device-state re-read; otherwise it is TTL based
+                invalidateDeviceState();
             } else if (id == NotificationCenter.activeAccountChanged) {
+                invalidateDeviceState();
                 if (running) {
                     synchronized (lock) {
                         downProgress.clear();
@@ -596,6 +672,10 @@ public class NetworkDiagnostics {
                 probeGeneration++;
                 pushProbe(true);
             }
+            //perf: nobody is looking at ping / loss - do not spend a round trip on it
+            if (probeConsumers <= 0) {
+                return;
+            }
             if (!probePending && now - lastProbeTime >= Math.max(1000, NetDiagConfig.probeIntervalMs)) {
                 probePending = true;
                 probeStartTime = now;
@@ -672,6 +752,10 @@ public class NetworkDiagnostics {
     // ---------------------------------------------------------------- proxy
 
     private void checkProxyPing(int account, SharedConfig.ProxyInfo proxy, long now) {
+        //perf: the proxy ping is only rendered where ping / loss are, so it follows the probe gate
+        if (!isProbing()) {
+            return;
+        }
         if (proxyCheckPending || now - lastProxyCheckTime < Math.max(3000, NetDiagConfig.proxyCheckIntervalMs)) {
             return;
         }
@@ -692,11 +776,43 @@ public class NetworkDiagnostics {
 
     // ---------------------------------------------------------------- device state
 
+    /**
+     * Copies the cached device / radio state into the sample, re-reading it at most every
+     * {@link #DEVICE_STATE_TTL} ms or after a connection-state change invalidated the cache.
+     */
+    //perf: this used to run 5+ binder IPCs on every single sample
     private void fillDeviceState(Sample s) {
-        Context context = ApplicationLoader.applicationContext;
-        if (context == null) {
+        DeviceState state = deviceState;
+        long now = SystemClock.elapsedRealtime();
+        if (state == null || now - deviceStateTime > DEVICE_STATE_TTL) {
+            DeviceState fresh = readDeviceState();
+            if (fresh != null) {
+                deviceState = state = fresh;
+                deviceStateTime = now;
+            }
+        }
+        if (state == null) {
             return;
         }
+        s.networkOnline = state.networkOnline;
+        s.metered = state.metered;
+        s.dataSaver = state.dataSaver;
+        s.powerSave = state.powerSave;
+        s.wifi = state.wifi;
+        s.wifiRssi = state.wifiRssi;
+    }
+
+    /** Forces the next sample to re-read the device state (connectivity or account changed). */
+    private void invalidateDeviceState() {
+        deviceStateTime = 0;
+    }
+
+    private DeviceState readDeviceState() {
+        Context context = ApplicationLoader.applicationContext;
+        if (context == null) {
+            return null;
+        }
+        DeviceState s = new DeviceState();
         try {
             s.networkOnline = ApplicationLoader.isNetworkOnline();
         } catch (Throwable ignore) {
@@ -745,6 +861,7 @@ public class NetworkDiagnostics {
             } catch (Throwable ignore) {
             }
         }
+        return s;
     }
 
     private int computeReason(Sample s) {

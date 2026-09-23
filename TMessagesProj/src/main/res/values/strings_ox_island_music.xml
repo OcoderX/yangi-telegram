@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ox-gram: Dynamic Island music player -->
+    <string name="OxIslandReplacePlayer">Replace player bar</string>
+    <string name="OxIslandReplacePlayerInfo">Keep the player only in the Dynamic Island and hide the audio player bar above the chat list. Tap the equalizer on the pill to pause or resume, tap the pill to open the full controls.</string>
+</resources>

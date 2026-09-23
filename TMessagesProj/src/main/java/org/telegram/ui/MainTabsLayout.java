@@ -43,7 +43,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         this.resourcesProvider = resourcesProvider;
     }
 
-    private static final float[] PASS_TEXT_SIZES_DP = {12f, 12f, 10f};
+    private static final float[] PASS_TEXT_SIZES_DP = {9f, 9f, 8f};
     private static final int[] PASS_PADDINGS_DP = {16, 8, 4};
 
     private int maxWidthPx;
@@ -380,13 +380,18 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
 
     public static View findChildUnder(ViewGroup parent, float x, float y) {
+        // Tabs are laid out as a single horizontal row that all share the same top/bottom (each
+        // child is measured to the same exact tabHeight). With compact content the visible
+        // icon+label band inside each tab can be shorter than the 48dp minimum touch target, so
+        // hit-testing is done on X only: any touch anywhere in the row's vertical extent (i.e.
+        // the parent's own bounds, including its top/bottom padding) still resolves to the
+        // nearest tab by X, keeping the effective touch target at the full pill height.
         for (int i = parent.getChildCount() - 1; i >= 0; i--) {
             View child = parent.getChildAt(i);
 
             if (child.getVisibility() != View.VISIBLE) continue;
 
-            if (x >= child.getLeft() && x <= child.getRight()
-                    && y >= child.getTop() && y <= child.getBottom()) {
+            if (x >= child.getLeft() && x <= child.getRight()) {
                 return child;
             }
         }

@@ -9,6 +9,9 @@
     <string name="AyuShowDeletedLabel">Показывать надпись «удалено автором»</string>
     <string name="AyuShowDeletedLabelInfo">Если выключено, рядом со временем показывается только метка удаления.</string>
 
+    <string name="AyuKeepOwnDeleted">Сохранять свои удалённые сообщения</string>
+    <string name="AyuKeepOwnDeletedInfo">Если выключено, ваше собственное сообщение исчезает окончательно, как только его где-либо удалили, включая «Удалить у всех» с другого устройства. Если включено, оно остаётся в чате с пометкой об удалении.</string>
+
     <string name="AyuKeepOnClearHistory">Сохранять при очистке истории</string>
     <string name="AyuKeepOnDeleteDialog">Сохранять при удалении чата</string>
     <string name="AyuKeepOnDeleteInfo">Локально сохраняется до 300 последних сообщений чата.</string>

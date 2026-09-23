@@ -34,6 +34,7 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
     private static final int NETWORK_PING = 19;
     private static final int NETWORK_DOT = 21;
     private static final int IDLE = 20;
+    private static final int REPLACE_PLAYER = 22;
 
     public DynamicIslandPreferencesActivity() {
         super();
@@ -62,10 +63,15 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
         items.add(UItem.asHeader(getString(R.string.AyuIslandSources)));
         items.add(UItem.asCheck(CALLS, getString(R.string.AyuIslandCalls)).setChecked(AyuConfig.islandCalls));
         items.add(UItem.asCheck(MUSIC, getString(R.string.AyuIslandMusic)).setChecked(AyuConfig.islandMusic));
+        if (AyuConfig.islandMusic) {
+            items.add(UItem.asCheck(REPLACE_PLAYER, getString(R.string.OxIslandReplacePlayer)).setChecked(AyuConfig.islandReplacePlayer));
+        }
         items.add(UItem.asCheck(RECORDING, getString(R.string.AyuIslandRecording)).setChecked(AyuConfig.islandRecording));
         items.add(UItem.asCheck(DOWNLOADS, getString(R.string.AyuIslandDownloads)).setChecked(AyuConfig.islandDownloads));
         items.add(UItem.asCheck(GHOST, getString(R.string.AyuIslandGhost)).setChecked(AyuConfig.islandGhost));
-        items.add(UItem.asShadow(getString(R.string.AyuIslandSourcesInfo)));
+        items.add(UItem.asShadow(AyuConfig.islandMusic
+                ? getString(R.string.AyuIslandSourcesInfo) + "\n\n" + getString(R.string.OxIslandReplacePlayerInfo)
+                : getString(R.string.AyuIslandSourcesInfo)));
 
         items.add(UItem.asCheck(NETWORK, getString(R.string.AyuNetDiagIslandToggle)).setChecked(NetDiagConfig.islandNetwork));
         if (NetDiagConfig.islandNetwork) {
@@ -103,6 +109,10 @@ public class DynamicIslandPreferencesActivity extends UniversalFragment {
             case MUSIC:
                 AyuConfig.setIslandMusic(!AyuConfig.islandMusic);
                 toggleSwitch(view, AyuConfig.islandMusic);
+                break;
+            case REPLACE_PLAYER:
+                AyuConfig.setIslandReplacePlayer(!AyuConfig.islandReplacePlayer);
+                toggleSwitch(view, AyuConfig.islandReplacePlayer);
                 break;
             case RECORDING:
                 AyuConfig.setIslandRecording(!AyuConfig.islandRecording);

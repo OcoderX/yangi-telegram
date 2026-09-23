@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: member popup / message menu - filter a group to one sender -->
+    <string name="AyuShowMessages">Show messages</string>
+    <string name="AyuShowMedia">Show media</string>
+    <string name="AyuCopyUsername">Copy username</string>
+</resources>

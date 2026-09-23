@@ -152,8 +152,14 @@ public class SpecialContactsConfig {
         return ids.size();
     }
 
+    /**
+     * //perf: the cheap early-out for hot callers such as {@code ContactTracker.check()}.
+     * Unlike {@link #getAll()} it copies nothing, and unlike the previous {@code size() == 0} body it
+     * does not re-enter the monitor.
+     */
     public static synchronized boolean isEmpty() {
-        return size() == 0;
+        ensureLoaded();
+        return ids.isEmpty();
     }
 
     public static synchronized void add(long userId) {

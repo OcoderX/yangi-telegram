@@ -83,6 +83,8 @@ public class AyuConfig {
     public static boolean islandDownloads = true;
     public static boolean islandGhost = true;
     public static boolean islandIdle = false;
+    /** the Dynamic Island hosts the player, so the stock audio strip stays hidden */
+    public static boolean islandReplacePlayer = true;
 
     // ---------------- Regex filters ----------------
     public static boolean regexFiltersEnabled = false;
@@ -190,6 +192,7 @@ public class AyuConfig {
         islandDownloads = preferences.getBoolean("islandDownloads", true);
         islandGhost = preferences.getBoolean("islandGhost", true);
         islandIdle = preferences.getBoolean("islandIdle", false);
+        islandReplacePlayer = preferences.getBoolean("islandReplacePlayer", true);
 
         regexFiltersEnabled = preferences.getBoolean("regexFiltersEnabled", false);
         regexFiltersInChats = preferences.getBoolean("regexFiltersInChats", false);
@@ -332,6 +335,7 @@ public class AyuConfig {
     public static void setIslandDownloads(boolean v) { islandDownloads = v; putBoolean("islandDownloads", v); }
     public static void setIslandGhost(boolean v) { islandGhost = v; putBoolean("islandGhost", v); }
     public static void setIslandIdle(boolean v) { islandIdle = v; putBoolean("islandIdle", v); }
+    public static void setIslandReplacePlayer(boolean v) { islandReplacePlayer = v; putBoolean("islandReplacePlayer", v); }
 
     public static void setRegexFiltersEnabled(boolean v) { regexFiltersEnabled = v; putBoolean("regexFiltersEnabled", v); }
     public static void setRegexFiltersInChats(boolean v) { regexFiltersInChats = v; putBoolean("regexFiltersInChats", v); }

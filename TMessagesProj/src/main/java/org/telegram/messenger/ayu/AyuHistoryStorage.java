@@ -453,6 +453,15 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
         }
     }
 
+    /** ayu: drops every kept message of a dialog (used by "clear history" / "delete chat") */
+    public void deleteDeletedForDialog(long userId, long dialogId) {
+        try {
+            db().delete(TABLE_DELETED, String.format(Locale.US, "userId = %d AND dialogId = %d", userId, dialogId), null);
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
     // ------------------------------------------------------------------ reads
 
     /** newest first; ids in (minId, maxId] - pass 0 for minId and 0 (or Integer.MAX_VALUE) for maxId to get everything */

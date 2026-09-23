@@ -80,6 +80,7 @@ import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode
 import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import org.telegram.ui.Components.glass.GlassTabView;
 import org.telegram.ui.Stories.recorder.HintView2;
+import org.telegram.ui.ayu.OcoderXMenuFragment;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -311,11 +312,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));
 
         tabs = new GlassTabView[5];
-        tabs[INDEX_CHATS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsChats);
-        tabs[INDEX_OCODERX] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.MENU, R.string.OxTabOcoderX);
-        tabs[INDEX_SETTINGS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings);
-        tabs[INDEX_CALLS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.MainTabsCalls);
-        tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
+        tabs[INDEX_CHATS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsChats, true);
+        tabs[INDEX_OCODERX] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.MENU, R.string.OxTabOcoderX, true);
+        tabs[INDEX_SETTINGS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings, true);
+        tabs[INDEX_CALLS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.MainTabsCalls, true);
+        tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile, true);
         tabs[INDEX_CHATS].setOnLongClickListener(this::openFoldersSelector);
         tabs[INDEX_CALLS].setOnLongClickListener(this::openCallsSelector);
         tabs[INDEX_PROFILE].setOnLongClickListener(this::openAccountSelector);
@@ -849,7 +850,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsView.invalidate();
     }
 
-    // opens the very same options popup as the "..." button of DialogsActivity, anchored to the OcoderX tab
+    // opens the OcoderX screen: the classic-drawer style section list, not a floating popup
     public boolean openOcoderXMenu(View anchor) {
         if (getContext() == null || getParentActivity() == null) {
             return false;
@@ -858,10 +859,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (fragment == null) {
             fragment = prepareDialogsActivity(null);
         }
-        if (fragment == null || fragment.getFragmentView() == null) {
-            return false;
+        final OcoderXMenuFragment menu = new OcoderXMenuFragment();
+        if (fragment != null) {
+            // the download manager is the dialogs search opened on its downloads tab
+            final DialogsActivity dialogs = fragment;
+            menu.setDownloadManagerAction(dialogs::openDownloadManager);
         }
-        fragment.showMainMenu(anchor);
+        presentFragment(menu);
         return true;
     }
 

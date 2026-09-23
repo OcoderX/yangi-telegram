@@ -9,6 +9,9 @@
     <string name="AyuShowDeletedLabel">\"muallif tomonidan o\'chirildi\" yozuvini ko\'rsatish</string>
     <string name="AyuShowDeletedLabelInfo">O\'chirilganda vaqt yonida faqat belgi ko\'rsatiladi.</string>
 
+    <string name="AyuKeepOwnDeleted">O\'z o\'chirilgan xabarlarimni saqlash</string>
+    <string name="AyuKeepOwnDeletedInfo">O\'chirilgan bo\'lsa, o\'zingiz yozgan xabar qayerda o\'chirilsa ham butunlay yo\'qoladi, boshqa qurilmadagi \"Hamma uchun o\'chirish\" ham shunga kiradi. Yoqilgan bo\'lsa, u suhbatda o\'chirilgan belgisi bilan qoladi.</string>
+
     <string name="AyuKeepOnClearHistory">\"Tarixni tozalash\"da xabarlarni saqlash</string>
     <string name="AyuKeepOnDeleteDialog">Suhbat o\'chirilganda xabarlarni saqlash</string>
     <string name="AyuKeepOnDeleteInfo">Suhbatning eng so\'nggi 300 tagacha xabari mahalliy arxivga olinadi.</string>

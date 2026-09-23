@@ -401,10 +401,12 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
 
     @Override
     public View createView(Context context) {
-        // the main tabs bar sits at the top now: reserve space above the list instead of below it
+        // the main tabs bar sits at the top now, but it is hidden while this fragment is shown
+        // (either full screen or inside the right sliding container of DialogsActivity),
+        // so no space has to be reserved for it above the topics list
         additionNavigationBarHeight = 0;
         additionFloatingButtonOffset = 0;
-        additionTopHeight = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+        additionTopHeight = 0;
 
         fragmentView = contentView = new SizeNotifierFrameLayout(context) {
             {

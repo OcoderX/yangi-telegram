@@ -11,6 +11,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FileUploadOperation;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
+import org.telegram.messenger.Utilities;
 import org.telegram.messenger.ayu.AyuKeepAliveService;
 import org.telegram.tgnet.ConnectionsManager;
 
@@ -89,6 +90,8 @@ public class AyuUploadManager {
 
     private boolean observersAdded;
     private boolean restoredLoaded;
+    /** //perf: true while the persisted queue is being parsed on a background queue */
+    private boolean restorePending;
     private boolean saveScheduled;
 
     private final Runnable saveRunnable = this::saveNow;
@@ -597,14 +600,37 @@ public class AyuUploadManager {
         return "queue_" + currentAccount;
     }
 
+    /**
+     * //perf: {@code initAll()} reaches this for every account while the app is still starting up.
+     * Parsing the persisted JSON and {@code stat()}ing every path is IO, so it runs on the global
+     * queue; only the (tiny) result is applied back on the main thread, which keeps the ownership
+     * rule "every mutation of the item list happens on the main thread" intact.
+     */
     private void loadRestored() {
         if (restoredLoaded) {
             return;
         }
         restoredLoaded = true;
+        restorePending = true;
+        Utilities.globalQueue.postRunnable(() -> {
+            ArrayList<UploadQueueItem> parsed;
+            try {
+                parsed = parseRestored();
+            } catch (Throwable e) {
+                FileLog.e(e);
+                parsed = new ArrayList<>();
+            }
+            final ArrayList<UploadQueueItem> result = parsed;
+            AndroidUtilities.runOnUIThread(() -> applyRestored(result));
+        });
+    }
+
+    /** background queue: JSON parse + the "is the file still there" check */
+    private ArrayList<UploadQueueItem> parseRestored() {
+        final ArrayList<UploadQueueItem> result = new ArrayList<>();
         final String json = AyuUploadConfig.getString(prefsKey(), null);
         if (TextUtils.isEmpty(json)) {
-            return;
+            return result;
         }
         try {
             final JSONArray array = new JSONArray(json);
@@ -618,13 +644,54 @@ public class AyuUploadManager {
                 if (item.addedTime != 0 && now - item.addedTime > RESTORE_MAX_AGE) {
                     continue;
                 }
-                if (!new File(item.path).exists()) {
+                if (TextUtils.isEmpty(item.path) || !new File(item.path).exists()) {
+                    // the file is gone: the entry is dropped, exactly as before
                     continue;
                 }
-                restored.put(item.key(), item);
+                result.add(item);
             }
         } catch (Throwable e) {
             FileLog.e(e);
+        }
+        return result;
+    }
+
+    /** main thread: publish what {@link #parseRestored()} found */
+    private void applyRestored(ArrayList<UploadQueueItem> parsed) {
+        restorePending = false;
+        if (parsed == null || parsed.isEmpty()) {
+            return;
+        }
+        boolean reattached = false;
+        for (int a = 0; a < parsed.size(); a++) {
+            final UploadQueueItem item = parsed.get(a);
+            final String key = item.key();
+            if (restored.containsKey(key)) {
+                continue;
+            }
+            final UploadQueueItem live = itemsByKey.get(key);
+            if (live == null) {
+                restored.put(key, item);
+                continue;
+            }
+            // the send pipeline re-enqueued this file while the parse was still running: re-attach
+            // the persisted order / paused flag here, exactly like enqueue() would have done
+            if (!live.isPending()) {
+                continue;
+            }
+            live.order = item.order;
+            if (item.addedTime != 0) {
+                live.addedTime = item.addedTime;
+            }
+            if (item.state == UploadQueueItem.STATE_PAUSED && live.state != UploadQueueItem.STATE_PAUSED) {
+                live.state = UploadQueueItem.STATE_PAUSED;
+                applyPause(live);
+            }
+            reattached = true;
+        }
+        if (reattached) {
+            sortItems();
+            notifyChanged();
         }
     }
 
@@ -638,6 +705,11 @@ public class AyuUploadManager {
 
     private void saveNow() {
         saveScheduled = false;
+        if (restorePending) {
+            //perf: the persisted queue has not been parsed back yet, saving now would drop it
+            scheduleSave();
+            return;
+        }
         try {
             final JSONArray array = new JSONArray();
             for (int a = 0; a < items.size(); a++) {

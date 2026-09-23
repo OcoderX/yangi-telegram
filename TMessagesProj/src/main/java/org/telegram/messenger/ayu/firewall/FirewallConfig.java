@@ -135,26 +135,31 @@ public class FirewallConfig {
     public static void setEnabled(boolean v) {
         enabled = v;
         putBoolean("enabled", v);
+        FirewallVerdictCache.clear();
     }
 
     public static void setBlockExecutables(boolean v) {
         blockExecutables = v;
         putBoolean("blockExecutables", v);
+        FirewallVerdictCache.clear();
     }
 
     public static void setBlockSuspiciousLinks(boolean v) {
         blockSuspiciousLinks = v;
         putBoolean("blockSuspiciousLinks", v);
+        // link-only rule: does not affect the per-document verdict cache
     }
 
     public static void setBlockDangerousArchives(boolean v) {
         blockDangerousArchives = v;
         putBoolean("blockDangerousArchives", v);
+        FirewallVerdictCache.clear();
     }
 
     public static void setUnknownSendersOnly(boolean v) {
         unknownSendersOnly = v;
         putBoolean("unknownSendersOnly", v);
+        FirewallVerdictCache.clear();
     }
 
     // ---------------- whitelist ----------------
@@ -175,6 +180,7 @@ public class FirewallConfig {
             return;
         }
         saveWhitelist();
+        FirewallVerdictCache.clear();
     }
 
     public static synchronized void removeFromWhitelist(long peerId) {
@@ -183,6 +189,7 @@ public class FirewallConfig {
             return;
         }
         saveWhitelist();
+        FirewallVerdictCache.clear();
     }
 
     public static synchronized void clearWhitelist() {
@@ -192,6 +199,7 @@ public class FirewallConfig {
         }
         whitelist.clear();
         saveWhitelist();
+        FirewallVerdictCache.clear();
     }
 
     private static void saveWhitelist() {

@@ -142,6 +142,12 @@ public class ContactTracker implements NotificationCenter.NotificationCenterDele
             if (!UserConfig.getInstance(account).isClientActivated()) {
                 return;
             }
+            //perf: updateInterfaces/UPDATE_MASK_STATUS fires for every status update on every
+            // account; getAll() copies the whole id list, so ask for the size first and allocate
+            // nothing at all in the (normal) case of no special contacts
+            if (SpecialContactsConfig.isEmpty()) {
+                return;
+            }
             final ArrayList<Long> ids = SpecialContactsConfig.getAll();
             if (ids.isEmpty()) {
                 return;

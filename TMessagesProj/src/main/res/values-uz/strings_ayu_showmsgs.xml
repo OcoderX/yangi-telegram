@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: a'zo menyusi / xabar menyusi - guruhni bitta yuboruvchiga filtrlash -->
+    <string name="AyuShowMessages">Xabarlarini ko\'rsatish</string>
+    <string name="AyuShowMedia">Medialarini ko\'rsatish</string>
+    <string name="AyuCopyUsername">Username nusxalash</string>
+</resources>

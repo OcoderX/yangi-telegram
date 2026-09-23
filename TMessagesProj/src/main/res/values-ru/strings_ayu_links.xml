@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ox-gram: запрос "Открывать по умолчанию" для ссылок t.me на Android 12+ -->
+    <string name="OxOpenLinksTitle">Открывать ссылки Telegram в Ox-gram</string>
+    <string name="OxOpenLinksText">Android не передаёт ссылки t.me в Ox-gram, поэтому ссылки на каналы и посты открываются в браузере.\n\nОткройте «Открывать по умолчанию» и включите поддерживаемые веб-адреса (t.me, telegram.me, telegram.dog).</string>
+    <string name="OxOpenLinksOpen">Открыть настройки</string>
+    <string name="OxOpenLinksLater">Позже</string>
+    <string name="OxOpenLinksNever">Больше не спрашивать</string>
+</resources>

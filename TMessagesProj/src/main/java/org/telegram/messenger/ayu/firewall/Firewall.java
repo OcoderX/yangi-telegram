@@ -185,9 +185,36 @@ public class Firewall {
             return ALLOWED;
         }
 
-        final String fileName = fileNameOf(document);
+        // senderIdOf is a plain field read (no controller / dict lookups), cheap enough to compute
+        // unconditionally so it can double as the memoization cache's sender guard
+        final long senderId = senderIdOf(message);
+        final long docId = document.id;
+        if (docId != 0) {
+            Verdict cached = FirewallVerdictCache.get(docId, senderId);
+            if (cached != null) {
+                return cached;
+            }
+        }
+
+        Verdict result = evaluateUncached(currentAccount, message, document, senderId);
+        if (docId != 0) {
+            FirewallVerdictCache.put(docId, senderId, result);
+        }
+        return result;
+    }
+
+    private static Verdict evaluateUncached(int currentAccount, TLRPC.Message message, TLRPC.Document document, long senderId) {
         final String mime = document.mime_type;
         final long size = document.size;
+
+        // cheap early out on mime alone, before ever touching the file name: a real image / video /
+        // audio mime can never be an executable, a hard-rule file, or (per our name-only detection)
+        // an archive - this covers the overwhelming majority of documents bound in a chat
+        if (FirewallRules.isDefinitelySafeMime(mime)) {
+            return ALLOWED;
+        }
+
+        final String fileName = fileNameOf(document);
 
         // cheap early out: stickers, photos, videos, voice messages and plain documents never match
         final String matchedExec = FirewallRules.matchedExecutableExtension(fileName);
@@ -197,7 +224,6 @@ public class Firewall {
             return ALLOWED;
         }
 
-        final long senderId = senderIdOf(message);
         final long dialogId = MessageObject.getDialogId(message);
 
         // ---- hard rule: exe / apk under 5 MB, from anyone, no bypass
@@ -278,8 +304,13 @@ public class Firewall {
 
         int reason = 0;
         boolean alwaysSuspicious = false;
+        // a real look-alike domain (fake t.me / telegram.org etc.) is the only link case worth a hard
+        // BLOCK; everything else downgrades to WARN below so a flagged link inside a channel post -
+        // whose sender is "unknown" almost by definition - stays tappable through "Open anyway"
+        // instead of being permanently stuck
+        final boolean isLookalikeHost = FirewallRules.isTelegramLookalike(host);
 
-        if (FirewallRules.isTelegramLookalike(host)) {
+        if (isLookalikeHost) {
             reason = R.string.AyuFirewallReasonLinkLookalike;
             alwaysSuspicious = true;
         } else if (FirewallRules.isPunycode(host)) {
@@ -319,7 +350,11 @@ public class Firewall {
         }
         detail.append('\n').append(senderLine(unknown));
 
-        return new Verdict(hasSenderContext && unknown ? BLOCK : WARN, REASON_LINK, R.string.AyuFirewallShortLink,
+        // BLOCK is reserved for an unknown sender's link to an actual Telegram look-alike domain;
+        // every other unknown-sender reason (punycode, mixed script, mismatch, raw ip, insecure
+        // phishy path, shortener) is only a WARN with an "Open anyway" way through
+        final int action = hasSenderContext && unknown && isLookalikeHost ? BLOCK : WARN;
+        return new Verdict(action, REASON_LINK, R.string.AyuFirewallShortLink,
                 detail.toString(), false, senderId, dialogId);
     }
 

@@ -211,7 +211,16 @@ public class FirewallAlerts {
                                     MessageObject messageObject, Firewall.Verdict verdict, String key, Runnable proceed) {
         if (verdict.isBlock()) {
             FirewallConfig.logEvent(verdict.dialogId, verdict.senderId, verdict.reasonKey, verdict.detail);
-            showBlockedAlert(context, resourcesProvider, verdict);
+            // verdict.hardRule is the one rule that never bends (the 5 MB exe/apk virus rule); every
+            // other BLOCK - including a look-alike-domain link, which is otherwise permanently
+            // untappable - gets an "Open anyway" way through instead of a dead-end alert
+            Runnable onOpenAnyway = verdict.hardRule ? null : () -> {
+                allowOnce(key);
+                if (proceed != null) {
+                    proceed.run();
+                }
+            };
+            showBlockedAlert(context, resourcesProvider, verdict, onOpenAnyway);
         } else {
             showWarningAlert(context, resourcesProvider, verdict, () -> {
                 allowOnce(key);
@@ -224,6 +233,16 @@ public class FirewallAlerts {
 
     /** the red, no-way-through alert */
     public static void showBlockedAlert(Context context, Theme.ResourcesProvider resourcesProvider, Firewall.Verdict verdict) {
+        showBlockedAlert(context, resourcesProvider, verdict, null);
+    }
+
+    /**
+     * The red alert. When {@code onOpenAnyway} is non-null the dialog gets a destructive-styled
+     * "Open anyway" button next to "Cancel" so a flagged item can still be opened on purpose; passing
+     * null keeps the old no-way-through alert (only "OK"), which is what the hard 5 MB exe/apk rule
+     * still uses.
+     */
+    public static void showBlockedAlert(Context context, Theme.ResourcesProvider resourcesProvider, Firewall.Verdict verdict, Runnable onOpenAnyway) {
         if (context == null) {
             return;
         }
@@ -231,7 +250,16 @@ public class FirewallAlerts {
         AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
         builder.setTitle(colored(LocaleController.getString(virus ? R.string.AyuFirewallVirusTitle : R.string.AyuFirewallBlockedTitle), COLOR_RED));
         builder.setMessage(verdict.detail == null ? LocaleController.getString(R.string.AyuFirewallBlockedGeneric) : verdict.detail);
-        builder.setPositiveButton(LocaleController.getString(R.string.OK), (dialog, which) -> dialog.dismiss());
+        if (onOpenAnyway == null) {
+            builder.setPositiveButton(LocaleController.getString(R.string.OK), (dialog, which) -> dialog.dismiss());
+        } else {
+            builder.setNegativeButton(LocaleController.getString(R.string.Cancel), (dialog, which) -> dialog.dismiss());
+            builder.setPositiveButton(LocaleController.getString(R.string.AyuFirewallOpenAnyway), (dialog, which) -> {
+                dialog.dismiss();
+                onOpenAnyway.run();
+            });
+            builder.makeRed(AlertDialog.BUTTON_POSITIVE);
+        }
         if (verdict.canWhitelist()) {
             builder.setNeutralButton(LocaleController.getString(R.string.AyuFirewallTrustSender), (dialog, which) -> {
                 FirewallConfig.addToWhitelist(verdict.senderId);

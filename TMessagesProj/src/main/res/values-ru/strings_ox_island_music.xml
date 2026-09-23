@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ox-gram: Dynamic Island music player -->
+    <string name="OxIslandReplacePlayer">Заменять панель плеера</string>
+    <string name="OxIslandReplacePlayerInfo">Оставить плеер только в Dynamic Island и скрыть панель аудиоплеера над списком чатов. Нажмите на эквалайзер на плашке, чтобы поставить на паузу или продолжить, нажмите на саму плашку для полного управления.</string>
+</resources>

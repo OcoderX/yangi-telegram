@@ -37,6 +37,7 @@ import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
+import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
@@ -65,6 +66,7 @@ import org.telegram.ui.Cells.RequestPeerRequirementsCell;
 import org.telegram.ui.Cells.ShadowSectionCell;
 import org.telegram.ui.Cells.TextCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
+import org.telegram.ui.Cells.UnreadByThemToggleCell;
 import org.telegram.ui.Cells.UserCell;
 import org.telegram.ui.Components.ArchiveHelp;
 import org.telegram.ui.Components.BlurredRecyclerView;
@@ -110,7 +112,57 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             VIEW_TYPE_GRAY_SECTION = 20,
             VIEW_TYPE_FORWARD_TO_STORIES_CELL = 21,
             VIEW_TYPE_HEADER_3 = 22,
-            VIEW_TYPE_DIALOG_COMMUNITY = 23;
+            VIEW_TYPE_DIALOG_COMMUNITY = 23,
+            VIEW_TYPE_UNREAD_BY_THEM = 24;
+
+    /** Folder (dialog filter) ids whose "unread by them" toggle is switched on. Session-scoped. */
+    public static final HashSet<Integer> unreadByThemFolders = new HashSet<>();
+    private boolean hasUnreadByThemToggle;
+
+    public static boolean isUnreadByThemActive(MessagesController.DialogFilter filter) {
+        return filter != null && !unreadByThemFolders.isEmpty() && unreadByThemFolders.contains(filter.id);
+    }
+
+    public boolean isUnreadByThemActive() {
+        return isUnreadByThemActive(getCurrentFilter());
+    }
+
+    /**
+     * Keeps only chats whose last message is outgoing, sent, and not yet read by the
+     * other side (same rule DialogCell uses to draw a single tick). Sorted newest first.
+     */
+    public static ArrayList<TLRPC.Dialog> filterUnreadByThem(int currentAccount, ArrayList<TLRPC.Dialog> source) {
+        ArrayList<TLRPC.Dialog> result = new ArrayList<>();
+        if (source == null) {
+            return result;
+        }
+        MessagesController messagesController = MessagesController.getInstance(currentAccount);
+        long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
+        for (int i = 0, n = source.size(); i < n; i++) {
+            TLRPC.Dialog dialog = source.get(i);
+            if (dialog == null || dialog.id == selfId || dialog.isFolder || DialogObject.isEncryptedDialog(dialog.id)) {
+                continue;
+            }
+            if (DialogObject.isChatDialog(dialog.id)) {
+                TLRPC.Chat chat = messagesController.getChat(-dialog.id);
+                if (chat == null || ChatObject.isChannel(chat) && !chat.megagroup) {
+                    continue;
+                }
+            }
+            ArrayList<MessageObject> messages = messagesController.dialogMessage.get(dialog.id);
+            MessageObject message = messages == null || messages.isEmpty() ? null : messages.get(0);
+            if (message == null || !message.isOut() || !message.isSent() || message.messageOwner == null || message.messageOwner.action != null) {
+                continue;
+            }
+            int readOutboxMaxId = dialog.read_outbox_max_id;
+            boolean read = (readOutboxMaxId > 0 && readOutboxMaxId >= message.getId()) || !message.isUnread();
+            if (!read) {
+                result.add(dialog);
+            }
+        }
+        Collections.sort(result, (a, b) -> Integer.compare(b.last_message_date, a.last_message_date));
+        return result;
+    }
 
     private Context mContext;
     private ArchiveHintCell archiveHintCell;
@@ -183,6 +235,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     public int fixPosition(int position) {
         if (hasChatlistHint) {
+            position--;
+        }
+        if (hasUnreadByThemToggle) {
             position--;
         }
         if (hasHints) {
@@ -387,6 +442,8 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             } else {
                 if (viewType == VIEW_TYPE_ARCHIVE_FULLSCREEN) {
                     stableId = 5;
+                } else if (viewType == VIEW_TYPE_UNREAD_BY_THEM) {
+                    stableId = 6;
                 } else {
                     stableId = stableIdPointer++;
                 }
@@ -639,7 +696,8 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         return viewType != VIEW_TYPE_FLICKER && viewType != VIEW_TYPE_EMPTY && viewType != VIEW_TYPE_DIVIDER &&
                 viewType != VIEW_TYPE_SHADOW && viewType != VIEW_TYPE_HEADER &&
                 viewType != VIEW_TYPE_LAST_EMPTY && viewType != VIEW_TYPE_NEW_CHAT_HINT && viewType != VIEW_TYPE_CONTACTS_FLICKER &&
-                viewType != VIEW_TYPE_REQUIREMENTS && viewType != VIEW_TYPE_REQUIRED_EMPTY && viewType != VIEW_TYPE_STORIES && viewType != VIEW_TYPE_ARCHIVE_FULLSCREEN && viewType != VIEW_TYPE_GRAY_SECTION;
+                viewType != VIEW_TYPE_REQUIREMENTS && viewType != VIEW_TYPE_REQUIRED_EMPTY && viewType != VIEW_TYPE_STORIES && viewType != VIEW_TYPE_ARCHIVE_FULLSCREEN && viewType != VIEW_TYPE_GRAY_SECTION &&
+                viewType != VIEW_TYPE_UNREAD_BY_THEM;
     }
 
     @Override
@@ -844,6 +902,22 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             case VIEW_TYPE_FOLDER_UPDATE_HINT:
                 view = new DialogsHintCell(mContext);
                 break;
+            case VIEW_TYPE_UNREAD_BY_THEM: {
+                UnreadByThemToggleCell toggleCell = new UnreadByThemToggleCell(mContext);
+                toggleCell.setOnToggle(() -> {
+                    MessagesController.DialogFilter filter = getCurrentFilter();
+                    if (filter == null) {
+                        return;
+                    }
+                    if (!unreadByThemFolders.remove(filter.id)) {
+                        unreadByThemFolders.add(filter.id);
+                    }
+                    toggleCell.setActive(unreadByThemFolders.contains(filter.id));
+                    notifyDataSetChanged();
+                });
+                view = toggleCell;
+                break;
+            }
             case VIEW_TYPE_STORIES: {
                 view = new View(mContext) {
                     @Override
@@ -1164,6 +1238,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             case VIEW_TYPE_REQUIREMENTS: {
                 RequestPeerRequirementsCell cell = (RequestPeerRequirementsCell) holder.itemView;
                 cell.set(requestPeerType);
+                break;
+            }
+            case VIEW_TYPE_UNREAD_BY_THEM: {
+                ((UnreadByThemToggleCell) holder.itemView).setActive(isUnreadByThemActive());
                 break;
             }
             case VIEW_TYPE_FOLDER_UPDATE_HINT: {
@@ -1697,6 +1775,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     itemInternals.add(new ItemInternal(updates));
                 }
             }
+        }
+        hasUnreadByThemToggle = false;
+        if ((dialogsType == 7 || dialogsType == 8) && filter != null && !isOnlySelect && communityId == 0
+                && parentFragment != null && parentFragment.getType() == DialogsActivity.DIALOGS_TYPE_DEFAULT) {
+            hasUnreadByThemToggle = true;
+            itemInternals.add(new ItemInternal(VIEW_TYPE_UNREAD_BY_THEM));
         }
 
         if (requestPeerType != null) {

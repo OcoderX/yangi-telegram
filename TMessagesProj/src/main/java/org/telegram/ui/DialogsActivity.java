@@ -288,7 +288,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private static final boolean TMP_DISABLE_TOPICS_TWO_COLUMNS = false;
 
-    public static final int MAIN_TABS_HEIGHT = 56;
+    public static final int MAIN_TABS_HEIGHT = 44; //ox: compact tab bar (visible pill 44dp, content 36dp)
     public static final int MAIN_TABS_MARGIN = 8;
     public static final int MAIN_TABS_HEIGHT_WITH_MARGINS = MAIN_TABS_HEIGHT + MAIN_TABS_MARGIN * 2;
     public static final int FILTER_TABS_HEIGHT = 36;
@@ -5482,6 +5482,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 rightFragmentTransitionIsOpen = open;
                 contentView.requestLayout();
                 fromScrollYProperty = scrollYOffset;
+                checkUi_mainTabsVisible();
 
                 transitionPage = viewPages[0];
                 if (transitionPage.animationSupportListView == null) {
@@ -5576,6 +5577,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 updateFilterTabs(false, true);
                 checkUi_searchFieldHint();
+                checkUi_mainTabsVisible();
                 updateDialogsHint();
             }
 
@@ -5617,6 +5619,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 checkUi_topPanelVisible();
                 checkUi_filterTabsVisible();
                 checkUi_searchFieldVisibility();
+                checkUi_mainTabsVisible();
                 if (viewPages[0] != null && viewPages[0].listView != null) {
                     viewPages[0].listView.requestLayout();
                 }
@@ -10323,8 +10326,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     /**
      * Appends the "OcoderX Features" section to the main menu popup ({@link #showItemOptions()}):
-     * a section header, one check-marked row per custom (non stock Telegram) feature that owns a
-     * master switch, then the rows opening the tool screens and the AyuGram preferences hub.
+     * a section header plus one check-marked row per custom (non stock Telegram) feature that owns a
+     * master switch. The rows that open the tool screens and the AyuGram preferences hub used to sit
+     * below them; they now live on the OcoderX screen
+     * ({@link org.telegram.ui.ayu.OcoderXMenuFragment}) opened from the OcoderX button of the main
+     * tabs, so this popup holds the switches only.
      * <p>
      * Toggling a row never closes the menu: the rows are built by hand instead of through
      * {@code ItemOptions.addChecked(...)} (which dismisses the popup after the click).
@@ -10396,33 +10402,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         addOcoderXToggle(io, R.drawable.msg_online, getString(R.string.AyuDrawerKeepAlive),
                 org.telegram.messenger.ayu.AyuConfig.keepAliveService,
                 org.telegram.messenger.ayu.AyuConfig::setKeepAliveService);
+    }
 
-        io.addGap();
-        io.add(R.drawable.msg_download, getString(R.string.OxMenuDownloadManager), () -> {
-            showSearch(true, true, true);
-            fragmentSearchFieldWatcher.toggleSearch(true);
-        });
-        io.add(R.drawable.msg_folders, getString(R.string.AyuDrawerFileExplorer),
-                () -> presentFragment(new org.telegram.ui.ayu.explorer.FileExplorerActivity()));
-        io.add(R.drawable.msg_brightness_high, getString(R.string.OxMenuScreenLight),
-                () -> presentFragment(new org.telegram.ui.ayu.tools.ScreenLightActivity()));
-        io.addGap();
-        io.add(R.drawable.msg_mention, getString(R.string.OxMenuIdFinder),
-                () -> presentFragment(new org.telegram.ui.ayu.tools.IdFinderActivity()));
-        io.add(R.drawable.msg_online, getString(R.string.OxMenuOnlineContacts),
-                () -> presentFragment(new org.telegram.ui.ayu.contacts.OnlineContactsActivity()));
-        io.add(R.drawable.msg_fave, getString(R.string.OxMenuSpecialContact),
-                () -> presentFragment(new org.telegram.ui.ayu.contacts.SpecialContactsActivity()));
-        io.add(R.drawable.msg_recent, getString(R.string.OxMenuContactTracker),
-                () -> presentFragment(new org.telegram.ui.ayu.contacts.ContactTrackerActivity()));
-        io.add(R.drawable.msg_contacts, getString(R.string.OxMenuContactsChanges),
-                () -> presentFragment(new org.telegram.ui.ayu.contactchanges.ContactChangesActivity()));
-        io.add(R.drawable.msg_copy, getString(R.string.AyuDrawerDuplicates),
-                () -> presentFragment(new org.telegram.ui.ayu.duplicates.DuplicateCleanerActivity()));
-        io.add(R.drawable.msg_retry, getString(R.string.AyuDrawerSync),
-                () -> presentFragment(new org.telegram.ui.ayu.AyuSyncPreferencesActivity()));
-        io.add(R.drawable.msg_settings, getString(R.string.AyuDrawerAllSettings),
-                () -> presentFragment(new org.telegram.ui.ayu.AyuPreferencesActivity()));
+    /**
+     * Opens the download manager: the dialogs search view started on its downloads tab. Called by
+     * {@link org.telegram.ui.ayu.OcoderXMenuFragment} (the OcoderX screen has no search of its own),
+     * which closes itself first so that this fragment is the visible one again.
+     */
+    public void openDownloadManager() {
+        if (fragmentView == null || fragmentSearchFieldWatcher == null) {
+            return;
+        }
+        showSearch(true, true, true);
+        fragmentSearchFieldWatcher.toggleSearch(true);
     }
 
     /**
@@ -10823,6 +10815,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         } else if (id == NotificationCenter.updateInterfaces) {
             Integer mask = (Integer) args[0];
             updateVisibleRows(mask);
+            if ((mask & (MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE | MessagesController.UPDATE_MASK_SEND_STATE)) != 0 && viewPages != null && !DialogsAdapter.unreadByThemFolders.isEmpty()) {
+                //perf: read receipts arrive in bursts; rebuild the filtered list once, 250 ms after the last one
+                AndroidUtilities.cancelRunOnUIThread(unreadByThemRefreshRunnable);
+                AndroidUtilities.runOnUIThread(unreadByThemRefreshRunnable, 250);
+            }
             if (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && (mask & MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE) != 0) {
                 filterTabsView.checkTabsCounter();
             }
@@ -11225,6 +11222,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private ArrayList<TLRPC.Dialog> botShareDialogs;
 
+    /** ox: coalesced refresh of the pages whose "unread by them" filter is switched on */
+    private final Runnable unreadByThemRefreshRunnable = () -> {
+        if (viewPages == null || DialogsAdapter.unreadByThemFolders.isEmpty()) {
+            return;
+        }
+        for (ViewPage page : viewPages) {
+            if (page != null && page.dialogsAdapter != null && page.dialogsAdapter.isUnreadByThemActive()) {
+                page.dialogsAdapter.notifyDataSetChanged();
+            }
+        }
+    };
+
     @NonNull
     public ArrayList<TLRPC.Dialog> getDialogsArray(int currentAccount, int dialogsType, int folderId, boolean frozen) {
         if (frozen && frozenDialogsList != null) {
@@ -11276,6 +11285,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
                     return dialogFilter.dialogsForward;
+                }
+                if (initialDialogsType == DIALOGS_TYPE_DEFAULT && DialogsAdapter.isUnreadByThemActive(dialogFilter)) {
+                    return DialogsAdapter.filterUnreadByThem(currentAccount, dialogFilter.dialogs);
                 }
                 return dialogFilter.dialogs;
             }
@@ -14378,8 +14390,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         updateContextViewPosition();
     }
 
+    // true while a fragment (topics list of a forum) is shown in the right sliding container:
+    // it takes over the whole area below the action bar, so the main tabs bar must step aside.
+    private boolean isRightSlidingFragmentShown() {
+        return rightSlidingDialogContainer != null
+            && rightSlidingDialogContainer.hasFragment()
+            && rightSlidingDialogContainer.isOpenned;
+    }
+
     private void checkUi_mainTabsVisible() {
-        final boolean mainTabsVisible = !searching && (blurredView == null || blurredView.getBackground() == null || blurredView.getAlpha() < 0.01f || blurredView.getVisibility() == View.GONE);
+        final boolean mainTabsVisible = !searching
+            && !isRightSlidingFragmentShown()
+            && (blurredView == null || blurredView.getBackground() == null || blurredView.getAlpha() < 0.01f || blurredView.getVisibility() == View.GONE);
         if (mainTabsActivityController != null) {
             mainTabsActivityController.setTabsVisible(mainTabsVisible);
         }

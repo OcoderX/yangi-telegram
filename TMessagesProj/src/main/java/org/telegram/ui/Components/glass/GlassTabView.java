@@ -53,6 +53,50 @@ import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 
 public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, FactorAnimator.Target {
+
+    // ---- Default (non-compact) sizing ----
+    // Used by GlassTabView.createMainTab()/createAvatar() when compact==false: the
+    // StatisticActivity tab strip (Statistics/Boosts/Monetization), the StarGiftPreviewSheet
+    // model/backdrop/symbol tabs, and any other caller that does not opt into compact mode.
+    // Do not change these without checking those call sites first
+    // (grep -rn "createMainTab\|createAvatar" TMessagesProj/src/main/java).
+    private static final int DEFAULT_ICON_SIZE_DP = 24;
+    private static final int DEFAULT_ICON_TOP_MARGIN_DP = 4;
+    private static final float DEFAULT_TEXT_SIZE_SP = 12f;
+    private static final float DEFAULT_TEXT_TOP_MARGIN_DP = 28.33f;
+    private static final int DEFAULT_AVATAR_SIZE_DP = 22;
+    private static final int DEFAULT_AVATAR_TOP_MARGIN_DP = 5;
+    private static final float DEFAULT_AVATAR_ROUND_RADIUS_DP = 11f;
+
+    // ---- Compact sizing ----
+    // Opt-in via createMainTab(..., true) / createAvatar(..., true). Used only by the main tab
+    // bar (Chatlar / OcoderX / Sozlamalar / Profil, wired in MainTabsActivity). Tune these to
+    // resize the pill's contents. The pill's own height / corner radius / outer margins are set
+    // by DialogsActivity.MAIN_TABS_HEIGHT and MAIN_TABS_MARGIN (consumed from MainTabsActivity),
+    // not here — see this class's caller for the exact line to change.
+    // Content budget at these values: 2 (top) + 18 (icon) + 1 (gap) + ~12 (9sp bold text line)
+    // + ~3 (bottom) ≈ 36dp, meant to fit inside a 36dp per-tab content height (paired with a
+    // 44dp visible pill, i.e. MAIN_TABS_HEIGHT=44; content = MAIN_TABS_HEIGHT - 8).
+    private static final int COMPACT_ICON_SIZE_DP = 18;
+    private static final int COMPACT_ICON_TOP_MARGIN_DP = 2;
+    private static final float COMPACT_ICON_TEXT_GAP_DP = 1f;
+    private static final float COMPACT_TEXT_SIZE_SP = 9f;
+    private static final int COMPACT_AVATAR_SIZE_DP = 18;
+    private static final float COMPACT_AVATAR_ROUND_RADIUS_DP = 9f;
+    private static final int COMPACT_HIGHLIGHT_HORIZONTAL_PADDING_DP = 6;
+    // Recommended overall pill height (dp) to pair with this compact sizing; see report for the
+    // exact DialogsActivity.java line to change to reach it.
+    private static final int COMPACT_BAR_HEIGHT_DP = 44;
+    // Minimum touch target height enforced in onMeasure() when compact, regardless of the
+    // (shorter) exact height the container hands down. See onMeasure()/dispatchDraw().
+    private static final int MIN_TOUCH_TARGET_DP = 48;
+
+    private boolean compact;
+    // The real (short) content-band height compact mode was measured at, before onMeasure()
+    // pads it up to MIN_TOUCH_TARGET_DP; used to keep the selected-tab highlight sized to the
+    // visible content instead of the enlarged touch area. 0 until first measured.
+    private int compactVisibleHeightPx;
+
     private final TextView textView;
     private final RLottieImageView imageView;
     private BackupImageView backupImageView;
@@ -85,7 +129,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         imageView.setColorFilter(new PorterDuffColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN));
 
         textView = new TextView(context);
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12f);
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, DEFAULT_TEXT_SIZE_SP);
         textView.setSingleLine();
         textView.setLines(1);
         textView.setEllipsize(TextUtils.TruncateAt.END);
@@ -93,7 +137,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         textView.setGravity(Gravity.CENTER);
 
         defaultTextPaint = new TextPaint(textView.getPaint());
-        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 28.33f, 0, 0));
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, DEFAULT_TEXT_TOP_MARGIN_DP, 0, 0));
 
         counter = new AnimatedTextView.AnimatedTextDrawable();
         counter.setTypeface(AndroidUtilities.bold());
@@ -155,7 +199,16 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             final float alpha = AnimatorUtils.DECELERATE_INTERPOLATOR.getInterpolation(selectedFactor);
 
             paintCounterBackground.setColor(Theme.multAlpha(colorSelected, 0.09f * alpha));
-            tmpRectF.set(0, 0, viewWidth, getHeight());
+            if (compact) {
+                final float pad = dp(COMPACT_HIGHLIGHT_HORIZONTAL_PADDING_DP);
+                // Use the real content-band height, not getHeight() — onMeasure() may have
+                // padded the view's actual bounds up to MIN_TOUCH_TARGET_DP for touch purposes,
+                // and the highlight must stay sized to the visible compact content only.
+                final float highlightHeight = compactVisibleHeightPx > 0 ? compactVisibleHeightPx : getHeight();
+                tmpRectF.set(pad, 0, Math.max(pad, viewWidth - pad), highlightHeight);
+            } else {
+                tmpRectF.set(0, 0, viewWidth, getHeight());
+            }
             final float r = Math.min(tmpRectF.width(), tmpRectF.height()) / 2f;
             final float s = lerp(0.6f, 1, selectedFactor) * MathUtils.clamp(attachScale, 0, 1);
             canvas.save();
@@ -398,12 +451,28 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     }
 
     public static GlassTabView createMainTab(Context context, Theme.ResourcesProvider resourcesProvider, TabAnimation tabAnimation, @StringRes int stringRes) {
+        return createMainTab(context, resourcesProvider, tabAnimation, stringRes, false);
+    }
+
+    /**
+     * @param compact when true, uses the smaller COMPACT_* icon/text/gap constants meant for the
+     *                main tab bar (Chatlar / OcoderX / Sozlamalar / Profil). Pass false (or use the
+     *                4-arg overload) to keep the original sizing used elsewhere (StatisticActivity,
+     *                StarGiftPreviewSheet).
+     */
+    public static GlassTabView createMainTab(Context context, Theme.ResourcesProvider resourcesProvider, TabAnimation tabAnimation, @StringRes int stringRes, boolean compact) {
         GlassTabView tab = new GlassTabView(context);
+        tab.compact = compact;
         tab.resourcesProvider = resourcesProvider;
         tab.tabAnimation = tabAnimation;
         tab.textView.setText(LocaleController.getString(stringRes));
         tab.checkPlayAnimation(false);
-        tab.imageView.setLayoutParams(LayoutHelper.createFrame(24, 24, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 4, 0, 0));
+        if (compact) {
+            tab.applyCompactTextMetrics();
+            tab.imageView.setLayoutParams(LayoutHelper.createFrame(COMPACT_ICON_SIZE_DP, COMPACT_ICON_SIZE_DP, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, COMPACT_ICON_TOP_MARGIN_DP, 0, 0));
+        } else {
+            tab.imageView.setLayoutParams(LayoutHelper.createFrame(DEFAULT_ICON_SIZE_DP, DEFAULT_ICON_SIZE_DP, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, DEFAULT_ICON_TOP_MARGIN_DP, 0, 0));
+        }
         tab.colorDefault = Theme.getColor(Theme.key_glass_tabUnselected, resourcesProvider);
         tab.colorSelected = Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider);
         tab.colorSelectedText = Theme.getColor(Theme.key_glass_tabSelectedText, resourcesProvider);
@@ -412,7 +481,13 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     }
 
     public static GlassTabView createAvatar(Context context, Theme.ResourcesProvider resourcesProvider, int currentAccount, @StringRes int stringRes) {
+        return createAvatar(context, resourcesProvider, currentAccount, stringRes, false);
+    }
+
+    /** @param compact see {@link #createMainTab(Context, Theme.ResourcesProvider, TabAnimation, int, boolean)}. */
+    public static GlassTabView createAvatar(Context context, Theme.ResourcesProvider resourcesProvider, int currentAccount, @StringRes int stringRes, boolean compact) {
         GlassTabView tab = new GlassTabView(context);
+        tab.compact = compact;
         tab.textView.setText(LocaleController.getString(stringRes));
         tab.imageView.setVisibility(GONE);
 
@@ -421,15 +496,30 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
         BackupImageView backupImageView = new BackupImageView(context);
         backupImageView.setForUserOrChat(user, avatarDrawable);
-        backupImageView.setRoundRadius(dp(11));
+
+        final int avatarSizeDp = compact ? COMPACT_AVATAR_SIZE_DP : DEFAULT_AVATAR_SIZE_DP;
+        final float avatarRoundRadiusDp = compact ? COMPACT_AVATAR_ROUND_RADIUS_DP : DEFAULT_AVATAR_ROUND_RADIUS_DP;
+        final int avatarTopMarginDp = compact ? COMPACT_ICON_TOP_MARGIN_DP : DEFAULT_AVATAR_TOP_MARGIN_DP;
+        backupImageView.setRoundRadius(dp(avatarRoundRadiusDp));
         tab.backupImageView = backupImageView;
 
-        tab.addView(backupImageView, LayoutHelper.createFrame(22, 22, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 5, 0, 0));
+        tab.addView(backupImageView, LayoutHelper.createFrame(avatarSizeDp, avatarSizeDp, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, avatarTopMarginDp, 0, 0));
+        if (compact) {
+            tab.applyCompactTextMetrics();
+        }
         tab.colorDefault = Theme.getColor(Theme.key_glass_tabUnselected, resourcesProvider);
         tab.colorSelected = Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider);
         tab.colorSelectedText = Theme.getColor(Theme.key_glass_tabSelectedText, resourcesProvider);
         tab.updateColors();
         return tab;
+    }
+
+    /** Applies COMPACT_TEXT_SIZE_SP and repositions the label directly under the compact icon/avatar. */
+    private void applyCompactTextMetrics() {
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, COMPACT_TEXT_SIZE_SP);
+        defaultTextPaint.setTextSize(dp(COMPACT_TEXT_SIZE_SP));
+        final float textTopMarginDp = COMPACT_ICON_TOP_MARGIN_DP + COMPACT_ICON_SIZE_DP + COMPACT_ICON_TEXT_GAP_DP;
+        textView.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, textTopMarginDp, 0, 0));
     }
 
     public void updateUserAvatar(int currentAccount) {
@@ -509,6 +599,23 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), heightMeasureSpec);
         } else {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            if (compact) {
+                // The container (MainTabsLayout) hands each tab an EXACT height equal to the
+                // compact content band (e.g. 36dp for a 44dp pill), which is shorter than the
+                // 48dp minimum touch target. Report a taller measured height so the standard
+                // Android click/touch dispatch (used by the tab's own OnClickListener) sees a
+                // >=48dp tall view. The extra height is transparent and grows downward past the
+                // visible content — MainTabsActivity already sets tabsView.setClipChildren(false)
+                // and reserves >= this much slack as the LinearLayout's own bottom padding, so
+                // nothing is clipped and no other content sits in that space. dispatchDraw below
+                // keeps the visible selected-tab highlight sized to the real content band
+                // (compactVisibleHeightPx), not to this enlarged touch height.
+                compactVisibleHeightPx = getMeasuredHeight();
+                final int minTouchTargetPx = dp(MIN_TOUCH_TARGET_DP);
+                if (compactVisibleHeightPx < minTouchTargetPx) {
+                    setMeasuredDimension(getMeasuredWidth(), minTouchTargetPx);
+                }
+            }
         }
     }
 

@@ -14,4 +14,5 @@
     <string name="AyuColoredStatusInfo">Read ticks are green, delivered ticks are red, the sending clock is yellow</string>
     <string name="AyuCardChatList">Chat list cards</string>
     <string name="AyuCardChatListInfo">Every chat in the main list is drawn as a separate rounded card with a compact gap between the cards.</string>
+    <string name="AyuUnreadByThem">Unread by them</string>
 </resources>

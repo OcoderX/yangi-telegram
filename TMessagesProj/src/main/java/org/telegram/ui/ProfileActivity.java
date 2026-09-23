@@ -7150,8 +7150,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 }
             }
 
-            boolean result = (canEditAdmin || canEditTag || canRestrict || allowKick);
-            if (resultOnly || !result) {
+            //ayu: "Show messages" applies to every member of a group, so the popup is always available there
+            final boolean canShowMessages = currentChat != null && (!ChatObject.isChannel(currentChat) || currentChat.megagroup);
+            final String publicUsername = UserObject.getPublicUsername(user);
+            final boolean canCopyUsername = !TextUtils.isEmpty(publicUsername);
+            boolean result = (canEditAdmin || canEditTag || canRestrict || allowKick || canShowMessages || canCopyUsername);
+            if (resultOnly || !result || view == null) {
                 return result;
             }
 
@@ -7174,7 +7178,16 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     .addIf(!self, R.drawable.msg_discussion, getString(R.string.SendMessage), () -> {
                         presentFragment(ChatActivity.of(user.id));
                     })
-                    .addGapIf(!self && (canEditAdmin || canEditTag || canRestrict || allowKick))
+                    //ayu: open the group in the stock "search from" mode filtered to this member
+                    .addIf(canShowMessages, R.drawable.msg_search, getString(R.string.AyuShowMessages), () -> {
+                        ayuShowMemberMessages(user.id);
+                    })
+                    //ayu: copy @username
+                    .addIf(canCopyUsername, R.drawable.msg_copy, getString(R.string.AyuCopyUsername), () -> {
+                        AndroidUtilities.addToClipboard("@" + publicUsername);
+                        BulletinFactory.of(ProfileActivity.this).createCopyBulletin(getString(R.string.UsernameCopied), resourcesProvider).show();
+                    })
+                    .addGapIf((!self || canShowMessages || canCopyUsername) && (canEditAdmin || canEditTag || canRestrict || allowKick))
                     .addIf(canEditTag, !isAdmin && TextUtils.isEmpty(rank) ? R.drawable.menu_tag_plus : R.drawable.menu_tag_edit, getString(isAdmin ? R.string.EditAdminTag : TextUtils.isEmpty(rank) ? R.string.AddMemberTag : R.string.EditMemberTag), () -> {
                         TagEditCell.showSheet(getContext(), currentAccount, getDialogId(), user, rank, isAdmin, isOwner, resourcesProvider);
                     })
@@ -7208,6 +7221,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             presentFragment(new ProfileActivity(args));
         }
         return true;
+    }
+
+    /**
+     * ayu: "Show messages" of a member: opens this group's ChatActivity in the stock "search from" mode
+     * (the {@code search_from_user_id} argument handled by ChatActivity.checkInstantSearch).
+     */
+    private void ayuShowMemberMessages(long userId) {
+        if (chatId == 0 || userId == 0) {
+            return;
+        }
+        Bundle args = new Bundle();
+        args.putLong("chat_id", chatId);
+        args.putLong("search_from_user_id", userId);
+        if (!getMessagesController().checkCanOpenChat(args, ProfileActivity.this)) {
+            return;
+        }
+        presentFragment(new ChatActivity(args));
     }
 
     private void openRightsEdit(int action, TLRPC.User user, TLRPC.ChatParticipant participant, TLRPC.TL_chatAdminRights adminRights, TLRPC.TL_chatBannedRights bannedRights, String rank, boolean editingAdmin) {

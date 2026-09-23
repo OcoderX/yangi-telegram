@@ -14085,6 +14085,12 @@ public class MessagesStorage extends BaseController {
         if (DialogObject.isEncryptedDialog(dialogId)) {
             return;
         }
+        //ayu: deletions the user started on this device (delete for me / for everyone / delete locally)
+        //must vanish for good - only what somebody else deleted is worth archiving.
+        messages = org.telegram.messenger.ayu.antidelete.AyuAntiDelete.filterLocalDeletions(currentAccount, dialogId, messages);
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
         String ayuIds = TextUtils.join(",", messages);
         if (dialogId != 0) {
             ayuArchiveQuery(String.format(Locale.US, "SELECT data, mid, uid FROM messages_v2 WHERE mid IN(%s) AND uid = %d", ayuIds, dialogId));
@@ -14118,11 +14124,13 @@ public class MessagesStorage extends BaseController {
             return;
         }
         final boolean historyOnly = messagesOnly == 1;
-        if (historyOnly) {
-            if (!org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.keepOnClearHistory) {
-                return;
-            }
-        } else if (!org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.keepOnDeleteDialog) {
+        final boolean keep = historyOnly
+                ? org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.keepOnClearHistory
+                : org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.keepOnDeleteDialog;
+        if (!keep) {
+            //ayu: not only "do not archive the tail" - everything this dialog had kept so far is
+            //dropped too, otherwise "clear history" leaves the chat full of resurrected ghosts.
+            org.telegram.messenger.ayu.AyuMessagesController.getInstance().forgetAllDeletedForDialog(currentAccount, did);
             return;
         }
         ayuArchiveQuery(String.format(Locale.US, "SELECT data, mid, uid FROM messages_v2 WHERE uid = %d ORDER BY mid DESC LIMIT %d", did, AYU_MAX_CLEAR_HISTORY_SAVE));

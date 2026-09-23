@@ -245,6 +245,7 @@ public class ApplicationLoader extends Application {
 
         SharedConfig.loadConfig();
         org.telegram.messenger.ayu.AyuConfig.load();
+        org.telegram.messenger.ayu.AyuMarkedMessages.preloadAsync(); //ox: warm the bookmark prefs off the UI thread
         org.telegram.messenger.ayu.contacts.ContactTracker.getInstance().init();
         org.telegram.messenger.ayu.AyuMessagesController.getInstance().warmUp();
         SharedPrefsHelper.init(applicationContext);

@@ -627,6 +627,9 @@ public class ChatActivity extends BaseFragment implements
     private boolean searchingForUser;
     private TLRPC.User searchingUserMessages;
     private TLRPC.Chat searchingChatMessages;
+    //ayu: "search_from_user_id" / "search_from_chat_id" arguments, applied once the fragment is fully visible
+    private TLRPC.User ayuPendingSearchFromUser;
+    private TLRPC.Chat ayuPendingSearchFromChat;
     public static boolean scrolling;
     public ReactionsLayoutInBubble.VisibleReaction searchingReaction;
     public ReactionsLayoutInBubble.VisibleReaction getFilterTag() {
@@ -1265,6 +1268,8 @@ public class ChatActivity extends BaseFragment implements
     public final static int OPTION_AYU_SPECIAL_FORWARD = 208;
     /** ox: local bookmark on this message */
     public final static int OPTION_AYU_MARK_MESSAGE = 209;
+    /** ox: filter the chat to the sender of this message (stock "search from" mode) */
+    public final static int OPTION_AYU_SHOW_MESSAGES = 210;
 
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
             NotificationCenter.messagesRead,
@@ -3102,6 +3107,9 @@ public class ChatActivity extends BaseFragment implements
             loading = false;
             checkDispatchHideSkeletons(false);
         }
+        //perf: start reading the local archive of deleted messages before the first history page is
+        //requested, so that ayuMergeDeletedMessages only has to splice an in-memory list later on
+        ayuPreloadDeletedMessages();
         if (chatMode != MODE_PINNED && !forceHistoryEmpty) {
             if (SharedConfig.deviceIsHigh()) {
                 initialMessagesSize = (isThreadChat() && !isTopic) ? 30 : 25;
@@ -9583,30 +9591,90 @@ public class ChatActivity extends BaseFragment implements
 
     }
 
+    /**
+     * Opens the chat in the stock "search from" mode when the arguments carry {@code search_from_user_id}
+     * or {@code search_from_chat_id}.
+     * ayu: the ids are read as long (the stock getInt never matched the putLong callers) and the search is
+     * applied from {@link #onBecomeFullyVisible()} so the action bar and the mentions container exist.
+     */
     private void checkInstantSearch() {
-        final long searchFromUserId = getArguments().getInt("search_from_user_id", 0);
-        if (searchFromUserId != 0) {
-            TLRPC.User user = getMessagesController().getUser(searchFromUserId);
-            if (user != null) {
-                openSearchWithText("");
-                if (searchUserButton != null) {
-                    searchUserButton.callOnClick();
-                }
-                searchUserMessages(user, null);
-            }
-        } else {
-            final long searchFromChatId = getArguments().getInt("search_from_chat_id", 0);
-            if (searchFromChatId != 0) {
-                TLRPC.Chat chat = getMessagesController().getChat(searchFromChatId);
-                if (chat != null) {
-                    openSearchWithText("");
-                    if (searchUserButton != null) {
-                        searchUserButton.callOnClick();
-                    }
-                    searchUserMessages(null, chat);
-                }
-            }
+        ayuPendingSearchFromUser = null;
+        ayuPendingSearchFromChat = null;
+        long searchFromUserId = getArguments().getLong("search_from_user_id", 0);
+        if (searchFromUserId == 0) {
+            searchFromUserId = getArguments().getInt("search_from_user_id", 0);
         }
+        if (searchFromUserId != 0) {
+            ayuPendingSearchFromUser = getMessagesController().getUser(searchFromUserId);
+            return;
+        }
+        long searchFromChatId = getArguments().getLong("search_from_chat_id", 0);
+        if (searchFromChatId == 0) {
+            searchFromChatId = getArguments().getInt("search_from_chat_id", 0);
+        }
+        if (searchFromChatId != 0) {
+            ayuPendingSearchFromChat = getMessagesController().getChat(searchFromChatId);
+        }
+    }
+
+    /** ayu: applies the pending "search from" argument, see {@link #checkInstantSearch()} */
+    private void ayuApplyPendingInstantSearch() {
+        final TLRPC.User user = ayuPendingSearchFromUser;
+        final TLRPC.Chat chat = ayuPendingSearchFromChat;
+        ayuPendingSearchFromUser = null;
+        ayuPendingSearchFromChat = null;
+        if (user == null && chat == null || searchItem == null || getParentActivity() == null || fragmentView == null) {
+            return;
+        }
+        if (user != null) {
+            openSearchWithUser(user);
+        } else {
+            openSearchWithChat(chat);
+        }
+    }
+
+    /** ayu: true when this chat can be filtered to a single sender through the stock "search from" mode */
+    private boolean ayuCanSearchFromSender() {
+        return currentChat != null && chatMode == 0 && !isInsideContainer && !ChatObject.isMonoForum(currentChat)
+                && (!ChatObject.isChannel(currentChat) || currentChat.megagroup);
+    }
+
+    /**
+     * ayu: "Show messages" from the message context menu: filters this chat to the sender of the message.
+     * Falls back to a fresh ChatActivity carrying {@code search_from_user_id} when the search field is not
+     * available here (comment threads without topic mode).
+     */
+    private void ayuShowMessagesFromSender(MessageObject message) {
+        if (message == null || message.messageOwner == null || !ayuCanSearchFromSender()) {
+            return;
+        }
+        final long fromId = MessageObject.getFromChatId(message.messageOwner);
+        TLRPC.User user = null;
+        TLRPC.Chat chat = null;
+        if (fromId > 0) {
+            user = getMessagesController().getUser(fromId);
+        } else if (fromId < 0) {
+            chat = getMessagesController().getChat(-fromId);
+        }
+        if (user == null && chat == null) {
+            return;
+        }
+        if (searchItem != null && (threadMessageId == 0 || isTopic)) {
+            if (user != null) {
+                openSearchWithUser(user);
+            } else {
+                openSearchWithChat(chat);
+            }
+            return;
+        }
+        Bundle args = new Bundle();
+        args.putLong("chat_id", currentChat.id);
+        if (user != null) {
+            args.putLong("search_from_user_id", user.id);
+        } else {
+            args.putLong("search_from_chat_id", chat.id);
+        }
+        presentFragment(new ChatActivity(args));
     }
 
     private void createTopPanel() {
@@ -22350,6 +22418,9 @@ public class ChatActivity extends BaseFragment implements
             if (ayuIds == null || ayuIds.isEmpty()) {
                 return;
             }
+            //perf: this can carry hundreds of ids - update the message objects in the loop and refresh
+            //the list once afterwards instead of asking the adapter for a row update per id
+            boolean ayuAnyChanged = false;
             for (int a = 0, N = ayuIds.size(); a < N; a++) {
                 final Integer mid = ayuIds.get(a);
                 if (mid == null) {
@@ -22371,9 +22442,8 @@ public class ChatActivity extends BaseFragment implements
                         obj.mediaExists = false;
                         obj.attachPathExists = false;
                         obj.checkMediaExistance();
-                        if (chatAdapter != null) {
-                            chatAdapter.updateRowWithMessageObject(obj, true, false);
-                        }
+                        //perf: these callbacks arrive one per message, coalesce them into one refresh
+                        ayuScheduleVisibleRowsUpdate();
                     });
                 } else if (ayuType == 1) {
                     //ayu-edithistory: the stored revision count is the source of truth. Blindly
@@ -22387,10 +22457,15 @@ public class ChatActivity extends BaseFragment implements
                 }
                 if (changed) {
                     obj.forceUpdate = true;
-                    if (chatAdapter != null) {
-                        chatAdapter.updateRowWithMessageObject(obj, true, false);
-                    }
+                    ayuAnyChanged = true;
                 }
+            }
+            if (ayuAnyChanged && chatAdapter != null) {
+                updateVisibleRows();
+            }
+            if (ayuType == 0) {
+                //perf: the archive of this dialog changed, rebuild the preloaded list in the background
+                ayuPreloadDeletedMessages();
             }
         } else if (id == NotificationCenter.quickRepliesDeleted) {
             if (chatMode != MODE_QUICK_REPLIES) return;
@@ -26329,6 +26404,12 @@ public class ChatActivity extends BaseFragment implements
             if (obj == null || obj.messageOwner == null || obj.scheduled || obj.isSponsored()) {
                 continue;
             }
+            //ayu: single gate for "may this deletion be kept?" - rejects deletions the user started on this
+            //device (delete for me / for everyone / delete locally / clear history) and, unless keepOwnDeleted
+            //is on, our own messages deleted from another device
+            if (!org.telegram.messenger.ayu.antidelete.AyuAntiDelete.shouldKeepInChat(currentAccount, dialog_id, obj)) {
+                continue;
+            }
             if (!obj.messageOwner.ayuDeleted) {
                 obj.messageOwner.ayuDeleted = true;
                 obj.forceUpdate = true;
@@ -26365,6 +26446,112 @@ public class ChatActivity extends BaseFragment implements
         }
     }
 
+    // ---------------- perf: preloaded archive of deleted messages ----------------
+
+    /** how many archived deleted messages are kept in memory per dialog (newest first); the same cap
+     *  the per-page query always used, so nothing more than one old page load is held */
+    private static final int AYU_DELETED_PRELOAD_LIMIT = 300;
+    /** the cap the per-page query always had; kept so a single page can not insert more than before */
+    private static final int AYU_DELETED_PAGE_LIMIT = 300;
+
+    /** perf: archived deleted messages of this dialog, already built as MessageObjects (id-descending) */
+    private ArrayList<MessageObject> ayuDeletedCache;
+    /** smallest message id {@link #ayuDeletedCache} is complete down to; 0 = the whole dialog fits */
+    private int ayuDeletedCacheCoveredFrom;
+    private boolean ayuDeletedPreloadRunning;
+    private boolean ayuDeletedPreloadStale;
+    private Runnable ayuVisibleRowsUpdateRunnable;
+
+    /**
+     * perf: queries the local archive and builds the (expensive) message layouts on the ayu storage
+     * queue, so that {@link #ayuMergeDeletedMessages} only has to splice an in-memory list afterwards.
+     * Cheap to call repeatedly: a second request while one is running just re-runs it once at the end.
+     */
+    private void ayuPreloadDeletedMessages() {
+        if (dialog_id == 0 || !ayuCanKeepDeletedMessages() || isThreadChat() && !isTopic) {
+            return;
+        }
+        if (ayuDeletedPreloadRunning) {
+            ayuDeletedPreloadStale = true;
+            return;
+        }
+        ayuDeletedPreloadRunning = true;
+        final int account = currentAccount;
+        final long dialogId = dialog_id;
+        final long topicId = getTopicId();
+        org.telegram.messenger.ayu.AyuHistoryStorage.getQueue().postRunnable(() -> {
+            final ArrayList<MessageObject> objects = new ArrayList<>();
+            int coveredFrom = 0;
+            try {
+                final AyuMessagesController controller = AyuMessagesController.getInstance();
+                //perf: publish the count first - the UI thread can short-circuit on it already while
+                //the much more expensive message objects are still being built here
+                final int total = controller.getDeletedMessagesCount(account, dialogId);
+                controller.putCachedDeletedMessagesCount(account, dialogId, total);
+                if (total > 0) {
+                    objects.addAll(ayuBuildDeletedObjects(account, dialogId, topicId, 0, Integer.MAX_VALUE, AYU_DELETED_PRELOAD_LIMIT));
+                    if (objects.size() >= AYU_DELETED_PRELOAD_LIMIT) {
+                        // only the newest ones fit: pages that reach below this id have to query again
+                        coveredFrom = objects.get(objects.size() - 1).getId();
+                    }
+                }
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+            final int covered = coveredFrom;
+            AndroidUtilities.runOnUIThread(() -> {
+                ayuDeletedPreloadRunning = false;
+                ayuDeletedCache = objects;
+                ayuDeletedCacheCoveredFrom = covered;
+                if (ayuDeletedPreloadStale) {
+                    ayuDeletedPreloadStale = false;
+                    ayuPreloadDeletedMessages();
+                }
+            });
+        });
+    }
+
+    /**
+     * ayu: reads the stored deleted messages of a range and turns them into ready-to-insert objects,
+     * newest first. Heavy (TL deserialisation + text layout), so it runs on the ayu storage queue.
+     */
+    private ArrayList<MessageObject> ayuBuildDeletedObjects(int account, long dialogId, long topicId, int lower, int upper, int limit) {
+        final ArrayList<MessageObject> result = new ArrayList<>();
+        try {
+            final ArrayList<TLRPC.Message> stored = AyuMessagesController.getInstance()
+                    .getDeletedMessagesAsObjects(account, dialogId, topicId, lower, upper, limit);
+            if (stored == null) {
+                return result;
+            }
+            for (int a = 0, N = stored.size(); a < N; a++) {
+                final TLRPC.Message message = stored.get(a);
+                if (message == null || message.id <= 0) {
+                    continue;
+                }
+                message.ayuDeleted = true;
+                final MessageObject messageObject = new MessageObject(account, message, true, true);
+                messageObject.messageOwner.ayuDeleted = true;
+                result.add(messageObject);
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+        return result;
+    }
+
+    /** perf: coalesces many single-row refreshes into one visible-rows pass */
+    private void ayuScheduleVisibleRowsUpdate() {
+        if (ayuVisibleRowsUpdateRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(ayuVisibleRowsUpdateRunnable);
+        }
+        AndroidUtilities.runOnUIThread(ayuVisibleRowsUpdateRunnable = () -> {
+            ayuVisibleRowsUpdateRunnable = null;
+            if (chatAdapter != null) {
+                updateVisibleRows();
+            }
+        });
+    }
+
     /**
      * ayu: mix the locally stored deleted messages of this dialog into a freshly loaded history page.
      * Returns how many messages were inserted (the caller bumps {@code count} so that the
@@ -26377,6 +26564,26 @@ public class ChatActivity extends BaseFragment implements
         if (isThreadChat() && !isTopic) {
             // comments/discussion view carries synthetic header objects with id 0, don't reorder them
             return 0;
+        }
+        //perf: dialogs that never had a message deleted (by far the common case) must not touch SQLite
+        //on the UI thread - both checks below are plain in-memory lookups
+        if (ayuDeletedCache != null && ayuDeletedCache.isEmpty() && ayuDeletedCacheCoveredFrom == 0) {
+            return 0;
+        }
+        if (ayuDeletedCache == null) {
+            final AyuMessagesController controller = AyuMessagesController.getInstance();
+            int deletedCount = controller.getCachedDeletedMessagesCount(currentAccount, dialog_id);
+            if (deletedCount < 0) {
+                //perf: cold open, the preload has not published the count yet. A COUNT on the indexed
+                //dialog column costs microseconds (unlike building up to 300 message layouts), so read it
+                //synchronously once and cache it: dialogs without archived deletions never go further.
+                deletedCount = controller.getDeletedMessagesCount(currentAccount, dialog_id);
+                controller.putCachedDeletedMessagesCount(currentAccount, dialog_id, deletedCount);
+            }
+            if (deletedCount == 0) {
+                return 0;
+            }
+            ayuPreloadDeletedMessages();
         }
         int inserted = 0;
         try {
@@ -26432,29 +26639,39 @@ public class ChatActivity extends BaseFragment implements
             if (upper <= 0 || upper != Integer.MAX_VALUE && upper <= lower) {
                 return 0;
             }
-            final ArrayList<TLRPC.Message> stored = AyuMessagesController.getInstance()
-                    .getDeletedMessagesAsObjects(currentAccount, dialog_id, getTopicId(), lower, upper, 300);
-            if (stored == null || stored.isEmpty()) {
+            //perf: normally the messages come from the list that was built on the ayu storage queue when
+            //the chat opened. Only while that preload is still running, or when this page reaches below
+            //what it covers (a dialog with more than AYU_DELETED_PRELOAD_LIMIT archived messages), the
+            //old per-page query is used, which keeps the merged result identical to before.
+            final ArrayList<MessageObject> stored;
+            if (ayuDeletedCache != null && (ayuDeletedCacheCoveredFrom == 0 || lower >= ayuDeletedCacheCoveredFrom - 1)) {
+                stored = ayuDeletedCache;
+            } else {
+                stored = ayuBuildDeletedObjects(currentAccount, dialog_id, getTopicId(), lower, upper, AYU_DELETED_PAGE_LIMIT);
+            }
+            if (stored.isEmpty()) {
                 return 0;
             }
-            for (int a = 0, N = stored.size(); a < N; a++) {
-                final TLRPC.Message message = stored.get(a);
-                if (message == null || message.id <= 0 || existing.contains(message.id)) {
+            //ayu: both lists are sorted from the newest to the oldest message, so one forward pass
+            //replaces the old "scan messArr from the beginning for every stored message"
+            int index = 0;
+            for (int a = 0, N = stored.size(); a < N && inserted < AYU_DELETED_PAGE_LIMIT; a++) {
+                final MessageObject messageObject = stored.get(a);
+                final int id = messageObject.getId();
+                // the cached list spans the whole dialog: keep only the ids this page has to cover, (lower, upper]
+                if (id <= 0 || id <= lower || upper != Integer.MAX_VALUE && id > upper) {
                     continue;
                 }
-                existing.add(message.id);
-                message.ayuDeleted = true;
-                final MessageObject messageObject = new MessageObject(currentAccount, message, true, true);
+                if (existing.contains(id)) {
+                    continue;
+                }
+                existing.add(id);
                 messageObject.messageOwner.ayuDeleted = true;
-                // messArr is sorted from the newest to the oldest message
-                int index = messArr.size();
-                for (int b = 0, M = messArr.size(); b < M; b++) {
-                    if (messArr.get(b).getId() < message.id) {
-                        index = b;
-                        break;
-                    }
+                while (index < messArr.size() && messArr.get(index).getId() >= id) {
+                    index++;
                 }
                 messArr.add(index, messageObject);
+                index++;
                 inserted++;
             }
         } catch (Exception e) {
@@ -27241,6 +27458,9 @@ public class ChatActivity extends BaseFragment implements
         if (showCloseChatDialogLater) {
             showDialog(closeChatDialog);
         }
+        if (ayuPendingSearchFromUser != null || ayuPendingSearchFromChat != null) {
+            ayuApplyPendingInstantSearch(); //ayu: "search_from_user_id" argument
+        }
         if (keyboardWasVisible) {
             if (chatActivityEnterView != null) {
                 chatActivityEnterView.openKeyboardInternal();
@@ -27784,11 +28004,16 @@ public class ChatActivity extends BaseFragment implements
     @Override
     protected void onDialogDismiss(Dialog dialog) {
         if (closeChatDialog != null && dialog == closeChatDialog) {
-            if (org.telegram.messenger.ayu.AyuConfig.keepKickedChats) {
+            //ayu: staying in the chat only makes sense when there IS cached history to read. With an
+            //empty message list the user is parked in a blank chat and never learns why it stayed
+            //empty, so fall back to the stock behaviour (close the fragment) in that case.
+            if (org.telegram.messenger.ayu.AyuConfig.keepKickedChats && !messages.isEmpty()) {
                 // AyuGram: keep the kicked/banned dialog and stay in the chat so cached history is readable
                 return;
             }
-            getMessagesController().deleteDialog(dialog_id, 0);
+            if (!org.telegram.messenger.ayu.AyuConfig.keepKickedChats) {
+                getMessagesController().deleteDialog(dialog_id, 0);
+            }
             if (parentLayout != null && !parentLayout.getFragmentStack().isEmpty() && parentLayout.getFragmentStack().get(parentLayout.getFragmentStack().size() - 1) != this) {
                 BaseFragment fragment = parentLayout.getFragmentStack().get(parentLayout.getFragmentStack().size() - 1);
                 removeSelfFromStack();
@@ -33584,6 +33809,14 @@ public class ChatActivity extends BaseFragment implements
             case OPTION_AYU_MARK_MESSAGE: {
                 //ox: local bookmark
                 ayuToggleMark(selectedObject);
+                selectedObject = null;
+                selectedObjectToEditCaption = null;
+                selectedObjectGroup = null;
+                break;
+            }
+            case OPTION_AYU_SHOW_MESSAGES: {
+                //ayu: filter the chat to the sender of this message
+                ayuShowMessagesFromSender(selectedObject);
                 selectedObject = null;
                 selectedObjectToEditCaption = null;
                 selectedObjectGroup = null;
@@ -46660,7 +46893,8 @@ public class ChatActivity extends BaseFragment implements
     /**
      * ayu/ox: every AyuGram + Ox-gram entry of the message context menu. The Graph-Messenger order is
      * rebuilt by inserting each entry after its stock anchor (copy, translate, save, forward, delete),
-     * the remaining AyuGram entries are appended after "Message details".
+     * "Show messages" (sender filter) goes right after the copy group (or after "Reply" when the message
+     * has nothing to copy), the remaining AyuGram entries are appended after "Message details".
      */
     private void fillAyuMessageMenu(MessageObject message, boolean ayuDeletedMessage, ArrayList<Integer> icons, ArrayList<CharSequence> items, ArrayList<Integer> options) {
         if (message == null || message.messageOwner == null || message.isSponsored() || chatMode == MODE_SCHEDULED) {
@@ -46674,6 +46908,18 @@ public class ChatActivity extends BaseFragment implements
         if (!TextUtils.isEmpty(menuText) && !noforwards) {
             ayuInsertMenuItem(icons, items, options, OPTION_COPY, OPTION_AYU_COPY_PIECE,
                     LocaleController.getString(R.string.AyuCopyPiece), R.drawable.msg_copy);
+        }
+        // Copy piece of text / Copy / Reply -> Show messages (from this sender)
+        if (ayuCanSearchFromSender()) {
+            final long fromId = MessageObject.getFromChatId(message.messageOwner);
+            final boolean hasSender = fromId > 0 && getMessagesController().getUser(fromId) != null
+                    || fromId < 0 && getMessagesController().getChat(-fromId) != null;
+            if (hasSender) {
+                final int anchor = options.contains(OPTION_AYU_COPY_PIECE) ? OPTION_AYU_COPY_PIECE
+                        : options.contains(OPTION_COPY) ? OPTION_COPY : OPTION_REPLY;
+                ayuInsertMenuItem(icons, items, options, anchor, OPTION_AYU_SHOW_MESSAGES,
+                        LocaleController.getString(R.string.AyuShowMessages), R.drawable.msg_search);
+            }
         }
         // Translate -> AI Tools
         if (!TextUtils.isEmpty(menuText) && AyuConfig.aiToolsEnabled) {

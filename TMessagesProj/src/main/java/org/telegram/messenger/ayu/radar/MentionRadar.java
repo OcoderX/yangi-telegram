@@ -1,6 +1,9 @@
 package org.telegram.messenger.ayu.radar;
 
 import android.text.TextUtils;
+import android.util.SparseBooleanArray;
+
+import androidx.collection.LongSparseArray;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
@@ -18,6 +21,7 @@ import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Locale;
 
 /**
@@ -111,6 +115,21 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
     private volatile int unreadCount;
     private volatile boolean unreadCountLoaded;
 
+    //perf: opening a chat and every pagination page re-delivers the same MessageObjects through
+    // messagesDidLoad. This remembers which (dialog, message id) pairs were already classified in
+    // this process, so a repeated page costs zero database round trips. Radar-queue only.
+    private final LongSparseArray<SparseBooleanArray> processedIds = new LongSparseArray<>();
+    /** per dialog cap; the oldest page of a very long chat is dropped instead of growing forever */
+    private static final int PROCESSED_PER_DIALOG = 4000;
+    /** how many dialogs keep a cache at the same time */
+    private static final int PROCESSED_MAX_DIALOGS = 24;
+    /**
+     * hash of everything {@link #match} depends on (match switches, my names / usernames, keywords).
+     * When the user edits a keyword the cache must not hide messages from the new matcher.
+     */
+    private int processedSignature;
+    private boolean processedSignatureValid;
+
     private HistoryScan scan;
 
     private MentionRadar(int account) {
@@ -143,6 +162,8 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
         NotificationCenter center = NotificationCenter.getInstance(currentAccount);
         center.removeObserver(this, NotificationCenter.didReceiveNewMessages);
         center.removeObserver(this, NotificationCenter.messagesDidLoad);
+        //perf: nothing will be collected until start() runs again, so release the cache
+        clearProcessedCache();
     }
 
     public void addDelegate(RadarDelegate delegate) {
@@ -253,6 +274,8 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
         RadarStorage.getQueue().postRunnable(() -> {
             RadarStorage storage = RadarStorage.getInstance(currentAccount);
             storage.delete(rowId);
+            //perf: the processed cache would otherwise keep the deleted hit from being re-detected
+            processedIds.clear();
             unreadCount = storage.getUnreadCount();
             unreadCountLoaded = true;
             notifyHitsChanged(0);
@@ -263,6 +286,8 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
         RadarStorage.getQueue().postRunnable(() -> {
             RadarStorage storage = RadarStorage.getInstance(currentAccount);
             storage.clear();
+            //perf: see deleteHit()
+            processedIds.clear();
             unreadCount = 0;
             unreadCountLoaded = true;
             notifyHitsChanged(0);
@@ -367,19 +392,46 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
         RadarStorage storage = RadarStorage.getInstance(currentAccount);
         ArrayList<RadarHit> hits = new ArrayList<>();
         ArrayList<RadarHit> keywordHits = new ArrayList<>();
+
+        //perf: (1) drop everything this process already classified, (2) group what is left per
+        // dialog and ask the database ONCE per dialog instead of four exists() queries per message
+        checkProcessedSignature(context);
+        final LongSparseArray<ArrayList<Candidate>> byDialog = new LongSparseArray<>();
         for (int i = 0; i < batch.size(); i++) {
             Candidate candidate = batch.get(i);
-            if (storage.exists(candidate.dialogId, candidate.message.id, RadarHit.KIND_MENTION)
-                    || storage.exists(candidate.dialogId, candidate.message.id, RadarHit.KIND_REPLY)
-                    || storage.exists(candidate.dialogId, candidate.message.id, RadarHit.KIND_KEYWORD)
-                    || storage.exists(candidate.dialogId, candidate.message.id, RadarHit.KIND_NAME)) {
+            if (candidate == null || candidate.message == null) {
                 continue;
             }
-            RadarHit hit = match(candidate, context, true);
-            if (hit != null) {
-                hits.add(hit);
-                if (hit.kind == RadarHit.KIND_KEYWORD) {
-                    keywordHits.add(hit);
+            if (isProcessed(candidate.dialogId, candidate.message.id)) {
+                continue;
+            }
+            ArrayList<Candidate> list = byDialog.get(candidate.dialogId);
+            if (list == null) {
+                list = new ArrayList<>();
+                byDialog.put(candidate.dialogId, list);
+            }
+            list.add(candidate);
+        }
+        for (int d = 0; d < byDialog.size(); d++) {
+            final long dialogId = byDialog.keyAt(d);
+            final ArrayList<Candidate> list = byDialog.valueAt(d);
+            final ArrayList<Integer> ids = new ArrayList<>(list.size());
+            for (int i = 0; i < list.size(); i++) {
+                ids.add(list.get(i).message.id);
+            }
+            final HashSet<Integer> stored = storage.filterExisting(dialogId, ids);
+            for (int i = 0; i < list.size(); i++) {
+                Candidate candidate = list.get(i);
+                markProcessed(dialogId, candidate.message.id);
+                if (stored.contains(candidate.message.id)) {
+                    continue;
+                }
+                RadarHit hit = match(candidate, context, true);
+                if (hit != null) {
+                    hits.add(hit);
+                    if (hit.kind == RadarHit.KIND_KEYWORD) {
+                        keywordHits.add(hit);
+                    }
                 }
             }
         }
@@ -394,6 +446,86 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
         if (added > 0 && RadarConfig.notifyOnKeyword && !keywordHits.isEmpty()) {
             RadarNotifier.notifyKeywordHits(currentAccount, keywordHits);
         }
+    }
+
+    // ------------------------------------------------------------------ processed cache (perf)
+
+    /** radar queue only */
+    private boolean isProcessed(long dialogId, int msgId) {
+        SparseBooleanArray set = processedIds.get(dialogId);
+        return set != null && set.get(msgId);
+    }
+
+    /** radar queue only; bounded, so a long scroll cannot grow it without limit */
+    private void markProcessed(long dialogId, int msgId) {
+        SparseBooleanArray set = processedIds.get(dialogId);
+        if (set == null) {
+            if (processedIds.size() >= PROCESSED_MAX_DIALOGS) {
+                // simplest bound that keeps the structure flat: start over
+                processedIds.clear();
+            }
+            set = new SparseBooleanArray();
+            processedIds.put(dialogId, set);
+        }
+        if (set.size() >= PROCESSED_PER_DIALOG) {
+            set.clear();
+        }
+        set.put(msgId, true);
+    }
+
+    /**
+     * Drops the cache when the matcher itself changed (a keyword was added / edited / toggled, my
+     * name or username changed, a match switch was flipped), so nothing is silently skipped.
+     */
+    private void checkProcessedSignature(MatchContext context) {
+        final int signature = signatureOf(context);
+        if (!processedSignatureValid || signature != processedSignature) {
+            processedSignature = signature;
+            processedSignatureValid = true;
+            processedIds.clear();
+        }
+    }
+
+    private static int signatureOf(MatchContext context) {
+        int hash = 1;
+        hash = hash * 31 + (RadarConfig.matchMentions ? 1 : 0);
+        hash = hash * 31 + (RadarConfig.matchReplies ? 1 : 0);
+        hash = hash * 31 + (RadarConfig.matchKeywords ? 1 : 0);
+        hash = hash * 31 + (RadarConfig.matchName ? 1 : 0);
+        if (context == null) {
+            return hash;
+        }
+        hash = hash * 31 + (int) (context.myId ^ (context.myId >>> 32));
+        if (context.usernames != null) {
+            hash = hash * 31 + context.usernames.hashCode();
+        }
+        if (context.names != null) {
+            hash = hash * 31 + context.names.hashCode();
+        }
+        if (context.keywords != null) {
+            hash = hash * 31 + context.keywords.size();
+            for (int i = 0; i < context.keywords.size(); i++) {
+                RadarKeyword keyword = context.keywords.get(i);
+                if (keyword == null) {
+                    continue;
+                }
+                hash = hash * 31 + (keyword.text == null ? 0 : keyword.text.hashCode());
+                hash = hash * 31 + (keyword.enabled ? 2 : 0) + (keyword.regex ? 1 : 0);
+            }
+        }
+        return hash;
+    }
+
+    /**
+     * Forgets every cached message id, so the next page load is classified again. Called whenever
+     * hits are removed (a deleted hit must be able to come back) and safe to call from any thread;
+     * also meant to be wired to {@code onLowMemory()} / {@code onTrimMemory()}.
+     */
+    public void clearProcessedCache() {
+        RadarStorage.getQueue().postRunnable(() -> {
+            processedIds.clear();
+            processedSignatureValid = false;
+        });
     }
 
     // ------------------------------------------------------------------ matching

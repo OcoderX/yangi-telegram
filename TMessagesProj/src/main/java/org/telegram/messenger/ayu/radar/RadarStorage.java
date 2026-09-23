@@ -12,6 +12,7 @@ import org.telegram.messenger.UserConfig;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Locale;
 
 /**
@@ -25,6 +26,9 @@ import java.util.Locale;
 public class RadarStorage extends SQLiteOpenHelper {
 
     private static final int DB_VERSION = 1;
+
+    /** //perf: how many ids go into one {@code msgId IN (...)} statement of {@link #filterExisting} */
+    private static final int EXISTS_CHUNK = 500;
 
     public static final String TABLE_HITS = "radar_hits";
 
@@ -266,6 +270,63 @@ public class RadarStorage extends SQLiteOpenHelper {
                 }
             }
         }
+    }
+
+    /**
+     * //perf: batched replacement for a per-message {@link #exists(long, int, int)} loop.
+     * <p>
+     * The live collector used to run one {@code SELECT 1} per (message, kind) pair, i.e. four
+     * round trips per message and 200 per 50-message history page. This answers the same question
+     * for a whole page with one statement per {@value #EXISTS_CHUNK} ids.
+     *
+     * @return the subset of {@code msgIds} that already has a hit of <i>any</i> kind in this dialog
+     *         (the radar stores at most one hit per message, so "any kind" is what the caller asked)
+     */
+    public HashSet<Integer> filterExisting(long dialogId, ArrayList<Integer> msgIds) {
+        final HashSet<Integer> result = new HashSet<>();
+        if (msgIds == null || msgIds.isEmpty()) {
+            return result;
+        }
+        try {
+            final SQLiteDatabase database = db();
+            final StringBuilder sb = new StringBuilder();
+            for (int from = 0; from < msgIds.size(); from += EXISTS_CHUNK) {
+                final int to = Math.min(msgIds.size(), from + EXISTS_CHUNK);
+                sb.setLength(0);
+                for (int i = from; i < to; i++) {
+                    final Integer id = msgIds.get(i);
+                    if (id == null) {
+                        continue;
+                    }
+                    if (sb.length() > 0) {
+                        sb.append(',');
+                    }
+                    // both values are numeric primitives: nothing to escape
+                    sb.append(id.intValue());
+                }
+                if (sb.length() == 0) {
+                    continue;
+                }
+                Cursor c = null;
+                try {
+                    c = database.rawQuery("SELECT msgId FROM " + TABLE_HITS + " WHERE dialogId = " + dialogId
+                            + " AND msgId IN (" + sb + ")", null);
+                    while (c.moveToNext()) {
+                        result.add(c.getInt(0));
+                    }
+                } finally {
+                    if (c != null) {
+                        try {
+                            c.close();
+                        } catch (Throwable ignore) {
+                        }
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        return result;
     }
 
     public void markRead(long rowId) {

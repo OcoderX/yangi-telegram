@@ -7029,6 +7029,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         checkAppUpdate(false, null);
         org.telegram.messenger.ayu.OcoderXChannelPrompt.checkAndShow(this);
+        //ayu: on Android 12+ an unverified t.me domain never reaches us, so offer "Open by default"
+        org.telegram.messenger.ayu.AyuLinkHandling.checkAndShow(this);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             ApplicationLoader.canDrawOverlays = Settings.canDrawOverlays(this);

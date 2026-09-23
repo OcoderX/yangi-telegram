@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ox-gram: Android 12+ "Open by default" prompt for t.me links -->
+    <string name="OxOpenLinksTitle">Open Telegram links in Ox-gram</string>
+    <string name="OxOpenLinksText">Android is not sending t.me links to Ox-gram, so links to channels and posts open in your browser instead.\n\nOpen \"Open by default\" and turn on the supported web addresses (t.me, telegram.me, telegram.dog).</string>
+    <string name="OxOpenLinksOpen">Open settings</string>
+    <string name="OxOpenLinksLater">Later</string>
+    <string name="OxOpenLinksNever">Don\'t ask again</string>
+</resources>

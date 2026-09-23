@@ -73,6 +73,7 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
+import org.telegram.messenger.ayu.AyuConfig;
 import org.telegram.messenger.voip.GroupCallMessage;
 import org.telegram.messenger.voip.GroupCallMessagesController;
 import org.telegram.messenger.voip.VoIPService;
@@ -1087,7 +1088,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
                 show = true;
                 startJoinFlickerAnimation();
             } else {
-                MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
+                MessageObject messageObject = getPlayingMessageObjectForStrip();
                 if (messageObject != null && messageObject.getId() != 0) {
                     show = true;
                 }
@@ -1416,6 +1417,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
             NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
             NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.webRtcMicAmplitudeEvent);
             NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.groupCallVisibilityChanged);
+            NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.ayuConfigChanged);
         }
 
         if (currentStyle == STYLE_ACTIVE_GROUP_CALL || currentStyle == STYLE_CONNECTING_GROUP_CALL) {
@@ -1453,6 +1455,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
             NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
             NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.webRtcMicAmplitudeEvent);
             NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.groupCallVisibilityChanged);
+            NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.ayuConfigChanged);
 
             if (LivePlayer.recording != null) {
                 checkLiveStory(true);
@@ -1589,6 +1592,11 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
         } else if (id == NotificationCenter.messagePlayingProgressDidChanged) {
             if (currentStyle == STYLE_AUDIO_PLAYER) {
                 invalidate();
+            }
+        } else if (id == NotificationCenter.ayuConfigChanged) {
+            // Ox-gram: the "Replace player bar" toggle may have flipped - show / hide the strip now.
+            if (!isLocation) {
+                checkPlayer(false);
             }
         }
     }
@@ -1811,7 +1819,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
         if (visible && (currentStyle == STYLE_CONNECTING_GROUP_CALL || currentStyle == STYLE_ACTIVE_GROUP_CALL || (currentStyle == STYLE_INACTIVE_GROUP_CALL || currentStyle == STYLE_IMPORTING_MESSAGES) && !isPlayingVoice())) {
             return;
         }
-        MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
+        MessageObject messageObject = getPlayingMessageObjectForStrip();
         View fragmentView = fragment.getFragmentView();
         if (!create && fragmentView != null) {
             if (fragmentView.getParent() == null || ((View) fragmentView.getParent()).getVisibility() != VISIBLE) {
@@ -2130,8 +2138,30 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
         }
     }
 
-    private boolean isPlayingVoice() {
+    /**
+     * Ox-gram: true while the Dynamic Island hosts the player, so this strip must not
+     * duplicate it. Only the audio-player style is affected - calls, voice chats,
+     * live location, proximity and imports keep working exactly as before.
+     */
+    public static boolean islandReplacesPlayer() {
+        return AyuConfig.dynamicIsland && AyuConfig.islandMusic && AyuConfig.islandReplacePlayer;
+    }
+
+    /**
+     * Ox-gram: the playing message as far as the audio-player style is concerned.
+     * Returns {@code null} (i.e. "nothing is playing") while the Dynamic Island shows
+     * the player instead. Videos are never shown by the island, so they are left alone.
+     */
+    private static MessageObject getPlayingMessageObjectForStrip() {
         MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
+        if (messageObject != null && !messageObject.isVideo() && islandReplacesPlayer()) {
+            return null;
+        }
+        return messageObject;
+    }
+
+    private boolean isPlayingVoice() {
+        MessageObject messageObject = getPlayingMessageObjectForStrip();
         return messageObject != null && messageObject.isVoice();
     }
 

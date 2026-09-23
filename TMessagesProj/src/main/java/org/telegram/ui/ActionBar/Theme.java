@@ -8773,12 +8773,16 @@ public class Theme {
             playPauseAnimator.addSvgKeyFrame("M 48 7 C 50.21 7 52 8.79 52 11 C 52 19 52 19 52 19 C 52 21.21 50.21 23 48 23 L 4 23 C 1.79 23 0 21.21 0 19 L 0 11 C 0 8.79 1.79 7 4 7 C 48 7 48 7 48 7 Z", 383);
 
             if (SharedConfig.messageStatusStyle != 0) {
-                chat_msgOutCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_READ);
-                chat_msgOutCheckSelectedDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_READ);
-                chat_msgOutCheckReadDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_READ);
-                chat_msgOutCheckReadSelectedDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_READ);
-                chat_msgMediaCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_READ);
-                chat_msgStickerCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_READ);
+                //ayu: these "check" drawables are single ticks, exactly like the msg_check_s bitmaps below:
+                //     ChatMessageCell composes the read state itself (check drawable + half check drawable
+                //     offset by 4.5dp). Using TYPE_READ (which already paints a double tick) here made a
+                //     delivered message show two ticks and a read message show three overlapping ticks.
+                chat_msgOutCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
+                chat_msgOutCheckSelectedDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
+                chat_msgOutCheckReadDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
+                chat_msgOutCheckReadSelectedDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
+                chat_msgMediaCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
+                chat_msgStickerCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
                 chat_msgOutHalfCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
                 chat_msgOutHalfCheckSelectedDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);
                 chat_msgMediaHalfCheckDrawable = new org.telegram.ui.Components.ModernStatusDrawable(org.telegram.ui.Components.ModernStatusDrawable.TYPE_SENT);

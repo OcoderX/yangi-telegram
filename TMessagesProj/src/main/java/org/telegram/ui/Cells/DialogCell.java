@@ -186,6 +186,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private static final int CARD_CONTENT_PAD_DP = 5;
     private final RectF cardRect = new RectF();
     private final Path cardPath = new Path();
+    private float cardPathLeft = Float.NaN, cardPathTop, cardPathRight, cardPathBottom;
     private Paint cardPaint;
     private int cardPaintBaseColor;
     public int heightDefault = 70;
@@ -3907,11 +3908,25 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             final float cardRadius = dp(CARD_RADIUS_DP);
             cardRect.set(dp(CARD_MARGIN_DP), 0, getMeasuredWidth() - dp(CARD_MARGIN_DP), getMeasuredHeight() - dp(CARD_GAP_DP));
             cardRect.offset(0, -translateY);
-            cardPath.rewind();
-            cardPath.addRoundRect(cardRect, cardRadius, cardRadius, Path.Direction.CW);
             cardRestoreCount = canvas.save();
-            canvas.clipPath(cardPath);
-            canvas.drawPath(cardPath, getCardPaint());
+            if (translationX != 0 || cornerProgress != 0.0f) {
+                // perf: a rounded (non-rectangular) clip is only needed while the swipe background can
+                // bleed past the corners; rebuild the path only when the rect actually moved
+                if (cardPathLeft != cardRect.left || cardPathTop != cardRect.top || cardPathRight != cardRect.right || cardPathBottom != cardRect.bottom) {
+                    cardPathLeft = cardRect.left;
+                    cardPathTop = cardRect.top;
+                    cardPathRight = cardRect.right;
+                    cardPathBottom = cardRect.bottom;
+                    cardPath.rewind();
+                    cardPath.addRoundRect(cardRect, cardRadius, cardRadius, Path.Direction.CW);
+                }
+                canvas.clipPath(cardPath);
+            } else {
+                // perf: rectangular clip stays on the GPU fast path; everything drawn below already
+                // uses rounded shapes (pinned/selected overlays go through drawRoundRect)
+                canvas.clipRect(cardRect);
+            }
+            canvas.drawRoundRect(cardRect, cardRadius, cardRadius, getCardPaint());
         }
 
         final boolean clipArchive = drawArchive && (currentDialogFolderId != 0 || isTopic && forumTopic != null && forumTopic.id == 1) && archivedChatsDrawable != null && translationX == 0.0f && parentFragment != null && parentFragment.hasHiddenArchive()

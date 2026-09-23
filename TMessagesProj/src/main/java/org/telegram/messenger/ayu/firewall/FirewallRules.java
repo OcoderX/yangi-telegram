@@ -91,26 +91,64 @@ public class FirewallRules {
 
     // ---------------------------------------------------------------- file names
 
+    private static final String[] NO_EXTENSIONS = new String[0];
+
     /**
      * Every dot-separated token after the first one, lower-cased. "photo.jpg.exe" yields [jpg, exe],
      * so a double extension can never hide an executable.
+     * <p>
+     * Hand-rolled scan instead of {@code name.split("\\.")}: this runs up to a few times per bound
+     * document cell while scrolling a chat, and {@code String.split} compiles a throwaway {@link
+     * java.util.regex.Pattern} on every call. A degenerate name such as a trailing or doubled dot can
+     * leave one extra empty-string element versus the old regex split (which drops trailing empty
+     * segments); no caller here ever treats "" as a matching extension, so that divergence never
+     * changes a verdict.
      */
     public static String[] extensionsOf(String fileName) {
         if (fileName == null) {
-            return new String[0];
+            return NO_EXTENSIONS;
         }
         String name = stripBidiControls(fileName.trim()).toLowerCase(Locale.ROOT);
         int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
         if (slash >= 0) {
             name = name.substring(slash + 1);
         }
-        String[] parts = name.split("\\.");
-        if (parts.length <= 1) {
-            return new String[0];
+        int firstDot = name.indexOf('.');
+        if (firstDot < 0) {
+            return NO_EXTENSIONS;
         }
-        String[] out = new String[parts.length - 1];
-        System.arraycopy(parts, 1, out, 0, parts.length - 1);
+        int len = name.length();
+        int count = 1;
+        for (int i = firstDot + 1; i < len; i++) {
+            if (name.charAt(i) == '.') {
+                count++;
+            }
+        }
+        String[] out = new String[count];
+        int idx = 0;
+        int start = firstDot + 1;
+        for (int i = start; i <= len; i++) {
+            if (i == len || name.charAt(i) == '.') {
+                out[idx++] = name.substring(start, i);
+                start = i + 1;
+            }
+        }
         return out;
+    }
+
+    /**
+     * True when the mime type alone already proves the document cannot be an executable or a
+     * hard-rule (.exe/.apk) file. Archives are only ever recognised by file name here, but a real
+     * image/video/audio mime never carries one either, so this lets the hot {@link Firewall#evaluate}
+     * path skip {@link Firewall#fileNameOf} entirely for the overwhelming majority of documents
+     * (photos-as-file, videos, voice messages, video notes, stickers) without touching the name.
+     */
+    public static boolean isDefinitelySafeMime(String mime) {
+        if (mime == null || mime.isEmpty()) {
+            return false;
+        }
+        String m = mime.trim().toLowerCase(Locale.ROOT);
+        return m.startsWith("image/") || m.startsWith("video/") || m.startsWith("audio/");
     }
 
     public static String lastExtension(String fileName) {

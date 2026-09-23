@@ -31,9 +31,11 @@ public class NetDiagConfig {
     public static boolean islandShowDot = false;
 
     /** how often a sample is produced, ms */
-    public static int samplingIntervalMs = 1000;
+    //perf: one sample every 2 s is plenty for a speed pill and halves the sampler wake-ups
+    public static int samplingIntervalMs = 2000;
     /** how often a round-trip probe is sent while sampling, ms */
-    public static int probeIntervalMs = 3000;
+    //perf: a real help.getNearestDc round trip every 3 s was far too aggressive
+    public static int probeIntervalMs = 15000;
     /** how often the current proxy is re-checked while sampling, ms */
     public static int proxyCheckIntervalMs = 10000;
 
@@ -49,8 +51,8 @@ public class NetDiagConfig {
         islandShowUp = preferences.getBoolean("islandShowUp", true);
         islandShowPing = preferences.getBoolean("islandShowPing", false);
         islandShowDot = preferences.getBoolean("islandShowDot", false);
-        samplingIntervalMs = clamp(preferences.getInt("samplingIntervalMs", 1000), 500, 10000);
-        probeIntervalMs = clamp(preferences.getInt("probeIntervalMs", 3000), 1000, 60000);
+        samplingIntervalMs = clamp(preferences.getInt("samplingIntervalMs", 2000), 500, 10000);
+        probeIntervalMs = clamp(preferences.getInt("probeIntervalMs", 15000), 1000, 60000);
         proxyCheckIntervalMs = clamp(preferences.getInt("proxyCheckIntervalMs", 10000), 5000, 120000);
 
         loaded = true;

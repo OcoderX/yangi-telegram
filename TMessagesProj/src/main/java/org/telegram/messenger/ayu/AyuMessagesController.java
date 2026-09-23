@@ -56,6 +56,10 @@ public class AyuMessagesController {
         }
     };
 
+    //perf: how many deleted messages are archived per dialog, so the UI thread can decide whether it
+    //has to merge anything at all without touching SQLite (see ChatActivity.ayuMergeDeletedMessages)
+    private final HashMap<String, Integer> deletedCountCache = new HashMap<>();
+
     private final HashMap<String, PendingMedia> pendingDownloads = new HashMap<>();
     private final boolean[] observerAdded = new boolean[UserConfig.MAX_ACCOUNT_COUNT];
 
@@ -140,7 +144,7 @@ public class AyuMessagesController {
             }
             for (int a = 0; a < oldMessages.size(); a++) {
                 TLRPC.Message message = oldMessages.get(a);
-                if (!shouldSave(currentAccount, message)) {
+                if (!shouldSaveDeleted(currentAccount, message)) {
                     continue;
                 }
                 final long dialogId = message.dialog_id != 0 ? message.dialog_id : MessageObject.getDialogId(message);
@@ -173,7 +177,7 @@ public class AyuMessagesController {
                 HashMap<Long, ArrayList<Integer>> byDialog = new HashMap<>();
                 for (int a = 0; a < oldMessages.size(); a++) {
                     TLRPC.Message message = oldMessages.get(a);
-                    if (!shouldSave(currentAccount, message)) {
+                    if (!shouldSaveDeleted(currentAccount, message)) {
                         continue;
                     }
                     DeletedMessage row = new DeletedMessage();
@@ -216,6 +220,8 @@ public class AyuMessagesController {
                 for (Map.Entry<Long, ArrayList<Integer>> entry : byDialog.entrySet()) {
                     final long did = entry.getKey();
                     final ArrayList<Integer> ids = entry.getValue();
+                    //perf: the archive of this dialog grew, the cached count is stale now
+                    invalidateDeletedCountCache(currentAccount, did);
                     AndroidUtilities.runOnUIThread(() -> NotificationCenter.getInstance(currentAccount)
                             .postNotificationName(NotificationCenter.ayuMessageHistoryUpdated, did, ids, 0));
                 }
@@ -439,14 +445,17 @@ public class AyuMessagesController {
      * (used by "delete locally" on already-deleted bubbles). Also drops the stored rows.
      */
     public void deleteMessagesLocallyWithoutSaving(int currentAccount, long dialogId, ArrayList<Integer> messageIds) {
-        AyuState.skipNextSave = true;
         if (messageIds == null || messageIds.isEmpty()) {
             return;
         }
+        //ayu: id-scoped instead of the old one-shot AyuState.skipNextSave flag, which stayed armed
+        //when no deletion followed and then swallowed the next (unrelated) message somebody deleted
+        org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, messageIds);
         final ArrayList<Integer> ids = new ArrayList<>(messageIds);
         final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             AyuHistoryStorage.getInstance().deleteDeletedByIds(selfId, dialogId, ids);
+            invalidateDeletedCountCache(currentAccount, dialogId);
             synchronized (deletedCache) {
                 for (int a = 0; a < ids.size(); a++) {
                     deletedCache.remove(cacheKey(currentAccount, dialogId, ids.get(a)));
@@ -509,9 +518,16 @@ public class AyuMessagesController {
         List<DeletedMessage> rows = getDeletedMessages(currentAccount, dialogId, topicId, minId, maxId, limit);
         for (int a = 0; a < rows.size(); a++) {
             TLRPC.Message message = toTLMessage(currentAccount, rows.get(a));
-            if (message != null) {
-                result.add(message);
+            if (message == null) {
+                continue;
             }
+            //ayu: rows archived before "keep my own deleted messages" was turned off must not come
+            //back into the chat either - the setting is applied on read, so it stays reversible
+            if (!AyuAntiDeleteConfig.keepOwnDeleted
+                    && org.telegram.messenger.ayu.antidelete.AyuAntiDelete.isOwnMessage(currentAccount, message)) {
+                continue;
+            }
+            result.add(message);
         }
         return result;
     }
@@ -556,6 +572,42 @@ public class AyuMessagesController {
         synchronized (deletedCache) {
             deletedCache.clear();
         }
+    }
+
+    /**
+     * perf: how many deleted messages this dialog has archived, as last seen by a background query,
+     * or -1 when that is not known yet. Pure map lookup - safe to call from the UI thread.
+     */
+    public int getCachedDeletedMessagesCount(int currentAccount, long dialogId) {
+        synchronized (deletedCountCache) {
+            final Integer value = deletedCountCache.get(countKey(currentAccount, dialogId));
+            return value == null ? -1 : value;
+        }
+    }
+
+    /** perf: fills the cache read by {@link #getCachedDeletedMessagesCount} (callable from any thread) */
+    public void putCachedDeletedMessagesCount(int currentAccount, long dialogId, int count) {
+        synchronized (deletedCountCache) {
+            deletedCountCache.put(countKey(currentAccount, dialogId), count);
+        }
+    }
+
+    /** perf: forgets the cached count of one dialog after its archive changed */
+    public void invalidateDeletedCountCache(int currentAccount, long dialogId) {
+        synchronized (deletedCountCache) {
+            deletedCountCache.remove(countKey(currentAccount, dialogId));
+        }
+    }
+
+    /** perf: forgets every cached count (used when the whole archive is touched) */
+    public void invalidateDeletedCountCache() {
+        synchronized (deletedCountCache) {
+            deletedCountCache.clear();
+        }
+    }
+
+    private static String countKey(int account, long dialogId) {
+        return account + "_" + dialogId;
     }
 
     /** Builds a TLRPC.Message (with ayuDeleted=true) from a stored row so it can be inserted into ChatActivity. */
@@ -693,6 +745,7 @@ public class AyuMessagesController {
                 FileLog.e(e);
             }
             invalidateDeletedCache();
+            invalidateDeletedCountCache();
             if (onDone != null) {
                 AndroidUtilities.runOnUIThread(onDone);
             }
@@ -703,20 +756,24 @@ public class AyuMessagesController {
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             AyuHistoryStorage.getInstance().deleteDeleted(fakeId);
             invalidateDeletedCache();
+            invalidateDeletedCountCache();
         });
     }
 
     /** forgets one stored deleted message (used by the "delete locally" action on a deleted bubble) */
     public void deleteDeletedMessage(int currentAccount, long dialogId, int messageId) {
-        AyuState.skipNextSave = true;
         final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
         final ArrayList<Integer> ids = new ArrayList<>();
         ids.add(messageId);
+        //ayu: see deleteMessagesLocallyWithoutSaving - the removal is remembered per id, so a
+        //deletion update for this very message can not re-archive it, and nothing else is affected
+        org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, ids);
         synchronized (deletedCache) {
             deletedCache.remove(cacheKey(currentAccount, dialogId, messageId));
         }
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             AyuHistoryStorage.getInstance().deleteDeletedByIds(selfId, dialogId, ids);
+            invalidateDeletedCountCache(currentAccount, dialogId);
             AndroidUtilities.runOnUIThread(() -> NotificationCenter.getInstance(currentAccount)
                     .postNotificationName(NotificationCenter.ayuMessageHistoryUpdated, dialogId, ids, 0));
         });
@@ -821,6 +878,67 @@ public class AyuMessagesController {
             }
         }
         return true;
+    }
+
+    /**
+     * ayu: {@link #shouldSave} plus everything that only applies to the anti-delete (a deletion the
+     * user started on this device, own outgoing messages when {@code keepOwnDeleted} is off).
+     * <p>
+     * Deliberately <b>not</b> folded into {@link #shouldSave}: that one also guards the edit-history
+     * capture, which must keep working for our own messages.
+     */
+    private boolean shouldSaveDeleted(int currentAccount, TLRPC.Message message) {
+        if (!shouldSave(currentAccount, message)) {
+            return false;
+        }
+        final long dialogId = message.dialog_id != 0 ? message.dialog_id : MessageObject.getDialogId(message);
+        return org.telegram.messenger.ayu.antidelete.AyuAntiDelete.shouldKeepDeleted(currentAccount, dialogId, message);
+    }
+
+    /**
+     * ayu: forgets the stored copies of {@code messageIds} (the "deleted by author" ghosts), so that
+     * reloading the history does not bring them back. No notification is posted: the caller removes
+     * the bubbles through the regular {@code messagesDeleted} path.
+     */
+    public void forgetDeletedMessages(int currentAccount, long dialogId, ArrayList<Integer> messageIds) {
+        if (messageIds == null || messageIds.isEmpty() || dialogId == 0) {
+            return;
+        }
+        final ArrayList<Integer> ids = new ArrayList<>(messageIds);
+        final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
+        synchronized (deletedCache) {
+            for (int a = 0; a < ids.size(); a++) {
+                deletedCache.remove(cacheKey(currentAccount, dialogId, ids.get(a)));
+            }
+        }
+        AyuHistoryStorage.getQueue().postRunnable(() -> {
+            try {
+                AyuHistoryStorage.getInstance().deleteDeletedByIds(selfId, dialogId, ids);
+                invalidateDeletedCountCache(currentAccount, dialogId);
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
+    }
+
+    /** ayu: forgets every stored deleted message of a dialog (clear history / delete chat) */
+    public void forgetAllDeletedForDialog(int currentAccount, long dialogId) {
+        if (dialogId == 0) {
+            return;
+        }
+        final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
+        if (selfId == 0) {
+            return;
+        }
+        invalidateDeletedCache();
+        invalidateDeletedCountCache(currentAccount, dialogId);
+        AyuHistoryStorage.getQueue().postRunnable(() -> {
+            try {
+                AyuHistoryStorage.getInstance().deleteDeletedForDialog(selfId, dialogId);
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
     }
 
     private boolean isMediaSaveAllowed(int currentAccount, long dialogId) {

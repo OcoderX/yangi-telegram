@@ -3,6 +3,7 @@ package org.telegram.ui.ayu;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Canvas;
@@ -131,6 +132,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     private final RectF rect = new RectF();
     private final RectF compactRect = new RectF();
+    /** hit area of the play/pause glyph on the collapsed music pill; empty when not drawn */
+    private final RectF compactPlayRect = new RectF();
     private final RectF expandedRect = new RectF();
     private final RectF tmpRect = new RectF();
     private final ArrayList<IslandButton> buttons = new ArrayList<>();
@@ -183,13 +186,26 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private final ArrayList<MessageObject> downloading = new ArrayList<>();
     private final ArrayList<Float> downloadProgresses = new ArrayList<>();
     private float downloadProgress;
-    private long lastDownloadRefresh;
 
     /** last sample delivered by the network sampler; null until the first tick */
     private NetworkDiagnostics.Sample netSample;
     /** true while this view holds a reference on {@link NetworkDiagnostics} */
     private boolean netSamplingActive;
+    /** true while this view asks the sampler for ping / packet-loss probes */
+    private boolean netProbesActive;
     private final float[] netPingBuf = new float[NetworkDiagnostics.HISTORY_SIZE];
+
+    //perf: fields of the last sample that was actually rendered, to skip no-op updates
+    private long lastNetDown = -1, lastNetUp = -1, lastNetProxyPing = Long.MIN_VALUE;
+    private int lastNetPing = Integer.MIN_VALUE, lastNetState = Integer.MIN_VALUE;
+    private int lastNetDc = Integer.MIN_VALUE, lastNetReason = Integer.MIN_VALUE;
+    private float lastNetLoss = -1f;
+
+    //perf: measureCompactWidth() runs on every frame; Paint.measureText() is not free
+    private String measuredCompactText;
+    private float measuredCompactWidth;
+    private String measuredRightText;
+    private float measuredRightWidth;
 
     private float micAmplitude;
     private float speakerAmplitude;
@@ -198,6 +214,15 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     private final Runnable tickRunnable = this::onTick;
     private final Runnable collapseRunnable = () -> setExpanded(false);
+
+    //perf: file notifications fire for every thumbnail, sticker and avatar while scrolling;
+    //      they are all folded into one delayed update instead of one update each
+    private static final long FILE_UPDATE_DELAY = 200;
+    private boolean fileUpdateScheduled;
+    private final Runnable fileUpdateRunnable = () -> {
+        fileUpdateScheduled = false;
+        update();
+    };
 
     private static class IslandButton {
         final int id;
@@ -343,8 +368,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         NetworkDiagnostics.getInstance().removeListener(this);
         setNetSampling(false);
         unregisterCallListener();
+        //perf: drop the coalesced file update so a detached island stops doing work
+        AndroidUtilities.cancelRunOnUIThread(fileUpdateRunnable);
+        fileUpdateScheduled = false;
         removeCallbacks(tickRunnable);
         removeCallbacks(collapseRunnable);
+        removeCallbacks(netQuietRunnable);
         if (instance == this) {
             instance = null;
         }
@@ -385,13 +414,17 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 invalidate();
             }
         } else if (id == NotificationCenter.fileLoadProgressChanged) {
+            //perf: progress ticks only matter while the download row is (about to be) on screen
             if (mode == MODE_DOWNLOAD || targetMode == MODE_DOWNLOAD) {
-                long now = System.currentTimeMillis();
-                if (now - lastDownloadRefresh > 120) {
-                    lastDownloadRefresh = now;
-                    update();
-                }
+                scheduleFileUpdate();
             }
+        } else if (id == NotificationCenter.fileLoaded || id == NotificationCenter.fileLoadFailed) {
+            //perf: one of these fires per thumbnail / sticker / avatar while scrolling a chat
+            if (isDownloadStateRelevant()) {
+                scheduleFileUpdate();
+            }
+        } else if (id == NotificationCenter.onDownloadingFilesChanged) {
+            scheduleFileUpdate();
         } else if (id == NotificationCenter.webRtcMicAmplitudeEvent) {
             micAmplitude = Math.min(1f, Math.max(0f, ((float) args[0]) * 4000f / 1500f));
             if (mode == MODE_CALL) {
@@ -407,6 +440,38 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
     }
 
+    /** Coalesces a burst of file-loader notifications into a single {@link #update()}. */
+    //perf: one update per FILE_UPDATE_DELAY instead of one per loaded file
+    private void scheduleFileUpdate() {
+        if (fileUpdateScheduled) {
+            return;
+        }
+        fileUpdateScheduled = true;
+        AndroidUtilities.cancelRunOnUIThread(fileUpdateRunnable);
+        AndroidUtilities.runOnUIThread(fileUpdateRunnable, FILE_UPDATE_DELAY);
+    }
+
+    /** true when a finished / failed file could change what the island shows */
+    private boolean isDownloadStateRelevant() {
+        if (mode == MODE_DOWNLOAD || targetMode == MODE_DOWNLOAD) {
+            return true;
+        }
+        return AyuConfig.dynamicIsland && AyuConfig.islandDownloads && hasActiveDownloads();
+    }
+
+    /** Cheap "is anything downloading at all" probe: no strings, no ImageLoader lookups. */
+    private static boolean hasActiveDownloads() {
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (!UserConfig.getInstance(a).isClientActivated()) {
+                continue;
+            }
+            if (!DownloadController.getInstance(a).downloadingFiles.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // NetworkDiagnostics.Listener
 
     @Override
@@ -417,12 +482,62 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             removeCallbacks(netQuietRunnable);
             postDelayed(netQuietRunnable, NET_HOLD_MS + 32);
         }
-        if (targetMode == MODE_NETWORK || targetMode == MODE_DOWNLOAD) {
-            update();
+        if (targetMode != MODE_NETWORK && targetMode != MODE_DOWNLOAD) {
+            return;
         }
+        //perf: while the pill is folded away nothing of this sample is drawn
+        if (targetMode == MODE_NETWORK && isNetworkQuiet()) {
+            return;
+        }
+        //perf: identical numbers would produce an identical pill - skip the rebuild + invalidate
+        if (!netSampleChanged(sample)) {
+            return;
+        }
+        rememberNetSample(sample);
+        update();
     }
 
-    private final Runnable netQuietRunnable = this::invalidate;
+    /** true when {@code s} would render differently from the sample the pill currently shows */
+    private boolean netSampleChanged(NetworkDiagnostics.Sample s) {
+        if (s == null) {
+            return lastNetState != Integer.MIN_VALUE;
+        }
+        if (s.connectionState != lastNetState || s.datacenterId != lastNetDc || s.reason != lastNetReason) {
+            return true;
+        }
+        if (targetMode == MODE_DOWNLOAD) {
+            return s.downSpeed != lastNetDown;
+        }
+        if (NetDiagConfig.islandShowDown && s.downSpeed != lastNetDown) {
+            return true;
+        }
+        if (NetDiagConfig.islandShowUp && s.upSpeed != lastNetUp) {
+            return true;
+        }
+        if (NetDiagConfig.islandShowPing && s.ping != lastNetPing) {
+            return true;
+        }
+        // the expanded card shows everything, so it has to follow every field it renders
+        return expanded && (s.ping != lastNetPing || s.loss != lastNetLoss
+                || s.proxyPing != lastNetProxyPing || s.downSpeed != lastNetDown || s.upSpeed != lastNetUp);
+    }
+
+    private void rememberNetSample(NetworkDiagnostics.Sample s) {
+        if (s == null) {
+            lastNetState = Integer.MIN_VALUE;
+            return;
+        }
+        lastNetDown = s.downSpeed;
+        lastNetUp = s.upSpeed;
+        lastNetPing = s.ping;
+        lastNetLoss = s.loss;
+        lastNetProxyPing = s.proxyPing;
+        lastNetState = s.connectionState;
+        lastNetDc = s.datacenterId;
+        lastNetReason = s.reason;
+    }
+
+    private final Runnable netQuietRunnable = this::update;
 
     /** true while media, files or any noticeable traffic is actually moving */
     private static boolean isTransferring(NetworkDiagnostics.Sample s) {
@@ -448,10 +563,30 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
         netSamplingActive = value;
         if (value) {
-            NetworkDiagnostics.getInstance().start();
+            // the island is a passive consumer: probes are requested separately, only when shown
+            NetworkDiagnostics.getInstance().start(false);
         } else {
+            setNetProbes(false);
             netSample = null;
-            NetworkDiagnostics.getInstance().stop();
+            rememberNetSample(null);
+            NetworkDiagnostics.getInstance().stop(false);
+        }
+    }
+
+    /**
+     * Ping / packet loss cost a real {@code help.getNearestDc} round trip, so they are only
+     * requested while the pill really shows them.
+     */
+    //perf: no probes while the network pill is quiet, folded away or off screen
+    private void setNetProbes(boolean value) {
+        if (netProbesActive == value) {
+            return;
+        }
+        netProbesActive = value;
+        if (value) {
+            NetworkDiagnostics.getInstance().addProbeConsumer();
+        } else {
+            NetworkDiagnostics.getInstance().removeProbeConsumer();
         }
     }
 
@@ -523,8 +658,18 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (AyuConfig.islandMusic && playing != null && playing.getId() != 0 && !playing.isVideo()) {
             return MODE_PLAYER;
         }
-        if (AyuConfig.islandDownloads && collectDownloads() > 0) {
-            return MODE_DOWNLOAD;
+        //perf: collectDownloads() allocates file names and hits ImageLoader for every job,
+        //      so the cheap "is anything downloading" check runs first
+        if (AyuConfig.islandDownloads) {
+            if (hasActiveDownloads()) {
+                if (collectDownloads() > 0) {
+                    return MODE_DOWNLOAD;
+                }
+            } else if (!downloading.isEmpty()) {
+                downloading.clear();
+                downloadProgresses.clear();
+                downloadProgress = 0f;
+            }
         }
         if (NetDiagConfig.islandNetwork) {
             return MODE_NETWORK;
@@ -562,6 +707,24 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     public void update() {
+        //perf: a disabled or detached island must not walk the download lists or sample the network
+        if (!AyuConfig.dynamicIsland || !isAttachedToWindow()) {
+            setNetSampling(false);
+            if (targetMode != MODE_NONE || idle) {
+                targetMode = MODE_NONE;
+                idle = false;
+                unregisterCallListener();
+                if (expanded) {
+                    setExpanded(false);
+                }
+                downloading.clear();
+                downloadProgresses.clear();
+                downloadProgress = 0f;
+                removeCallbacks(tickRunnable);
+                invalidate();
+            }
+            return;
+        }
         int newMode = computeMode();
         boolean wasNone = targetMode == MODE_NONE;
         targetMode = newMode;
@@ -571,9 +734,11 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             unregisterCallListener();
         }
         // The sampler only runs while the island is on screen and actually shows network data.
-        setNetSampling(isAttachedToWindow() && getWindowVisibility() == VISIBLE
-                && AyuConfig.dynamicIsland && NetDiagConfig.islandNetwork
+        setNetSampling(getWindowVisibility() == VISIBLE
+                && NetDiagConfig.islandNetwork
                 && (newMode == MODE_NETWORK || (newMode == MODE_DOWNLOAD && NetDiagConfig.islandNetworkWithDownloads)));
+        // Probes only while the network pill is actually visible (the download pill shows no ping).
+        setNetProbes(netSamplingActive && newMode == MODE_NETWORK && !isNetworkQuiet());
         switch (newMode) {
             case MODE_CALL:
                 fillCall();
@@ -591,7 +756,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 fillGhost();
                 break;
             case MODE_NETWORK:
-                fillNetwork();
+                //perf: a quiet pill is transparent, so its strings are never drawn - do not build them
+                if (isNetworkQuiet()) {
+                    hasImage = false;
+                } else {
+                    fillNetwork();
+                }
                 break;
             default:
                 hasImage = false;
@@ -838,14 +1008,24 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         return dp(20);
     }
 
+    /** {@link Paint#measureText} for the right label, cached per string (text size never changes) */
+    //perf: called from onDraw on every frame
+    private float rightTextWidth() {
+        if (!TextUtils.equals(measuredRightText, rightText)) {
+            measuredRightText = rightText;
+            measuredRightWidth = rightPaint.measureText(rightText);
+        }
+        return measuredRightWidth;
+    }
+
     private float measureRightWidth(int m) {
         switch (m) {
             case MODE_CALL:
-                return dp(22) + rightPaint.measureText(rightText);
+                return dp(22) + rightTextWidth();
             case MODE_RECORDING:
             case MODE_DOWNLOAD:
             case MODE_NETWORK:
-                return rightPaint.measureText(rightText);
+                return rightTextWidth();
             case MODE_PLAYER:
                 return dp(18);
             default:
@@ -860,7 +1040,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
         float textMax = m == MODE_NETWORK ? dp(200) : dp(150);
         String text = compactText(m);
-        float textW = Math.min(textMax, compactPaint.measureText(text));
+        //perf: same cache-per-string trick for the pill's own label
+        if (!TextUtils.equals(measuredCompactText, text)) {
+            measuredCompactText = text;
+            measuredCompactWidth = compactPaint.measureText(text);
+        }
+        float textW = Math.min(textMax, measuredCompactWidth);
         float rightW = measureRightWidth(m);
         float iconW = hasLeftIcon(m) ? leftIconSize() + dp(8) : 0;
         float w = dp(12) + iconW + textW + (rightW > 0 && textW > 0 ? dp(8) : 0) + rightW + dp(12);
@@ -969,7 +1154,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
 
         float expand = expandT.set(expanded && isExpandable(mode) ? 1f : 0f);
-        float press = pressT.set(pressed && !expanded ? 1f : 0f);
+        float press = pressT.set(pressed && !expanded && pressedButton == 0 ? 1f : 0f);
 
         // Compact rect.
         float cw = widthT.set(measureCompactWidth());
@@ -1006,6 +1191,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             path.addRoundRect(rect, radius, radius, Path.Direction.CW);
             canvas.clipPath(path);
             buttons.clear();
+            compactPlayRect.setEmpty();
             if (expand < 1f) {
                 drawCompact(canvas, content * (1f - expand));
             }
@@ -1097,9 +1283,17 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 rightPaint.setAlpha(a);
                 canvas.drawText(rightText, rightX, cy + rightPaint.getTextSize() * 0.35f, rightPaint);
                 break;
-            case MODE_PLAYER:
-                drawEqualizer(canvas, rightX, cy, !playerPaused, a);
+            case MODE_PLAYER: {
+                // Tapping this glyph toggles playback instead of expanding the pill.
+                compactPlayRect.set(rightX - dp(8), compactRect.top, compactRect.right, compactRect.bottom);
+                int glyphAlpha = pressed && pressedButton == BTN_PLAY ? (int) (a * 0.5f) : a;
+                if (playerPaused) {
+                    drawDrawable(canvas, playDrawable, rightX + dp(8), cy, dp(16), glyphAlpha, COLOR_TEXT);
+                } else {
+                    drawEqualizer(canvas, rightX, cy, true, glyphAlpha);
+                }
                 break;
+            }
         }
 
         // Text.
@@ -1552,8 +1746,15 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                     pressed = true;
                     pressX = x;
                     pressY = y;
-                    IslandButton b = expanded ? findButton(x, y) : null;
-                    pressedButton = b != null ? b.id : 0;
+                    if (expanded) {
+                        IslandButton b = findButton(x, y);
+                        pressedButton = b != null ? b.id : 0;
+                    } else if (mode == MODE_PLAYER && !compactPlayRect.isEmpty() && compactPlayRect.contains(x, y)) {
+                        // collapsed music pill: the glyph on the right is the play/pause button
+                        pressedButton = BTN_PLAY;
+                    } else {
+                        pressedButton = 0;
+                    }
                     bumpAutoCollapse();
                     invalidate();
                     return true;
@@ -1585,6 +1786,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                         } else if (rect.contains(x, y)) {
                             openSource();
                         }
+                    } else if (btn != 0) {
+                        onButtonClick(btn);
                     } else if (isExpandable(mode)) {
                         setExpanded(true);
                     } else {
@@ -1715,7 +1918,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 }
                 if (mo.isMusic()) {
                     try {
-                        new AudioPlayerAlert(getContext(), null).show();
+                        final Activity activity = AndroidUtilities.findActivity(getContext());
+                        if (activity instanceof LaunchActivity) {
+                            new AudioPlayerAlert(activity, null).show();
+                        } else if (AndroidUtilities.isContextSafe(LaunchActivity.instance)) {
+                            new AudioPlayerAlert(LaunchActivity.instance, null).show();
+                        }
                     } catch (Exception ignore) {
                     }
                 } else {

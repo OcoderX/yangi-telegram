@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ox-gram: Android 12+ uchun t.me havolalarini "Sukut bo'yicha ochish" so'rovi -->
+    <string name="OxOpenLinksTitle">Telegram havolalarini Ox-gram\'da ochish</string>
+    <string name="OxOpenLinksText">Android t.me havolalarini Ox-gram\'ga uzatmayapti, shuning uchun kanal va postlarga havolalar brauzerda ochilmoqda.\n\n«Sukut bo\'yicha ochish» bo\'limini oching va qo\'llab-quvvatlanadigan veb-manzillarni (t.me, telegram.me, telegram.dog) yoqing.</string>
+    <string name="OxOpenLinksOpen">Sozlamalarni ochish</string>
+    <string name="OxOpenLinksLater">Keyinroq</string>
+    <string name="OxOpenLinksNever">Boshqa so\'ralmasin</string>
+</resources>

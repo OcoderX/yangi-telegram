@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AyuGram: меню участника / меню сообщения - фильтр группы по одному отправителю -->
+    <string name="AyuShowMessages">Показать сообщения</string>
+    <string name="AyuShowMedia">Показать медиа</string>
+    <string name="AyuCopyUsername">Скопировать username</string>
+</resources>

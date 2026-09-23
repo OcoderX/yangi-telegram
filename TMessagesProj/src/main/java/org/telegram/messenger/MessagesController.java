@@ -9340,6 +9340,7 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         ArrayList<Integer> toSend = null;
+        ArrayList<Integer> ayuKeptOnly = null; //ayu: ids that only exist in the anti-delete archive
         long channelId;
         if (taskId == 0) {
             if (dialogId != 0 && DialogObject.isChatDialog(dialogId)) {
@@ -9349,10 +9350,22 @@ public class MessagesController extends BaseController implements NotificationCe
                 channelId = 0;
             }
             if (!cacheOnly) {
+                //ayu: the user started this deletion here, so the anti-delete must not keep the
+                //messages as "deleted by author" ghosts - neither now (MessagesStorage archives them
+                //a few lines below) nor when the server echoes the deletion back as an update.
+                //cacheOnly deletions are excluded on purpose: those are the auto-delete / TTL tasks,
+                //which nobody started by hand and which the anti-delete is meant to catch.
+                if (!scheduled && !quickReplies && encryptedChat == null) {
+                    org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, messages);
+                    //ayu: ids whose only copy is our own archive (the bubbles with the deleted badge).
+                    //The server deleted them long ago: forget the stored rows and never ask it again -
+                    //for a channel that request would fail with MESSAGE_ID_INVALID.
+                    ayuKeptOnly = org.telegram.messenger.ayu.antidelete.AyuAntiDelete.extractLocallyKept(currentAccount, dialogId, messages);
+                }
                 toSend = new ArrayList<>();
                 for (int a = 0, N = messages.size(); a < N; a++) {
                     Integer mid = messages.get(a);
-                    if (mid > 0) {
+                    if (mid > 0 && (ayuKeptOnly == null || !ayuKeptOnly.contains(mid))) { //ayu
                         toSend.add(mid);
                     }
                 }
@@ -9388,6 +9401,11 @@ public class MessagesController extends BaseController implements NotificationCe
             }
         }
         if (cacheOnly) {
+            return;
+        }
+        //ayu: every selected message was an anti-delete ghost - it is gone from the storage, from the
+        //archive and from the open chat by now, and there is nothing left to delete on the server.
+        if (ayuKeptOnly != null && !ayuKeptOnly.isEmpty() && toSend != null && toSend.isEmpty()) {
             return;
         }
 

@@ -3,4 +3,5 @@
     <!-- AyuGram: qulayliklar -->
     <string name="AyuCardChatList">Suhbatlar ro\'yxatida kartochkalar</string>
     <string name="AyuCardChatListInfo">Asosiy ro\'yxatdagi har bir suhbat alohida yumaloq kartochka ko\'rinishida chiziladi, kartochkalar orasida ixcham oraliq qoladi.</string>
+    <string name="AyuUnreadByThem">Xabarimni o\'qimaganlar</string>
 </resources>

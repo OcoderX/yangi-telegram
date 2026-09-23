@@ -1833,6 +1833,16 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private boolean edited;
     //ayu: number of locally stored previous versions of this message (0 = none / unknown)
     private int ayuEditedRevisions;
+    /** ox: "marked" state resolved once per bind (re-checked only when AyuMarkedMessages.getVersion() changes) */
+    private boolean ayuMarked;
+    private int ayuMarkedVersion;
+    private int ayuMarkedFilterColor;
+    private PorterDuffColorFilter ayuMarkedFilter;
+    /** ayu: whether this bubble is drawn dimmed (locally kept message deleted by its author), resolved per bind */
+    private boolean ayuDimDeleted;
+    /** ox: cached ellipsized "Whole Message" label and the width it was measured for */
+    private CharSequence oxCollapseLabel;
+    private float oxCollapseLabelWidth = -1;
     //ayu: the edited mark is being pressed, releasing it opens the edit history sheet
     private boolean ayuEditedPressed;
     private boolean imageDrawn;
@@ -4210,15 +4220,18 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (currentMessageObject == null || !edited || timeLayout == null || currentMessageObject.notime) {
             return false;
         }
+        final int action = event.getAction();
+        if (action == MotionEvent.ACTION_MOVE) {
+            // perf: never do any work for the drag events of a scroll
+            return false;
+        }
         if (!AyuEditHistoryConfig.tapEditedOpensHistory || currentMessageObject.getId() <= 0 || currentMessageObject.scheduled) {
             return false;
         }
-        // read the count live: a recycled cell may still carry the previous message's value
-        if (AyuEditHistoryCache.getCount(currentAccount, currentMessageObject.getDialogId(), currentMessageObject.getId()) <= 0
-                && currentMessageObject.messageOwner.ayuEditedCount <= 0) {
+        // ayuEditedRevisions is refreshed on every bind (measureTime), so it is never stale for a recycled cell
+        if (ayuEditedRevisions <= 0 && currentMessageObject.messageOwner.ayuEditedCount <= 0) {
             return false;
         }
-        final int action = event.getAction();
         if (action == MotionEvent.ACTION_CANCEL) {
             ayuEditedPressed = false;
             return false;
@@ -4289,7 +4302,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             canvas.scale(scale, scale, oxCollapseButtonRect.centerX(), oxCollapseButtonRect.centerY());
         }
         canvas.drawRoundRect(oxCollapseButtonRect, dp(10), dp(10), oxCollapseStrokePaint);
-        final CharSequence label = TextUtils.ellipsize(getString(R.string.OxWholeMessage), oxCollapseTextPaint, Math.max(dp(20), oxCollapseButtonRect.width() - dp(16)), TextUtils.TruncateAt.END);
+        final float labelWidth = Math.max(dp(20), oxCollapseButtonRect.width() - dp(16));
+        if (oxCollapseLabel == null || oxCollapseLabelWidth != labelWidth) {
+            // perf: ellipsize once per width, not on every frame
+            oxCollapseLabel = TextUtils.ellipsize(getString(R.string.OxWholeMessage), oxCollapseTextPaint, labelWidth, TextUtils.TruncateAt.END);
+            oxCollapseLabelWidth = labelWidth;
+        }
+        final CharSequence label = oxCollapseLabel;
         canvas.drawText(label, 0, label.length(), oxCollapseButtonRect.centerX(),
                 oxCollapseButtonRect.centerY() - (oxCollapseTextPaint.descent() + oxCollapseTextPaint.ascent()) / 2f, oxCollapseTextPaint);
         if (restore) {
@@ -18586,6 +18605,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             final int ayuStored = AyuEditHistoryCache.getCount(currentAccount, messageObject.getDialogId(), messageObject.getId());
             ayuEditedRevisions = ayuStored > 0 ? ayuStored : messageObject.messageOwner.ayuEditedCount;
         }
+        //ox/ayu: resolve per-bind flags that used to be looked up on every frame
+        ayuMarkedVersion = org.telegram.messenger.ayu.AyuMarkedMessages.getVersion();
+        ayuMarked = AyuConfig.markedMessagesEnabled && !messageObject.scheduled && messageObject.getId() != 0 && messageObject.getDialogId() != 0
+                && org.telegram.messenger.ayu.AyuMarkedMessages.isMarked(currentAccount, messageObject.getDialogId(), messageObject.getId());
+        ayuDimDeleted = messageObject.messageOwner.ayuDeleted && org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.dimDeletedMessages;
         if (messageObject.scheduled || messageObject.messageOwner.edit_hide) {
             edited = false;
         } else if (currentPosition == null || currentMessagesGroup == null || currentMessagesGroup.messages.isEmpty()) {
@@ -20284,12 +20308,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return;
         }
 
-        //ayu: dim the whole bubble for messages kept locally after the sender deleted them
-        final float ayuDeletedAlpha = (currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.ayuDeleted
-            && org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.dimDeletedMessages)
-            ? org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.DELETED_MESSAGE_ALPHA : 1f;
+        //ayu: dim the bubble for messages kept locally after the sender deleted them (flag resolved per bind)
+        final boolean ayuDim = ayuDimDeleted && !drawForBlur;
+        final float ayuDeletedAlpha = ayuDim ? org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.DELETED_MESSAGE_ALPHA : 1f;
 
-        final int sponosoredAlpha = (int) (255 * (1f - isSponsoredMessageHidden.getFloatValue()) * ayuDeletedAlpha);
+        final float sponsoredFactor = 1f - isSponsoredMessageHidden.getFloatValue();
+        final int sponosoredAlpha = (int) (255 * sponsoredFactor * ayuDeletedAlpha);
         if (sponosoredAlpha == 0) {
             return;
         }
@@ -20297,7 +20321,23 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         final int restore = canvas.getSaveCount();
         int restoreToSponosoredAlpha = -1;
         if (sponosoredAlpha != 255) {
-            restoreToSponosoredAlpha = canvas.saveLayerAlpha(0, 0, getMeasuredWidth(), getMeasuredHeight(), sponosoredAlpha);
+            if (sponsoredFactor < 1f) {
+                // stock behaviour: the sponsored hide animation fades the whole cell
+                restoreToSponosoredAlpha = canvas.saveLayerAlpha(0, 0, getMeasuredWidth(), getMeasuredHeight(), sponosoredAlpha);
+            } else {
+                // perf: the deleted-message dim only needs an offscreen layer the size of the bubble,
+                // not the whole row; a smaller layer is far cheaper for the GPU during scrolling
+                final int pad = dp(6);
+                final int left = Math.max(0, getBackgroundDrawableLeft() - pad);
+                final int top = Math.max(0, getBackgroundDrawableTop() - pad);
+                final int right = Math.min(getMeasuredWidth(), getBackgroundDrawableRight() + pad);
+                final int bottom = Math.min(getMeasuredHeight(), getBackgroundDrawableBottom() + pad);
+                if (right > left && bottom > top) {
+                    restoreToSponosoredAlpha = canvas.saveLayerAlpha(left, top, right, bottom, sponosoredAlpha);
+                } else {
+                    restoreToSponosoredAlpha = canvas.saveLayerAlpha(0, 0, getMeasuredWidth(), getMeasuredHeight(), sponosoredAlpha);
+                }
+            }
         }
 
         setupTextColors();
@@ -23866,9 +23906,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (currentMessageObject == null || currentMessageObject.messageOwner == null) {
             return;
         }
-        final int mid = currentMessageObject.getId();
-        final long did = currentMessageObject.getDialogId();
-        if (mid == 0 || did == 0 || !org.telegram.messenger.ayu.AyuMarkedMessages.isMarked(currentAccount, did, mid)) {
+        // perf: the flag is resolved per bind; only re-check when a bookmark was toggled since then
+        final int version = org.telegram.messenger.ayu.AyuMarkedMessages.getVersion();
+        if (version != ayuMarkedVersion) {
+            ayuMarkedVersion = version;
+            final int mid = currentMessageObject.getId();
+            final long did = currentMessageObject.getDialogId();
+            ayuMarked = mid != 0 && did != 0 && org.telegram.messenger.ayu.AyuMarkedMessages.isMarked(currentAccount, did, mid);
+        }
+        if (!ayuMarked) {
             return;
         }
         if (ayuMarkedDrawable == null) {
@@ -23882,7 +23928,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         final int x = (int) (drawTimeX - AndroidUtilities.dp(14));
         final int y = (int) (drawTimeY + (timeLayout.getHeight() - size) / 2f);
         ayuMarkedDrawable.setBounds(x, y, x + size, y + size);
-        ayuMarkedDrawable.setColorFilter(new PorterDuffColorFilter(Theme.chat_timePaint.getColor(), PorterDuff.Mode.SRC_IN));
+        final int color = Theme.chat_timePaint.getColor();
+        if (ayuMarkedFilter == null || ayuMarkedFilterColor != color) {
+            ayuMarkedFilterColor = color;
+            ayuMarkedFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
+        }
+        ayuMarkedDrawable.setColorFilter(ayuMarkedFilter);
         ayuMarkedDrawable.setAlpha((int) (255 * Math.max(0f, Math.min(1f, alpha))));
         ayuMarkedDrawable.draw(canvas);
     }
