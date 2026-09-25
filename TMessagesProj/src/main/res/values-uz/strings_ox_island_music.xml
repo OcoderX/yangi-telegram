@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Ox-gram: Dynamic Island music player -->
-    <string name="OxIslandReplacePlayer">Pleer panelini almashtirish</string>
-    <string name="OxIslandReplacePlayerInfo">Pleerni faqat Dynamic Island ichida qoldiring va suhbatlar ro‘yxati ustidagi audio pleer panelini yashiring. Pauza yoki davom ettirish uchun tabletkadagi ekvalayzerga, to‘liq boshqaruv uchun tabletkaning o‘ziga bosing.</string>
-</resources>

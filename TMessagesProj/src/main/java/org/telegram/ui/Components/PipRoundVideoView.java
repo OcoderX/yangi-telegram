@@ -89,6 +89,7 @@ public class PipRoundVideoView implements NotificationCenter.NotificationCenterD
         }
         instance = this;
         onCloseRunnable = closeRunnable;
+        org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram
         windowView = new PipFrameLayout(activity) {
 
             private float startX;
@@ -370,6 +371,7 @@ public class PipRoundVideoView implements NotificationCenter.NotificationCenterD
             if (instance == this) {
                 instance = null;
             }
+            org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram
             parentActivity = null;
             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagePlayingProgressDidChanged);
         }

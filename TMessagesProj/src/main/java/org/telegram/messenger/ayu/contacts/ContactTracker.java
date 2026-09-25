@@ -68,11 +68,16 @@ public class ContactTracker implements NotificationCenter.NotificationCenterDele
             return;
         }
         initialized = true;
-        try {
-            SpecialContactsConfig.load();
-        } catch (Throwable e) {
-            FileLog.e(e);
-        }
+        //perf: the special-contacts prefs file is read off the main thread; check() goes through
+        // SpecialContactsConfig.isEmpty(), which is synchronized and loads on demand, so an early
+        // status update simply waits for (or performs) the read itself
+        org.telegram.messenger.Utilities.globalQueue.postRunnable(() -> {
+            try {
+                SpecialContactsConfig.load();
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
         // observers must be added from the main thread; ApplicationLoader.applicationHandler may not
         // exist yet at this point, so use the looper directly instead of AndroidUtilities
         new Handler(Looper.getMainLooper()).post(this::attach);

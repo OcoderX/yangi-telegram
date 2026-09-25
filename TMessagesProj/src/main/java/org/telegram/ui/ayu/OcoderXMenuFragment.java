@@ -9,11 +9,15 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -46,6 +50,7 @@ import org.telegram.ui.GroupCreateActivity;
 import org.telegram.ui.InviteContactsActivity;
 import org.telegram.ui.LaunchActivity;
 import org.telegram.ui.LoginActivity;
+import org.telegram.ui.MainTabsActivity;
 import org.telegram.ui.SettingsActivity;
 import org.telegram.ui.ThemeActivity;
 import org.telegram.ui.ayu.menu.OxDrawerProfileCell;
@@ -64,7 +69,7 @@ import java.util.Collections;
  * The feature switches of the fork stay where they were: in the "..." popup of the chats screen
  * ({@code DialogsActivity.addOcoderXFeatureOptions}).
  */
-public class OcoderXMenuFragment extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
+public class OcoderXMenuFragment extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, MainTabsActivity.TabFragmentDelegate {
 
     private static final int VIEW_TYPE_PROFILE = 0;
     private static final int VIEW_TYPE_ACTION = 1;
@@ -107,6 +112,19 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
     /** Opens the download manager of the chats screen; supplied by {@code MainTabsActivity}. */
     private Runnable downloadManagerAction;
 
+    /** true when this screen is a page of {@link MainTabsActivity} instead of a pushed fragment. */
+    private boolean hasMainTabs;
+    private int navigationBarHeight = AndroidUtilities.navigationBarHeight;
+    private int statusBarHeight = AndroidUtilities.statusBarHeight;
+
+    public OcoderXMenuFragment() {
+        super();
+    }
+
+    public OcoderXMenuFragment(Bundle args) {
+        super(args);
+    }
+
     public void setDownloadManagerAction(Runnable action) {
         downloadManagerAction = action;
     }
@@ -115,6 +133,9 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
 
     @Override
     public boolean onFragmentCreate() {
+        if (arguments != null) {
+            hasMainTabs = arguments.getBoolean("hasMainTabs", false);
+        }
         getNotificationCenter().addObserver(this, NotificationCenter.mainUserInfoChanged);
         getNotificationCenter().addObserver(this, NotificationCenter.updateInterfaces);
         return super.onFragmentCreate();
@@ -129,13 +150,15 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
 
     @Override
     public View createView(Context context) {
-        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
+        if (!hasMainTabs) {
+            actionBar.setBackButtonImage(R.drawable.ic_ab_back);
+        }
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle(getString(R.string.OxTabOcoderX));
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
-                if (id == -1) {
+                if (id == -1 && !hasMainTabs) {
                     finishFragment();
                 }
             }
@@ -153,6 +176,13 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
                 Gravity.TOP | (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT)));
         listView.setOnItemClickListener((view, position) -> onItemClick(view, position));
 
+        if (hasMainTabs) {
+            // the action bar overlays the page and the floating tabs bar covers its bottom
+            listView.setClipToPadding(false);
+            checkUi_listViewPadding();
+            ViewCompat.setOnApplyWindowInsetsListener(fragmentView, this::onApplyWindowInsets);
+        }
+
         updateRows();
         return fragmentView;
     }
@@ -165,7 +195,20 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.mainUserInfoChanged || id == NotificationCenter.updateInterfaces) {
+        if (id == NotificationCenter.updateInterfaces) {
+            //perf: updateInterfaces fires for every online-status / typing / read update; this page
+            // only shows names, avatars, phones and emoji statuses, so everything else is ignored
+            // instead of rebinding the whole list
+            final int mask = args != null && args.length > 0 && args[0] instanceof Integer ? (Integer) args[0] : 0;
+            if ((mask & (MessagesController.UPDATE_MASK_NAME | MessagesController.UPDATE_MASK_AVATAR
+                    | MessagesController.UPDATE_MASK_PHONE | MessagesController.UPDATE_MASK_USER_PHONE
+                    | MessagesController.UPDATE_MASK_EMOJI_STATUS)) == 0) {
+                return;
+            }
+            if (adapter != null) {
+                adapter.notifyDataSetChanged();
+            }
+        } else if (id == NotificationCenter.mainUserInfoChanged) {
             if (adapter != null) {
                 adapter.notifyDataSetChanged();
             }
@@ -407,8 +450,55 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
         if (action == null) {
             return;
         }
-        finishFragment();
+        if (hasMainTabs) {
+            final MainTabsActivity mainTabs = getMainTabsActivity();
+            if (mainTabs != null) {
+                mainTabs.selectChatsTab();
+            }
+        } else {
+            finishFragment();
+        }
         AndroidUtilities.runOnUIThread(action, 200);
+    }
+
+    private MainTabsActivity getMainTabsActivity() {
+        final org.telegram.ui.ActionBar.INavigationLayout layout = getParentLayout();
+        final BaseFragment last = layout != null ? layout.getLastFragment() : null;
+        return last instanceof MainTabsActivity ? (MainTabsActivity) last : null;
+    }
+
+    private void checkUi_listViewPadding() {
+        if (listView == null || !hasMainTabs) {
+            return;
+        }
+        listView.setPadding(
+            0,
+            statusBarHeight + ActionBar.getCurrentActionBarHeight(),
+            0,
+            navigationBarHeight + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS)
+        );
+    }
+
+    @NonNull
+    private WindowInsetsCompat onApplyWindowInsets(@NonNull View v, @NonNull WindowInsetsCompat insets) {
+        final Insets systemInsets = AndroidUtilities.getDefaultWindowInsets(insets, false);
+        navigationBarHeight = systemInsets.bottom;
+        statusBarHeight = systemInsets.top;
+        checkUi_listViewPadding();
+        return WindowInsetsCompat.CONSUMED;
+    }
+
+    @Override
+    public void onParentScrollToTop() {
+        if (listView != null) {
+            listView.smoothScrollToPosition(0);
+        }
+    }
+
+    @Override
+    public boolean canParentTabsSlide(MotionEvent ev, boolean forward) {
+        // the page never scrolls sideways itself, so the tabs pager always takes the gesture
+        return true;
     }
 
     private void toggleNightMode(View view) {

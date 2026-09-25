@@ -14093,6 +14093,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
     private void onPhotoShow(final MessageObject messageObject, final TLRPC.FileLocation fileLocation, ImageLocation imageLocation, ImageLocation videoLocation, final ArrayList<MessageObject> messages, final ArrayList<SecureDocument> documents, final List<Object> photos, int index, final PlaceProviderObject object) {
         classGuid = ConnectionsManager.generateClassGuid();
+        org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram: island hides while media is on screen
         customTitle = null;
         disableSelection = false;
         currentMessageObject = null;
@@ -18884,6 +18885,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void onPhotoClosed(PlaceProviderObject object) {
+        org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram: island may come back
         if (doneButtonPressed) {
             releasePlayer(true);
         }

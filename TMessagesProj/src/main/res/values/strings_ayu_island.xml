@@ -20,4 +20,11 @@
     <string name="AyuIslandGhostOn">Ghost mode is on</string>
     <string name="AyuIslandGhostInfo">Read receipts, online status and typing are hidden</string>
     <string name="AyuIslandGhostOff">Turn off</string>
+    <!-- Ox-gram: pro island - uploads, per-transfer controls, dismiss, gestures -->
+    <string name="AyuIslandUploads">Uploads</string>
+    <string name="AyuIslandUploadingFiles_one">Uploading %1$d file</string>
+    <string name="AyuIslandUploadingFiles_other">Uploading %1$d files</string>
+    <string name="AyuIslandHide">Hide</string>
+    <string name="AyuIslandPaused">Paused</string>
+    <string name="AyuIslandGesturesInfo">Only the sources enabled here can occupy the island. Tap the pill or pull it down to open it, swipe up or tap outside to close it. The X on each card hides that item until it changes; in the music card the X stops playback, and Hide only hides it.</string>
 </resources>

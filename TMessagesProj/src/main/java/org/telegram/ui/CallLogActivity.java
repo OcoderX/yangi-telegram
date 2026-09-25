@@ -706,10 +706,8 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 			hasMainTabs = arguments.getBoolean("hasMainTabs", false);
 		}
 
-		// the main tabs bar sits at the top now: reserve space above the list instead of below it
-		additionNavigationBarHeight = 0;
-		additionFloatingButtonOffset = 0;
-		additionTopHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+		additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+		additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
 
 		return true;
 	}
@@ -1514,7 +1512,6 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 
 	private int additionNavigationBarHeight;
 	private int additionFloatingButtonOffset;
-	private int additionTopHeight;
 	private float additionalFloatingTranslation;
 	private int navigationBarHeight;
 
@@ -1533,7 +1530,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 	private void checkUi_listViewPadding() {
 		listView.setPadding(
 			0,
-			dp(ADDITIONAL_LIST_HEIGHT_DP) + actionBar.getMeasuredHeight() + additionTopHeight + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(14)),
+			dp(ADDITIONAL_LIST_HEIGHT_DP) + actionBar.getMeasuredHeight() + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(14)),
 			0,
 			dp(ADDITIONAL_LIST_HEIGHT_DP) + navigationBarHeight + additionNavigationBarHeight
 		);
@@ -2073,8 +2070,8 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 		}
 
 		final int additionalList = dp(48) + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(7));
-		final int mainTabTop = actionBar.getMeasuredHeight();
-		final int mainTabBottom = mainTabTop + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
+		final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+		final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
 
 		iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
 		iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);

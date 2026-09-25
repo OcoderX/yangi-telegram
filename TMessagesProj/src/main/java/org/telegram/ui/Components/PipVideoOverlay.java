@@ -419,6 +419,7 @@ public class PipVideoOverlay implements IPipSourceDelegate {
         isVisible = false;
         isDismissing = false;
         canLongClick = false;
+        org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram
 
         cancelRewind();
         AndroidUtilities.cancelRunOnUIThread(longClickCallback);
@@ -576,6 +577,7 @@ public class PipVideoOverlay implements IPipSourceDelegate {
             return false;
         }
         isVisible = true;
+        org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram
 
         mVideoWidth = videoWidth;
         mVideoHeight = videoHeight;

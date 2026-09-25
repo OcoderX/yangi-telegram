@@ -10631,16 +10631,48 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             AndroidUtilities.hideKeyboard(tokenField);
 
             ConnectionsManager.getInstance(currentAccount).cleanup(false);
+            importBot(token, 0);
+        }
+
+        /**
+         * api_id / api_hash pairs tried for the import, in order. Telegram refuses the published
+         * id of the official apps for bot imports on some accounts, so the dedicated pair from
+         * {@link BuildVars#BOT_LOGIN_APP_ID} (when set) goes first and the public desktop pair last.
+         */
+        private java.util.List<Object[]> botApiCredentials() {
+            final java.util.ArrayList<Object[]> list = new java.util.ArrayList<>();
+            if (BuildVars.BOT_LOGIN_APP_ID != 0 && !TextUtils.isEmpty(BuildVars.BOT_LOGIN_APP_HASH)) {
+                list.add(new Object[]{BuildVars.BOT_LOGIN_APP_ID, BuildVars.BOT_LOGIN_APP_HASH});
+            }
+            list.add(new Object[]{BuildVars.APP_ID, BuildVars.APP_HASH});
+            // Telegram Desktop's public pair (docs/api_credentials.md of the tdesktop repo).
+            list.add(new Object[]{2040, "b18441a1ff607e10a989891a5462e627"});
+            return list;
+        }
+
+        private boolean isApiIdError(TLRPC.TL_error error) {
+            return error != null && error.text != null && (error.text.contains("API_ID_INVALID") || error.text.contains("API_ID_PUBLISHED_FLOOD"));
+        }
+
+        private void importBot(final String token, final int attempt) {
+            final java.util.List<Object[]> credentials = botApiCredentials();
+            final Object[] pair = credentials.get(Math.min(attempt, credentials.size() - 1));
 
             final TLRPC.TL_auth_importBotAuthorization req = new TLRPC.TL_auth_importBotAuthorization();
-            req.api_id = BuildVars.APP_ID;
-            req.api_hash = BuildVars.APP_HASH;
+            req.api_id = (Integer) pair[0];
+            req.api_hash = (String) pair[1];
             req.bot_auth_token = token;
 
             final boolean testBackend = ConnectionsManager.getInstance(currentAccount).isTestBackend();
             final int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                 if (!requesting) {
                     // cancelled with the back button while the request was in flight
+                    return;
+                }
+                if (error != null && isApiIdError(error) && attempt + 1 < credentials.size()) {
+                    // this api_id is refused for bot imports: fall through to the next pair
+                    FileLog.d("bot login: " + error.text + " for api_id " + req.api_id + ", trying the next pair");
+                    importBot(token, attempt + 1);
                     return;
                 }
                 requesting = false;
@@ -10698,7 +10730,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 return getString(R.string.AyuBotLoginErrorExpired);
             }
             if (text.contains("API_ID_INVALID") || text.contains("API_ID_PUBLISHED_FLOOD")) {
-                return getString(R.string.AyuBotLoginErrorApiId);
+                return LocaleController.formatString(R.string.AyuBotLoginErrorApiId, text);
             }
             if (text.contains("FLOOD_WAIT")) {
                 return getString(R.string.FloodWait);

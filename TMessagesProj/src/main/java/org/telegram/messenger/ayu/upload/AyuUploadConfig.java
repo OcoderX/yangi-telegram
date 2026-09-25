@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.ayu.AyuKeepAliveService;
 
 /**
  * AyuGram Upload Accelerator configuration.
@@ -127,6 +128,12 @@ public class AyuUploadConfig {
     public static void setKeepAliveWhileUploading(boolean v) {
         keepAliveWhileUploading = v;
         putBoolean("keepAliveWhileUploading", v);
+        // re-evaluate immediately: turning this off mid-upload must drop the notification right away
+        // instead of waiting for the next queue-progress event (which may not come again soon).
+        try {
+            AyuKeepAliveService.checkState(null);
+        } catch (Throwable ignore) {
+        }
     }
 
     public static void setPartRetries(int v) {

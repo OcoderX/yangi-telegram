@@ -2304,9 +2304,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
         setActionsMode();
 
-        // the main tabs bar sits at the top now (see getHeaderOnlyExtraHeight), nothing to reserve below
-        additionNavigationBarHeight = 0;
-        additionFloatingButtonOffset = 0;
+        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
 
         return true;
     }
@@ -6031,13 +6030,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getHeaderOnlyExtraHeight() {
-        // in main tabs mode the tabs bar is drawn right below the action bar, so the profile
-        // header has to start below it
-        final int mainTabs = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
         if (getActionsExtraHeight() == 0) {
-            return dp(168f) + mainTabs;
+            return dp(168f);
         }
-        return dp(152f) + mainTabs;
+        return dp(152f);
     }
 
     private int getActionsExtraHeight() {
@@ -17288,8 +17284,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
 
         final int additionalList = dp(48);
-        final int mainTabTop = actionBar.getMeasuredHeight();
-        final int mainTabBottom = mainTabTop + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
+        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
 
         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);

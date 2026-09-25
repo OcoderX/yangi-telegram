@@ -64,7 +64,7 @@ public class AyuConfig {
     public static boolean saveSelfDestructingMedia = true;
 
     // ---------------- Quality of life ----------------
-    public static boolean keepAliveService = true;
+    public static boolean keepAliveService = false;
     public static boolean disableAds = true;
     public static boolean disableProxySponsor = true;
     public static boolean localPremium = false;
@@ -83,6 +83,8 @@ public class AyuConfig {
     public static boolean islandDownloads = true;
     public static boolean islandGhost = true;
     public static boolean islandIdle = false;
+    /** uploads (the AyuGram upload queue) may occupy the island next to downloads */
+    public static boolean islandUploads = true;
     /** the Dynamic Island hosts the player, so the stock audio strip stays hidden */
     public static boolean islandReplacePlayer = true;
 
@@ -174,7 +176,7 @@ public class AyuConfig {
         saveReactions = preferences.getBoolean("saveReactions", true);
         saveSelfDestructingMedia = preferences.getBoolean("saveSelfDestructingMedia", true);
 
-        keepAliveService = preferences.getBoolean("keepAliveService", true);
+        keepAliveService = preferences.getBoolean("keepAliveService", false);
         disableAds = preferences.getBoolean("disableAds", true);
         disableProxySponsor = preferences.getBoolean("disableProxySponsor", true);
         localPremium = preferences.getBoolean("localPremium", false);
@@ -192,6 +194,7 @@ public class AyuConfig {
         islandDownloads = preferences.getBoolean("islandDownloads", true);
         islandGhost = preferences.getBoolean("islandGhost", true);
         islandIdle = preferences.getBoolean("islandIdle", false);
+        islandUploads = preferences.getBoolean("islandUploads", true);
         islandReplacePlayer = preferences.getBoolean("islandReplacePlayer", true);
 
         regexFiltersEnabled = preferences.getBoolean("regexFiltersEnabled", false);
@@ -335,6 +338,7 @@ public class AyuConfig {
     public static void setIslandDownloads(boolean v) { islandDownloads = v; putBoolean("islandDownloads", v); }
     public static void setIslandGhost(boolean v) { islandGhost = v; putBoolean("islandGhost", v); }
     public static void setIslandIdle(boolean v) { islandIdle = v; putBoolean("islandIdle", v); }
+    public static void setIslandUploads(boolean v) { islandUploads = v; putBoolean("islandUploads", v); }
     public static void setIslandReplacePlayer(boolean v) { islandReplacePlayer = v; putBoolean("islandReplacePlayer", v); }
 
     public static void setRegexFiltersEnabled(boolean v) { regexFiltersEnabled = v; putBoolean("regexFiltersEnabled", v); }

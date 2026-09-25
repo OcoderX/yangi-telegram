@@ -872,9 +872,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 h += storiesHeight * (1f - searchAnimationProgress) * (1f - rightSlidingProgress) * (1f - progressToActionMode);
             }
             h += storiesOverscroll;
-            h += topSlotCollapsibleHeight() * (1f - progressToActionMode) * (1f - searchAnimationProgress) * (1f - rightSlidingProgress);
-            // the main tabs bar only goes away while searching
-            h += mainTabsSlotHeight() * (1f - searchAnimationProgress) * (1f - rightSlidingProgress);
+            h += dp(SEARCH_FIELD_HEIGHT) * (1f - progressToActionMode) * (1f - searchAnimationProgress) * (1f - rightSlidingProgress);
 
             return (int) h;
         }
@@ -1052,8 +1050,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             tabsYOffset = 0;
             storiesYOffset = 0;
             tabsYOffset -= Math.min(
-                dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight() + scrollYOffset,
-                progressToActionMode * (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight())
+                dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + dp(SEARCH_FIELD_HEIGHT) + scrollYOffset,
+                progressToActionMode * (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + dp(SEARCH_FIELD_HEIGHT))
             );
             storiesYOffset = tabsYOffset;
             if ((rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment())) {
@@ -1079,7 +1077,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (hasStories) {
                     addH += dp(DialogStoriesCell.HEIGHT_IN_DP);
                 }
-                addH += topSlotHeight();
+                addH += dp(SEARCH_FIELD_HEIGHT);
                 addH *= rightSlidingDialogContainer.openedProgress;
 
                 viewPages[0].setTranslationY(rightFragmentOffset - addH);
@@ -1178,7 +1176,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         if (hasStories) {
                             h += dp(DialogStoriesCell.HEIGHT_IN_DP);
                         }
-                        h += topSlotHeight();
+                        h += dp(SEARCH_FIELD_HEIGHT);
                     }
                     h += actionModeAdditionalHeight;
                     if (actionBarColorAnimator == null) {
@@ -1291,10 +1289,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                 if (child == fragmentSearchField || child == searchTabsAndFiltersLayout || child == dialogStoriesCell) {
                     childTop = actionBar.getMeasuredHeight();
-                    if (child == dialogStoriesCell) {
-                        // the main tabs bar is pinned right below the action bar, stories go under it
-                        childTop += mainTabsSlotHeight();
-                    }
                     if (child != fragmentSearchField && child != dialogStoriesCell && child != searchTabsAndFiltersLayout) {
                         childTop += dp(SEARCH_FIELD_HEIGHT);
                     }
@@ -1321,7 +1315,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     childTop = 0;
                 } else if (child == topPanelLayout || child == topBubblesFadeView || child == filterTabsView) {
                     childTop += actionBar.getMeasuredHeight();
-                    childTop += topSlotHeight();
+                    childTop += dp(SEARCH_FIELD_HEIGHT);
                 } else if (dialogStoriesCell != null && dialogStoriesCell.getPremiumHint() == child) {
                     continue;
                 }
@@ -2077,10 +2071,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 t += dp(DialogStoriesCell.HEIGHT_IN_DP);
             }
             if (!actionModeFullyShowed) {
-                t += topSlotHeight();
-            } else {
-                // the main tabs bar stays pinned even in action mode
-                t += mainTabsSlotHeight();
+                t += dp(SEARCH_FIELD_HEIGHT);
             }
             additionalPadding = 0;
 
@@ -2391,7 +2382,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         offset += dp(DialogStoriesCell.HEIGHT_IN_DP);
                     }
                     if (backward) {
-                        offset += topSlotHeight();
+                        offset += dp(SEARCH_FIELD_HEIGHT);
                         // offset += canShowFilterTabsView ? dp(50) : 0;
                     }
                     if (p >= 0) {
@@ -2994,9 +2985,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         BirthdayController.getInstance(currentAccount).check();
-        // the main tabs bar lives at the top now, so nothing has to be reserved at the bottom
-        additionNavigationBarHeight = 0;
-        additionFloatingButtonOffset = 0;
+        additionNavigationBarHeight = hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
 
         return true;
     }
@@ -4248,13 +4238,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 }
                                 int canScrollDy = -(view.getTop() - pTop) + viewsH;
                                 if (!rightSlidingDialogContainer.hasFragment() && !(actionBar != null && actionBar.isActionModeShowed())) {
-                                    canScrollDy -= topSlotCollapsibleHeight();
+                                    canScrollDy -= dp(SEARCH_FIELD_HEIGHT);
                                 }
                                 if (hasStories && (viewPage.scroller.isRunning() || dialogStoriesCell.isExpanded()) && !rightSlidingDialogContainer.hasFragment() && !fixScrollYAfterArchiveOpened) {
                                     canScrollDy += dp(DialogStoriesCell.HEIGHT_IN_DP);
                                 }
                                 if ((viewPage.scroller.isRunning() || dialogStoriesCell.isExpanded()) && !rightSlidingDialogContainer.hasFragment() && !fixScrollYAfterArchiveOpened && !(actionBar != null && actionBar.isActionModeShowed())) {
-                                    canScrollDy += topSlotCollapsibleHeight();
+                                    canScrollDy += dp(SEARCH_FIELD_HEIGHT);
                                 }
                                 int positiveDy = Math.abs(dy);
                                 if (canScrollDy < positiveDy) {
@@ -4617,7 +4607,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         if (applyScrollY) {
                             int maxScrollYOffset = getMaxScrollYOffset();
                             if (!(filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && animatorFilterTabsVisible.getValue())) {
-                                maxScrollYOffset = topSlotCollapsibleHeight();
+                                maxScrollYOffset = dp(SEARCH_FIELD_HEIGHT);
                             }
                             if (newTranslation < -maxScrollYOffset) {
                                 newTranslation = -maxScrollYOffset;
@@ -5783,29 +5773,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return false;
     }
 
-    // Total height of the slot reserved right below the action bar, above the stories row.
-    // Normally it holds the big "Search Chats" field; when this fragment is a page of
-    // MainTabsActivity the (never collapsing) main tabs bar is drawn there instead and the
-    // search field is only shown while searching.
-    private int topSlotHeight() {
-        return mainTabsSlotHeight() + topSlotCollapsibleHeight();
-    }
-
-    // Fixed slot of the main tabs bar (0 when there are no main tabs).
-    private int mainTabsSlotHeight() {
-        return hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-    }
-
-    // Part of the top slot that collapses away (the search field). The main tabs bar never collapses.
-    private int topSlotCollapsibleHeight() {
-        return hasMainTabs ? 0 : dp(SEARCH_FIELD_HEIGHT);
-    }
-
     private int getMaxScrollYOffsetWithoutSearch() {
-        if (hasMainTabs) {
-            // the main tabs bar is pinned below the action bar, nothing above the list may slide under it
-            return 0;
-        }
         if (hasStories) {
             return dp(DialogStoriesCell.HEIGHT_IN_DP);
         } else {
@@ -5814,13 +5782,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getMaxScrollYOffset() {
-        if (hasMainTabs) {
-            return 0;
-        }
         if (hasStories) {
-            return dp(DialogStoriesCell.HEIGHT_IN_DP) + topSlotCollapsibleHeight();
+            return dp(DialogStoriesCell.HEIGHT_IN_DP) + dp(SEARCH_FIELD_HEIGHT);
         } else {
-            return topSlotCollapsibleHeight();
+            return dp(SEARCH_FIELD_HEIGHT);
         }
     }
 
@@ -7249,7 +7214,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE ? filterTabsView.getMeasuredHeight() : 0) +
                     (topPanelLayout != null ? topPanelLayout.getHeight() : 0) +
                     (dialogStoriesCell != null && dialogStoriesCellVisible ? (int) ((1f - dialogStoriesCell.getCollapsedProgress()) * dp(DialogStoriesCell.HEIGHT_IN_DP)) : 0) +
-                    (topSlotHeight())
+                    (dp(SEARCH_FIELD_HEIGHT))
                 );
             }
 
@@ -8128,7 +8093,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     searchObject = null;
                 }
             }
-            boolean canOpenInRightSlidingView = !(LocaleController.isRTL || searching || (AndroidUtilities.isTablet() && folderId != 0)) && LiteMode.isEnabled(LiteMode.FLAG_CHAT_FORUM_TWOCOLUMN) && !TMP_DISABLE_TOPICS_TWO_COLUMNS && communityId == 0;
+            // two column forum view (collapsed avatar column of chats + topics on the right) is for tablets only:
+            // on phones the topics list is opened as a regular fullscreen fragment
+            boolean canOpenInRightSlidingView = AndroidUtilities.isTablet() && !(LocaleController.isRTL || searching || folderId != 0) && LiteMode.isEnabled(LiteMode.FLAG_CHAT_FORUM_TWOCOLUMN) && !TMP_DISABLE_TOPICS_TWO_COLUMNS && communityId == 0;
             args.putInt("dialog_folder_id", folderId);
             args.putInt("dialog_filter_id", filterId);
             if (AndroidUtilities.isTablet() && (!getMessagesController().isForum(dialogId) || !canOpenInRightSlidingView)) {
@@ -9104,7 +9071,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 viewPages[i].listView.cancelClickRunnables(true);
             }
         }
-        translateListHeight = Math.max(0, (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) + scrollYOffset);
+        translateListHeight = Math.max(0, dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) + scrollYOffset);
         float finalTranslateListHeight = translateListHeight;
         actionBarColorAnimator = ValueAnimator.ofFloat(progressToActionMode, 0);
         actionBarColorAnimator.addUpdateListener(valueAnimator -> {
@@ -9130,7 +9097,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 invalidateScrollY = true;
                 fixScrollYAfterArchiveOpened = true;
                 fragmentView.invalidate();
-                scrollAdditionalOffset = -((dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) - finalTranslateListHeight);
+                scrollAdditionalOffset = -(dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight);
                 viewPages[0].setTranslationY(0);
                 for (int i = 0; i < viewPages.length; i++) {
                     if (viewPages[i] != null) {
@@ -10128,7 +10095,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     viewPages[i].listView.cancelClickRunnables(true);
                 }
             }
-            translateListHeight = Math.max(0, (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) + scrollYOffset);
+            translateListHeight = Math.max(0, dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) + scrollYOffset);
             if (translateListHeight != 0) {
                 actionModeAdditionalHeight = (int) translateListHeight;
                 fragmentView.requestLayout();
@@ -10155,7 +10122,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     actionBarColorAnimator = null;
                     actionModeAdditionalHeight = 0;
                     actionModeFullyShowed = true;
-                    scrollAdditionalOffset = (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + topSlotCollapsibleHeight()) - finalTranslateListHeight;
+                    scrollAdditionalOffset = dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight;
                     viewPages[0].setTranslationY(0);
                     for (int i = 0; i < viewPages.length; i++) {
                         if (viewPages[i] != null) {
@@ -14390,18 +14357,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         updateContextViewPosition();
     }
 
-    // true while a fragment (topics list of a forum) is shown in the right sliding container:
-    // it takes over the whole area below the action bar, so the main tabs bar must step aside.
-    private boolean isRightSlidingFragmentShown() {
-        return rightSlidingDialogContainer != null
-            && rightSlidingDialogContainer.hasFragment()
-            && rightSlidingDialogContainer.isOpenned;
-    }
-
     private void checkUi_mainTabsVisible() {
-        final boolean mainTabsVisible = !searching
-            && !isRightSlidingFragmentShown()
-            && (blurredView == null || blurredView.getBackground() == null || blurredView.getAlpha() < 0.01f || blurredView.getVisibility() == View.GONE);
+        final boolean mainTabsVisible = !searching && (blurredView == null || blurredView.getBackground() == null || blurredView.getAlpha() < 0.01f || blurredView.getVisibility() == View.GONE);
         if (mainTabsActivityController != null) {
             mainTabsActivityController.setTabsVisible(mainTabsVisible);
         }
@@ -14420,9 +14377,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         final float factor0 = isSupportSearch() ? 1 : 0;
         final float factor1 = (1f - actionModeVisible) * (1f - animatorDoneButtonVisible.getFloatValue());
-        final float factor2 = hasMainTabs ?
-            searchFieldVisible :
-            Math.max(searchFieldVisible, alphaByScrollOffset * (1f - getRightSlidingProgress()));
+        final float factor2 = Math.max(searchFieldVisible, alphaByScrollOffset * (1f - getRightSlidingProgress()));
 
         final float alpha = factor0 * factor1 * factor2;
 
@@ -14549,11 +14504,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         final int additionalList = dp(48);
-        final int mainTabTop = actionBar.getMeasuredHeight();
-        final int mainTabBottom = mainTabTop + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
+        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
 
         final int actionBarHeight = actionBar.getMeasuredHeight()
-            + topSlotHeight()
+            + dp(DialogsActivity.SEARCH_FIELD_HEIGHT)
             + dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0)
             + (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE ? filterTabsView.getMeasuredHeight() : 0)
             + (topPanelLayout != null && topPanelLayout.getVisibility() == View.VISIBLE ? topPanelLayout.getSumHeightOfAllVisibleChild() : 0)

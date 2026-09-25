@@ -43,7 +43,14 @@ public class AyuLinkHandling {
     private static final long ASK_INTERVAL = 14L * 24 * 60 * 60 * 1000; // at most once every two weeks
     private static final long START_DELAY = 2500; // let the main screen settle first
 
-    private static boolean scheduled;
+    private static volatile boolean scheduled;
+    /**
+     * //perf: {@link #handlesTelegramLinks} is a binder round trip to the system server. It used to
+     * run synchronously in LaunchActivity.onResume() on every resume; now it runs on the global
+     * queue and at most once per {@link #RECHECK_INTERVAL} per process.
+     */
+    private static long lastCheckUptime;
+    private static final long RECHECK_INTERVAL = 30L * 60 * 1000;
 
     private AyuLinkHandling() {
     }
@@ -144,37 +151,44 @@ public class AyuLinkHandling {
         if (System.currentTimeMillis() - prefs.getLong(PREF_LAST_ASKED, 0) < ASK_INTERVAL) {
             return;
         }
-        if (handlesTelegramLinks(activity)) {
+        final long now = android.os.SystemClock.elapsedRealtime();
+        if (lastCheckUptime != 0 && now - lastCheckUptime < RECHECK_INTERVAL) {
             return;
         }
+        lastCheckUptime = now;
         scheduled = true;
-        AndroidUtilities.runOnUIThread(() -> {
-            scheduled = false;
-            if (activity.isFinishing() || activity.isDestroyed()) {
+        final Context appContext = activity.getApplicationContext();
+        // the system-server query runs off the main thread; only the dialog is posted back
+        org.telegram.messenger.Utilities.globalQueue.postRunnable(() -> {
+            final boolean handled = handlesTelegramLinks(appContext);
+            if (handled) {
+                scheduled = false;
                 return;
             }
-            if (SharedConfig.passcodeHash.length() > 0 && SharedConfig.appLocked) {
-                return;
-            }
-            if (handlesTelegramLinks(activity)) {
-                // the user fixed it in the meantime
-                return;
-            }
-            final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
-            final Activity parent = fragment != null ? fragment.getParentActivity() : null;
-            if (fragment == null || parent == null || parent.isFinishing()) {
-                return;
-            }
-            prefs.edit().putLong(PREF_LAST_ASKED, System.currentTimeMillis()).apply();
+            AndroidUtilities.runOnUIThread(() -> {
+                scheduled = false;
+                if (activity.isFinishing() || activity.isDestroyed()) {
+                    return;
+                }
+                if (SharedConfig.passcodeHash.length() > 0 && SharedConfig.appLocked) {
+                    return;
+                }
+                final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
+                final Activity parent = fragment != null ? fragment.getParentActivity() : null;
+                if (fragment == null || parent == null || parent.isFinishing()) {
+                    return;
+                }
+                prefs.edit().putLong(PREF_LAST_ASKED, System.currentTimeMillis()).apply();
 
-            final AlertDialog.Builder builder = new AlertDialog.Builder(parent);
-            builder.setTitle(LocaleController.getString(R.string.OxOpenLinksTitle));
-            builder.setMessage(LocaleController.getString(R.string.OxOpenLinksText));
-            builder.setPositiveButton(LocaleController.getString(R.string.OxOpenLinksOpen), (dialog, which) -> openLinkSettings(parent));
-            builder.setNegativeButton(LocaleController.getString(R.string.OxOpenLinksLater), null);
-            builder.setNeutralButton(LocaleController.getString(R.string.OxOpenLinksNever), (dialog, which) ->
-                    prefs.edit().putBoolean(PREF_NEVER, true).apply());
-            fragment.showDialog(builder.create());
-        }, START_DELAY);
+                final AlertDialog.Builder builder = new AlertDialog.Builder(parent);
+                builder.setTitle(LocaleController.getString(R.string.OxOpenLinksTitle));
+                builder.setMessage(LocaleController.getString(R.string.OxOpenLinksText));
+                builder.setPositiveButton(LocaleController.getString(R.string.OxOpenLinksOpen), (dialog, which) -> openLinkSettings(parent));
+                builder.setNegativeButton(LocaleController.getString(R.string.OxOpenLinksLater), null);
+                builder.setNeutralButton(LocaleController.getString(R.string.OxOpenLinksNever), (dialog, which) ->
+                        prefs.edit().putBoolean(PREF_NEVER, true).apply());
+                fragment.showDialog(builder.create());
+            }, START_DELAY);
+        });
     }
 }

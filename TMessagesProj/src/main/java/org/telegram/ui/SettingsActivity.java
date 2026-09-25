@@ -217,9 +217,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
         }
 
-        // the main tabs bar sits at the top now: reserve space above the list instead of below it
-        additionNavigationBarHeight = 0;
-        additionTopHeight = hasMainTabs ? (ActionBar.getCurrentActionBarHeight() + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS)) : 0;
+        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
         return super.onFragmentCreate();
     }
 
@@ -352,7 +350,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, this::onLongClick);
         listView.adapter.setApplyBackground(false);
         listView.setSections();
-        listView.setPadding(0, AndroidUtilities.statusBarHeight + dp(12) + additionTopHeight, 0, AndroidUtilities.navigationBarHeight + additionNavigationBarHeight);
+        listView.setPadding(0, AndroidUtilities.statusBarHeight + dp(12), 0, AndroidUtilities.navigationBarHeight + additionNavigationBarHeight);
         listView.setClipToPadding(false);
         listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
@@ -969,14 +967,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
     private int navigationBarHeight;
     private int additionNavigationBarHeight;
-    private int additionTopHeight;
 
     @NonNull
     private WindowInsetsCompat onApplyWindowInsets(@NonNull View v, @NonNull WindowInsetsCompat insets) {
         final Insets systemInsets = AndroidUtilities.getDefaultWindowInsets(insets, false);
         navigationBarHeight = systemInsets.bottom;
         final int statusBarHeight = systemInsets.top;
-        listView.setPadding(0, statusBarHeight + dp(12) + additionTopHeight, 0, navigationBarHeight + additionNavigationBarHeight);
+        listView.setPadding(0, statusBarHeight + dp(12), 0, navigationBarHeight + additionNavigationBarHeight);
         return WindowInsetsCompat.CONSUMED;
     }
 
@@ -2075,8 +2072,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         }
 
         final int additionalList = dp(48);
-        final int mainTabTop = actionBar.getMeasuredHeight();
-        final int mainTabBottom = mainTabTop + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
+        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
 
         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);

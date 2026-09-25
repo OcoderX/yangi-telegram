@@ -274,6 +274,12 @@
     <string name="AyuIslandGhostOn">Ghost rejimi yoqilgan</string>
     <string name="AyuIslandGhostInfo">O\'qilganlik, onlayn holat va yozish belgisi yashirilgan</string>
     <string name="AyuIslandGhostOff">O\'chirish</string>
+    <string name="AyuIslandUploads">Yuklashlar</string>
+    <string name="AyuIslandUploadingFiles_one">%1$d ta fayl yuborilmoqda</string>
+    <string name="AyuIslandUploadingFiles_other">%1$d ta fayl yuborilmoqda</string>
+    <string name="AyuIslandHide">Yashirish</string>
+    <string name="AyuIslandPaused">To\'xtatilgan</string>
+    <string name="AyuIslandGesturesInfo">Orolchani faqat shu yerda yoqilgan manbalar egallay oladi. Ochish uchun tabletkani bosing yoki pastga torting, yopish uchun yuqoriga suring yoki tashqarisiga bosing. Har bir kartadagi X shu elementni o\'zgarguncha yashiradi; musiqa kartasida X ijroni to\'xtatadi, Yashirish esa faqat yashiradi.</string>
 
     <!-- AyuGram: bot token orqali kirish -->
     <string name="AyuBotLoginTitle">Bot tokeni</string>
@@ -324,7 +330,7 @@
     <string name="AyuBotLoginShowToken">Tokenni ko\'rsatish</string>
     <string name="AyuBotLoginHideToken">Tokenni yashirish</string>
     <string name="AyuBotLoginPasteDetected">Buferdagi tokenni joylashtirish</string>
-    <string name="AyuBotLoginErrorApiId">Telegram bu ilovaning API ID sini rad etdi. Keyinroq qayta urinib ko\'ring.</string>
+    <string name="AyuBotLoginErrorApiId">Telegram bot uchun bu ilovaning API ID sini rad etdi (%1$s). Bu build uchun my.telegram.org dan alohida API ID kerak.</string>
     <string name="AyuBotLoginErrorNetwork">Telegram bilan bog\'lanib bo\'lmadi. Internetni tekshirib, qayta urinib ko\'ring.</string>
     <string name="AyuBotLoginErrorGeneric">Kirish amalga oshmadi: %1$s</string>
     <string name="AyuBotAccountBadge">bot</string>

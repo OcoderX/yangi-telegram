@@ -76,11 +76,34 @@ public class AyuMessagesController {
 
     /** opens (and creates on first run) the database off the main thread */
     public void warmUp() {
-        // plain static fields of the anti-delete prefs are read from ChatMessageCell and from the
-        // storage queue, so they have to be materialized before the first chat is drawn
-        AyuAntiDeleteConfig.load();
-        // same for the edit-history prefs (read from ChatMessageCell while drawing a bubble)
-        org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.load();
+        //perf: every per-area config is its own SharedPreferences file, and getSharedPreferences()
+        // blocks on the XML read the first time it is touched. Called from postInitApplication()
+        // this used to read them one after another on the main thread, before the first frame.
+        // They are read here on the global queue instead; every load() is synchronized and every
+        // reader goes through ensureLoaded(), so a caller that wins the race simply loads it
+        // itself (as before) and a caller that arrives mid-load waits for the read to finish.
+        // The plain static fields of the anti-delete / edit-history prefs are read from
+        // ChatMessageCell without ensureLoaded(): the queue finishes long before a chat is drawn.
+        org.telegram.messenger.Utilities.globalQueue.postRunnable(() -> {
+            try {
+                AyuAntiDeleteConfig.load();
+                org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.load();
+                // read by the upload manager constructor (initAll) and by FileLoader statics
+                org.telegram.messenger.ayu.upload.AyuUploadConfig.ensureLoaded();
+                // first touched from the main thread: DownloadController.canDownloadMedia()
+                org.telegram.messenger.ayu.firewall.FirewallConfig.ensureLoaded();
+                // first touched from the main thread: messagesDidLoad observer of ZeroReupload
+                org.telegram.messenger.ayu.reupload.ZeroReuploadConfig.ensureLoaded();
+                // first touched from the main thread: DynamicIslandView.onAttachedToWindow()
+                org.telegram.messenger.ayu.netdiag.NetDiagConfig.load();
+                // first touched while laying out the first long message (MessageObject)
+                OxChatConfig.load();
+                // first touched from MessagesController.putUser() on the main thread
+                org.telegram.messenger.ayu.contactchanges.ContactChangesConfig.load();
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             try {
                 AyuHistoryStorage.getInstance().getDatabaseSize();

@@ -87,17 +87,26 @@ public class MentionRadar implements NotificationCenter.NotificationCenterDelega
 
     /** starts the radar on every activated account; safe to call more than once */
     public static void initAll() {
-        AndroidUtilities.runOnUIThread(() -> {
-            RadarConfig.load();
-            for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                try {
-                    if (UserConfig.getInstance(a).isClientActivated() && !UserConfig.getInstance(a).isBotAccount()) {
-                        getInstance(a).start();
-                    }
-                } catch (Throwable e) {
-                    FileLog.e(e);
-                }
+        //perf: the radar prefs file used to be read on the main thread before the first frame;
+        // it is read on the global queue now and the observers are attached afterwards, so the
+        // constructor's RadarConfig.load() is a no-op by the time start() runs on the UI thread
+        org.telegram.messenger.Utilities.globalQueue.postRunnable(() -> {
+            try {
+                RadarConfig.load();
+            } catch (Throwable e) {
+                FileLog.e(e);
             }
+            AndroidUtilities.runOnUIThread(() -> {
+                for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                    try {
+                        if (UserConfig.getInstance(a).isClientActivated() && !UserConfig.getInstance(a).isBotAccount()) {
+                            getInstance(a).start();
+                        }
+                    } catch (Throwable e) {
+                        FileLog.e(e);
+                    }
+                }
+            });
         });
     }
 

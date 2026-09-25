@@ -27,7 +27,7 @@
     <string name="AyuBotLoginShowToken">Show token</string>
     <string name="AyuBotLoginHideToken">Hide token</string>
     <string name="AyuBotLoginPasteDetected">Paste the token from clipboard</string>
-    <string name="AyuBotLoginErrorApiId">Telegram rejected this app\'s API ID. Try again later.</string>
+    <string name="AyuBotLoginErrorApiId">Telegram rejected this app\'s API ID for bot login (%1$s). A dedicated API ID from my.telegram.org is needed for this build.</string>
     <string name="AyuBotLoginErrorNetwork">Could not reach Telegram. Check your connection and try again.</string>
     <string name="AyuBotLoginErrorGeneric">Login failed: %1$s</string>
     <string name="AyuBotAccountBadge">bot</string>

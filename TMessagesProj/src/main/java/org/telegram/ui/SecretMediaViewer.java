@@ -1593,6 +1593,7 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
         wm.addView(windowView, windowLayoutParams);
         secretDeleteTimer.invalidate();
         isVisible = true;
+        org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram
 
         final Window window = parentActivity.getWindow();
         wasLightNavigationBar = AndroidUtilities.getLightNavigationBar(window);
@@ -2216,6 +2217,7 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
 
     private void onPhotoClosed(PhotoViewer.PlaceProviderObject object) {
         isVisible = false;
+        org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram
         currentProvider = null;
         disableShowCheck = false;
         releasePlayer();

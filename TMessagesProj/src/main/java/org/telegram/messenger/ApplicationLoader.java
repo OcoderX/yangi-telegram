@@ -295,11 +295,17 @@ public class ApplicationLoader extends Application {
             FileLog.e(e);
         }
         // AyuGram: restore the pending upload queue before the first re-send
-        try {
-            org.telegram.messenger.ayu.upload.AyuUploadManager.initAll();
-        } catch (Throwable e) {
-            FileLog.e(e);
-        }
+        //perf: the constructor reads the upload prefs file (ensureLoaded) - on the global queue it
+        // runs right after AyuMessagesController.warmUp() has already read it, so nothing blocks the
+        // main thread; the observers are attached on the UI thread by the manager itself, and a
+        // re-send that races the restore is re-attached by applyRestored()
+        Utilities.globalQueue.postRunnable(() -> {
+            try {
+                org.telegram.messenger.ayu.upload.AyuUploadManager.initAll();
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
         // AyuGram: zero-reupload index observer
         try {
             org.telegram.messenger.ayu.reupload.ZeroReupload.ensureObserver(UserConfig.selectedAccount);

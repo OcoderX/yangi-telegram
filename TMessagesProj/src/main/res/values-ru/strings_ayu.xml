@@ -276,6 +276,14 @@
     <string name="AyuIslandGhostOn">Режим призрака включён</string>
     <string name="AyuIslandGhostInfo">Отметки о прочтении, статус онлайн и набор текста скрыты</string>
     <string name="AyuIslandGhostOff">Выключить</string>
+    <string name="AyuIslandUploads">Отправка файлов</string>
+    <string name="AyuIslandUploadingFiles_one">Отправляется %1$d файл</string>
+    <string name="AyuIslandUploadingFiles_few">Отправляется %1$d файла</string>
+    <string name="AyuIslandUploadingFiles_many">Отправляется %1$d файлов</string>
+    <string name="AyuIslandUploadingFiles_other">Отправляется %1$d файлов</string>
+    <string name="AyuIslandHide">Скрыть</string>
+    <string name="AyuIslandPaused">Пауза</string>
+    <string name="AyuIslandGesturesInfo">Островок могут занимать только включённые здесь источники. Нажмите на плашку или потяните её вниз, чтобы открыть; смахните вверх или нажмите снаружи, чтобы закрыть. Крестик на каждой карточке скрывает элемент, пока он не изменится; в карточке музыки крестик останавливает воспроизведение, а «Скрыть» только прячет её.</string>
 
     <!-- AyuGram: вход по токену бота -->
     <string name="AyuBotLoginTitle">Токен бота</string>
@@ -326,7 +334,7 @@
     <string name="AyuBotLoginShowToken">Показать токен</string>
     <string name="AyuBotLoginHideToken">Скрыть токен</string>
     <string name="AyuBotLoginPasteDetected">Вставить токен из буфера</string>
-    <string name="AyuBotLoginErrorApiId">Telegram отклонил API ID этого приложения. Попробуйте позже.</string>
+    <string name="AyuBotLoginErrorApiId">Telegram отклонил API ID этого приложения для входа ботом (%1$s). Для этой сборки нужен отдельный API ID с my.telegram.org.</string>
     <string name="AyuBotLoginErrorNetwork">Не удалось связаться с Telegram. Проверьте соединение и попробуйте снова.</string>
     <string name="AyuBotLoginErrorGeneric">Не удалось войти: %1$s</string>
     <string name="AyuBotAccountBadge">бот</string>

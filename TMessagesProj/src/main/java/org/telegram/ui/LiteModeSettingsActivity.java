@@ -152,7 +152,8 @@ public class LiteModeSettingsActivity extends BaseFragment {
         });
 
         fragmentView = contentView;
-        FLAGS_CHAT = AndroidUtilities.isTablet() ? (LiteMode.FLAGS_CHAT & ~LiteMode.FLAG_CHAT_FORUM_TWOCOLUMN) : LiteMode.FLAGS_CHAT;
+        // the two column forum view is tablet only, so its option is never shown here
+        FLAGS_CHAT = LiteMode.FLAGS_CHAT & ~LiteMode.FLAG_CHAT_FORUM_TWOCOLUMN;
 
         updateItems();
 
@@ -257,9 +258,6 @@ public class LiteModeSettingsActivity extends BaseFragment {
         items.add(Item.asSwitch(R.drawable.msg2_ask_question, LocaleController.getString(R.string.LiteOptionsChat), FLAGS_CHAT));
         if (expanded[2]) {
             items.add(Item.asCheckbox(LocaleController.getString("LiteOptionsBackground"), LiteMode.FLAG_CHAT_BACKGROUND));
-            if (!AndroidUtilities.isTablet()) {
-                items.add(Item.asCheckbox(LocaleController.getString("LiteOptionsTopics"), LiteMode.FLAG_CHAT_FORUM_TWOCOLUMN));
-            }
             items.add(Item.asCheckbox(LocaleController.getString("LiteOptionsSpoiler"), LiteMode.FLAG_CHAT_SPOILER));
             if (SharedConfig.getDevicePerformanceClass() >= SharedConfig.PERFORMANCE_CLASS_AVERAGE || BuildVars.DEBUG_PRIVATE_VERSION) {
                 items.add(Item.asCheckbox(LocaleController.getString("LiteOptionsBlur2"), LiteMode.FLAG_CHAT_BLUR));
