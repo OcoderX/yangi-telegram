@@ -10,46 +10,49 @@ import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.ayu.AyuHistoryStorage;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Map;
 
 /**
- * In-memory "how many revisions does this message have" cache.
- * <p>
- * {@code TLRPC.Message.ayuEditedCount} only survives while the app is running, so the bubble would
- * lose its "edited (N)" mark after a restart. This cache is filled once per dialog with a single
- * grouped query on the AyuGram storage queue and then answers in O(1) from the UI thread.
- * Everything is keyed by {@code currentAccount} so multi-account setups never mix.
- * <p>
- * Hot-path friendly: primitive keys only (account index, dialog id, message id), no string
- * building and no boxing on the lookup path, which runs once per cell bind.
+ * Revision counts loaded once per dialog on the history queue. Cell binds only look up primitive
+ * keys in memory. Building a large dialog snapshot never holds the lock used by those lookups.
  */
 public class AyuEditHistoryCache {
 
+    /** ayuMessageHistoryUpdated type for a completed cache load; ids are null, no edit was stored. */
+    public static final int NOTIFICATION_CACHE_LOADED = 2;
+
     private static final int LOADED = 1;
     private static final int LOADING = 2;
-
     private static final Object lock = new Object();
-    /** account -> dialogId -> (messageId -> revisions) */
-    @SuppressWarnings("unchecked")
-    private static final LongSparseArray<SparseIntArray>[] counts = new LongSparseArray[UserConfig.MAX_ACCOUNT_COUNT];
-    /** account -> dialogId -> LOADED / LOADING */
-    @SuppressWarnings("unchecked")
-    private static final LongSparseArray<Integer>[] dialogState = new LongSparseArray[UserConfig.MAX_ACCOUNT_COUNT];
 
-    /** how many ids one refresh notification carries at most */
-    private static final int MAX_NOTIFIED_IDS = 400;
+    private static class DialogCounts {
+        // Published snapshots are never mutated. Updates, including zero-valued removals, win over
+        // a snapshot that may have been read before the update arrived.
+        SparseIntArray snapshot;
+        final SparseIntArray updates = new SparseIntArray();
+        int state;
+    }
 
-    private static final Integer STATE_LOADED = LOADED;
-    private static final Integer STATE_LOADING = LOADING;
+    @SuppressWarnings("unchecked")
+    private static final LongSparseArray<DialogCounts>[] counts = new LongSparseArray[UserConfig.MAX_ACCOUNT_COUNT];
+    private static final long[] accountOwners = new long[UserConfig.MAX_ACCOUNT_COUNT];
 
     private static boolean validAccount(int currentAccount) {
         return currentAccount >= 0 && currentAccount < counts.length;
     }
 
-    /** must be called under {@link #lock} */
-    private static SparseIntArray dialogCounts(int currentAccount, long dialogId, boolean create) {
-        LongSparseArray<SparseIntArray> dialogs = counts[currentAccount];
+    /** Must be called under {@link #lock}; account slots can be reused after logout. */
+    private static DialogCounts dialogCounts(int currentAccount, long dialogId, boolean create) {
+        final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
+        if (accountOwners[currentAccount] != selfId) {
+            counts[currentAccount] = null;
+            accountOwners[currentAccount] = selfId;
+        }
+        if (selfId == 0) {
+            return null;
+        }
+        LongSparseArray<DialogCounts> dialogs = counts[currentAccount];
         if (dialogs == null) {
             if (!create) {
                 return null;
@@ -57,88 +60,64 @@ public class AyuEditHistoryCache {
             dialogs = new LongSparseArray<>();
             counts[currentAccount] = dialogs;
         }
-        SparseIntArray result = dialogs.get(dialogId);
+        DialogCounts result = dialogs.get(dialogId);
         if (result == null && create) {
-            result = new SparseIntArray();
+            result = new DialogCounts();
             dialogs.put(dialogId, result);
         }
         return result;
     }
 
-    /** must be called under {@link #lock} */
-    private static int stateOf(int currentAccount, long dialogId) {
-        LongSparseArray<Integer> states = dialogState[currentAccount];
-        if (states == null) {
-            return 0;
-        }
-        Integer state = states.get(dialogId);
-        return state == null ? 0 : state;
-    }
-
-    /** must be called under {@link #lock} */
-    private static void setState(int currentAccount, long dialogId, int state) {
-        LongSparseArray<Integer> states = dialogState[currentAccount];
-        if (states == null) {
-            if (state == 0) {
-                return;
-            }
-            states = new LongSparseArray<>();
-            dialogState[currentAccount] = states;
-        }
-        if (state == 0) {
-            states.remove(dialogId);
-        } else {
-            states.put(dialogId, state == LOADED ? STATE_LOADED : STATE_LOADING);
-        }
-    }
-
-    /**
-     * Non blocking. Returns 0 (and schedules a background load) until the dialog is warmed up.
-     * Safe to call from the UI thread.
-     */
+    /** Returns immediately; a missing dialog is loaded in the background. */
     public static int getCount(int currentAccount, long dialogId, int messageId) {
         if (messageId <= 0 || dialogId == 0 || !validAccount(currentAccount)) {
             return 0;
         }
         final boolean needLoad;
+        int value = 0;
         synchronized (lock) {
-            final SparseIntArray dialog = dialogCounts(currentAccount, dialogId, false);
+            final DialogCounts dialog = dialogCounts(currentAccount, dialogId, false);
             if (dialog != null) {
-                final int value = dialog.get(messageId, 0);
-                if (value > 0) {
-                    return value;
+                final int updateIndex = dialog.updates.indexOfKey(messageId);
+                if (updateIndex >= 0) {
+                    value = dialog.updates.valueAt(updateIndex);
+                } else if (dialog.snapshot != null) {
+                    value = dialog.snapshot.get(messageId, 0);
                 }
             }
-            needLoad = stateOf(currentAccount, dialogId) == 0;
+            needLoad = dialog == null || dialog.state == 0;
         }
         if (needLoad) {
             requestDialogLoad(currentAccount, dialogId);
         }
-        return 0;
+        return value;
     }
 
     public static boolean hasRevisions(int currentAccount, long dialogId, int messageId) {
         return getCount(currentAccount, dialogId, messageId) > 0;
     }
 
-    /** called right after a new revision was stored */
+    /** Called right after a new revision was stored. */
     public static void put(int currentAccount, long dialogId, int messageId, int count) {
         if (messageId <= 0 || dialogId == 0 || count <= 0 || !validAccount(currentAccount)) {
             return;
         }
         synchronized (lock) {
-            dialogCounts(currentAccount, dialogId, true).put(messageId, count);
+            final DialogCounts dialog = dialogCounts(currentAccount, dialogId, true);
+            if (dialog != null) {
+                dialog.updates.put(messageId, count);
+            }
         }
     }
 
     public static void remove(int currentAccount, long dialogId, int messageId) {
-        if (!validAccount(currentAccount)) {
+        if (messageId <= 0 || dialogId == 0 || !validAccount(currentAccount)) {
             return;
         }
         synchronized (lock) {
-            final SparseIntArray dialog = dialogCounts(currentAccount, dialogId, false);
+            final DialogCounts dialog = dialogCounts(currentAccount, dialogId, false);
             if (dialog != null) {
-                dialog.delete(messageId);
+                dialog.updates.put(messageId, 0);
             }
         }
     }
@@ -147,7 +126,7 @@ public class AyuEditHistoryCache {
         synchronized (lock) {
             for (int a = 0; a < counts.length; a++) {
                 counts[a] = null;
-                dialogState[a] = null;
+                accountOwners[a] = 0;
             }
         }
     }
@@ -157,8 +136,7 @@ public class AyuEditHistoryCache {
             return;
         }
         synchronized (lock) {
-            setState(currentAccount, dialogId, 0);
-            LongSparseArray<SparseIntArray> dialogs = counts[currentAccount];
+            final LongSparseArray<DialogCounts> dialogs = counts[currentAccount];
             if (dialogs != null) {
                 dialogs.remove(dialogId);
             }
@@ -169,53 +147,57 @@ public class AyuEditHistoryCache {
         if (dialogId == 0 || !validAccount(currentAccount)) {
             return;
         }
+        final DialogCounts loadingDialog;
+        final long selfId;
         synchronized (lock) {
-            if (stateOf(currentAccount, dialogId) != 0) {
+            loadingDialog = dialogCounts(currentAccount, dialogId, true);
+            if (loadingDialog == null || loadingDialog.state != 0) {
                 return;
             }
-            setState(currentAccount, dialogId, LOADING);
+            selfId = accountOwners[currentAccount];
+            loadingDialog.state = LOADING;
         }
         AyuHistoryStorage.getQueue().postRunnable(() -> {
-            ArrayList<Integer> changed = new ArrayList<>();
-            boolean loaded = false;
             try {
-                final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-                if (selfId == 0) {
-                    return;
-                }
                 final Map<Integer, Integer> result = AyuHistoryStorage.getInstance().getRevisionCounts(selfId, dialogId);
-                synchronized (lock) {
-                    final SparseIntArray dialog = dialogCounts(currentAccount, dialogId, true);
-                    for (Map.Entry<Integer, Integer> entry : result.entrySet()) {
-                        final Integer messageId = entry.getKey();
-                        final Integer count = entry.getValue();
-                        if (messageId == null || count == null || count <= 0) {
-                            continue;
-                        }
-                        dialog.put(messageId, count);
-                        if (changed.size() < MAX_NOTIFIED_IDS) {
-                            changed.add(messageId);
-                        }
+                final int[] messageIds = new int[result.size()];
+                int size = 0;
+                for (Map.Entry<Integer, Integer> entry : result.entrySet()) {
+                    if (entry.getKey() != null && entry.getKey() > 0 && entry.getValue() != null && entry.getValue() > 0) {
+                        messageIds[size++] = entry.getKey();
                     }
                 }
-                loaded = true;
+                Arrays.sort(messageIds, 0, size);
+                final SparseIntArray snapshot = new SparseIntArray(size);
+                for (int a = 0; a < size; a++) {
+                    // Appending ordered keys avoids shifting the full array for each map entry.
+                    snapshot.append(messageIds[a], result.get(messageIds[a]));
+                }
+                synchronized (lock) {
+                    if (dialogCounts(currentAccount, dialogId, false) != loadingDialog) {
+                        return;
+                    }
+                    loadingDialog.snapshot = snapshot;
+                    loadingDialog.state = LOADED;
+                }
+                AndroidUtilities.runOnUIThread(() -> {
+                    synchronized (lock) {
+                        if (dialogCounts(currentAccount, dialogId, false) != loadingDialog) {
+                            return;
+                        }
+                    }
+                    // Warming a cache is not a new edit: sync observers must not reread and resend
+                    // the entire stored history. The chat refreshes only its already loaded rows.
+                    NotificationCenter.getInstance(currentAccount).postNotificationName(
+                            NotificationCenter.ayuMessageHistoryUpdated, dialogId, null, NOTIFICATION_CACHE_LOADED);
+                });
             } catch (Throwable e) {
                 FileLog.e(e);
-            } finally {
                 synchronized (lock) {
-                    setState(currentAccount, dialogId, loaded ? LOADED : 0);
-                }
-            }
-            if (!changed.isEmpty()) {
-                final ArrayList<Integer> ids = changed;
-                AndroidUtilities.runOnUIThread(() -> {
-                    try {
-                        NotificationCenter.getInstance(currentAccount)
-                                .postNotificationName(NotificationCenter.ayuMessageHistoryUpdated, dialogId, ids, 1);
-                    } catch (Throwable e) {
-                        FileLog.e(e);
+                    if (dialogCounts(currentAccount, dialogId, false) == loadingDialog) {
+                        loadingDialog.state = 0;
                     }
-                });
+                }
             }
         });
     }

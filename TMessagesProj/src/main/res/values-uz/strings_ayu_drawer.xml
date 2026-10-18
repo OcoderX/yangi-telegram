@@ -23,4 +23,6 @@
     <string name="AyuDrawerSync">OcoderX-sync</string>
     <string name="AyuDrawerAllSettings">Barcha OcoderX sozlamalari</string>
     <string name="OxMenuDownloadManager">Yuklab olish menejeri</string>
+    <string name="MyProfile">Mening profilim</string>
+    <string name="ChangeEmojiStatus">Statusni oʻzgartirish</string>
 </resources>

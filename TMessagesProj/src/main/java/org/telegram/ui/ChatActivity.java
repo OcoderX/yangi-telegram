@@ -337,6 +337,7 @@ import java.io.FileWriter;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URLDecoder;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -3383,6 +3384,20 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        if (ayuVisibleRowsUpdateRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(ayuVisibleRowsUpdateRunnable);
+            ayuVisibleRowsUpdateRunnable = null;
+        }
+        if (ayuDeletedPreloadRunnable != null) {
+            org.telegram.messenger.ayu.AyuHistoryStorage.getQueue().cancelRunnable(ayuDeletedPreloadRunnable);
+            ayuDeletedPreloadRunnable = null;
+        }
+        if (ayuDeferredMessageLoadRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(ayuDeferredMessageLoadRunnable);
+            ayuDeferredMessageLoadRunnable = null;
+        }
+        ayuDeferredMessageLoads = null;
+        ayuDeletedCache = null;
         if (messageMetricsView != null) {
             messageMetricsView.finish();
         }
@@ -20558,6 +20573,34 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void didReceivedNotification_messagesDidLoad(int id, int account, final Object... args) {
+        if (isFinished || (Integer) args[10] != classGuid) {
+            return;
+        }
+        // Wait before touching waitingForLoad, pagination or firstLoading. A cold archive can then
+        // be built on its storage queue instead of falling back to DB reads and layouts on the UI.
+        if ((Long) args[0] == dialog_id && (Integer) args[14] == MODE_DEFAULT
+                && (ayuDeferredMessageLoads != null || ayuShouldWaitForDeletedPreload())) {
+            if (ayuDeferredMessageLoads == null) {
+                ayuDeferredMessageLoads = new ArrayDeque<>();
+            }
+            final Object[] deferredArgs = args.clone();
+            deferredArgs[2] = new ArrayList<>((ArrayList<MessageObject>) args[2]);
+            final long ownerId = getUserConfig().getClientUserId();
+            ayuDeferredMessageLoads.addLast(() -> {
+                // An account slot may be reused while a page is waiting. Its old owner's page must
+                // not reach the new account; the original handler also rechecks the request guid.
+                if (ownerId == getUserConfig().getClientUserId()) {
+                    didReceivedNotification_messagesDidLoadNow(id, account, deferredArgs);
+                }
+            });
+            ayuScheduleDeferredMessageLoads();
+            return;
+        }
+        ayuScheduleDeferredMessageLoads();
+        didReceivedNotification_messagesDidLoadNow(id, account, args);
+    }
+
+    private void didReceivedNotification_messagesDidLoadNow(int id, int account, final Object... args) {
         int guid = (Integer) args[10];
         if (guid != classGuid) {
             return;
@@ -22408,13 +22451,34 @@ public class ChatActivity extends BaseFragment implements
                 }
             }
         } else if (id == NotificationCenter.ayuMessageHistoryUpdated) {
-            //ayu: the local history DB stored a deletion (type 0) or an edit (type 1)
+            //ayu: stored deletion (type 0), stored edit (type 1), or revision-cache warmup.
             final long did = (Long) args[0];
             if (did != dialog_id || chatMode != MODE_DEFAULT || currentEncryptedChat != null) {
                 return;
             }
             final ArrayList<Integer> ayuIds = (ArrayList<Integer>) args[1];
             final int ayuType = args.length > 2 && args[2] instanceof Integer ? (Integer) args[2] : 0;
+            if (ayuType == org.telegram.messenger.ayu.edithistory.AyuEditHistoryCache.NOTIFICATION_CACHE_LOADED) {
+                boolean changed = false;
+                // The whole dialog cache is ready, but only loaded rows need updating. There is no
+                // list of historical edits to allocate, cap, or accidentally send to sync observers.
+                for (int a = 0, N = messagesDict[0].size(); a < N; a++) {
+                    final MessageObject obj = messagesDict[0].valueAt(a);
+                    if (obj == null || obj.messageOwner == null || obj.getId() <= 0) {
+                        continue;
+                    }
+                    final int revisions = org.telegram.messenger.ayu.edithistory.AyuEditHistoryCache.getCount(currentAccount, did, obj.getId());
+                    if (revisions > 0 && obj.messageOwner.ayuEditedCount != revisions) {
+                        obj.messageOwner.ayuEditedCount = revisions;
+                        obj.forceUpdate = true;
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    ayuScheduleVisibleRowsUpdate();
+                }
+                return;
+            }
             if (ayuIds == null || ayuIds.isEmpty()) {
                 return;
             }
@@ -22465,7 +22529,7 @@ public class ChatActivity extends BaseFragment implements
             }
             if (ayuType == 0) {
                 //perf: the archive of this dialog changed, rebuild the preloaded list in the background
-                ayuPreloadDeletedMessages();
+                ayuPreloadDeletedMessages(true);
             }
         } else if (id == NotificationCenter.quickRepliesDeleted) {
             if (chatMode != MODE_QUICK_REPLIES) return;
@@ -26395,32 +26459,34 @@ public class ChatActivity extends BaseFragment implements
             return markAsDeletedMessages;
         }
         ArrayList<Integer> rest = null;
+        boolean changed = false;
         for (int a = 0, N = markAsDeletedMessages.size(); a < N; a++) {
             final Integer mid = markAsDeletedMessages.get(a);
-            if (mid == null || mid <= 0 || ayuLocallyDeletingIds.contains(mid)) {
-                continue;
-            }
-            final MessageObject obj = messagesDict[0].get(mid);
-            if (obj == null || obj.messageOwner == null || obj.scheduled || obj.isSponsored()) {
-                continue;
-            }
+            final MessageObject obj = mid == null || mid <= 0 || ayuLocallyDeletingIds.contains(mid) ? null : messagesDict[0].get(mid);
             //ayu: single gate for "may this deletion be kept?" - rejects deletions the user started on this
             //device (delete for me / for everyone / delete locally / clear history) and, unless keepOwnDeleted
             //is on, our own messages deleted from another device
-            if (!org.telegram.messenger.ayu.antidelete.AyuAntiDelete.shouldKeepInChat(currentAccount, dialog_id, obj)) {
+            if (obj == null || obj.messageOwner == null || obj.scheduled || obj.isSponsored()
+                    || !org.telegram.messenger.ayu.antidelete.AyuAntiDelete.shouldKeepInChat(currentAccount, dialog_id, obj)) {
+                if (rest != null) {
+                    rest.add(mid);
+                }
                 continue;
             }
             if (!obj.messageOwner.ayuDeleted) {
                 obj.messageOwner.ayuDeleted = true;
                 obj.forceUpdate = true;
+                changed = true;
             }
             if (rest == null) {
-                rest = new ArrayList<>(markAsDeletedMessages);
+                rest = new ArrayList<>(N - 1);
+                for (int b = 0; b < a; b++) {
+                    rest.add(markAsDeletedMessages.get(b));
+                }
             }
-            rest.remove(mid);
-            if (chatAdapter != null) {
-                chatAdapter.updateRowWithMessageObject(obj, true, false);
-            }
+        }
+        if (changed) {
+            ayuScheduleVisibleRowsUpdate();
         }
         return rest == null ? markAsDeletedMessages : rest;
     }
@@ -26460,28 +26526,85 @@ public class ChatActivity extends BaseFragment implements
     private int ayuDeletedCacheCoveredFrom;
     private boolean ayuDeletedPreloadRunning;
     private boolean ayuDeletedPreloadStale;
+    private boolean ayuDeletedPreloadFailed;
+    private Runnable ayuDeletedPreloadRunnable;
     private Runnable ayuVisibleRowsUpdateRunnable;
+    private ArrayDeque<Runnable> ayuDeferredMessageLoads;
+    private Runnable ayuDeferredMessageLoadRunnable;
+
+    private boolean ayuShouldWaitForDeletedPreload() {
+        return !isFinished && dialog_id != 0 && ayuDeletedCache == null && !ayuDeletedPreloadFailed
+                && ayuCanKeepDeletedMessages() && (!isThreadChat() || isTopic)
+                && AyuMessagesController.getInstance().getCachedDeletedMessagesCount(currentAccount, dialog_id) != 0;
+    }
+
+    /** Replay one page per UI turn, retaining FIFO order even if handling a page enqueues another. */
+    private void ayuScheduleDeferredMessageLoads() {
+        if (isFinished || ayuDeferredMessageLoads == null || ayuDeferredMessageLoadRunnable != null) {
+            return;
+        }
+        if (ayuShouldWaitForDeletedPreload()) {
+            ayuPreloadDeletedMessages();
+            return;
+        }
+        AndroidUtilities.runOnUIThread(ayuDeferredMessageLoadRunnable = () -> {
+            ayuDeferredMessageLoadRunnable = null;
+            if (isFinished || ayuDeferredMessageLoads == null) {
+                return;
+            }
+            // An archive change may invalidate the snapshot after this replay was scheduled.
+            if (ayuShouldWaitForDeletedPreload()) {
+                ayuPreloadDeletedMessages();
+                return;
+            }
+            final Runnable page = ayuDeferredMessageLoads.pollFirst();
+            try {
+                if (page != null) {
+                    page.run();
+                }
+            } finally {
+                if (ayuDeferredMessageLoads != null && ayuDeferredMessageLoads.isEmpty()) {
+                    ayuDeferredMessageLoads = null;
+                }
+                ayuScheduleDeferredMessageLoads();
+            }
+        });
+    }
 
     /**
      * perf: queries the local archive and builds the (expensive) message layouts on the ayu storage
      * queue, so that {@link #ayuMergeDeletedMessages} only has to splice an in-memory list afterwards.
-     * Cheap to call repeatedly: a second request while one is running just re-runs it once at the end.
+     * Repeated warmups share the pending result; only an archive change requests another query.
      */
     private void ayuPreloadDeletedMessages() {
-        if (dialog_id == 0 || !ayuCanKeepDeletedMessages() || isThreadChat() && !isTopic) {
+        ayuPreloadDeletedMessages(false);
+    }
+
+    private void ayuPreloadDeletedMessages(boolean invalidate) {
+        if (isFinished || dialog_id == 0 || !ayuCanKeepDeletedMessages() || isThreadChat() && !isTopic) {
             return;
         }
+        if (invalidate) {
+            ayuDeletedCache = null;
+            ayuDeletedCacheCoveredFrom = 0;
+        }
         if (ayuDeletedPreloadRunning) {
-            ayuDeletedPreloadStale = true;
+            ayuDeletedPreloadStale |= invalidate;
+            return;
+        }
+        if (ayuDeletedCache != null) {
             return;
         }
         ayuDeletedPreloadRunning = true;
+        ayuDeletedPreloadFailed = false;
         final int account = currentAccount;
         final long dialogId = dialog_id;
         final long topicId = getTopicId();
-        org.telegram.messenger.ayu.AyuHistoryStorage.getQueue().postRunnable(() -> {
+        final long ownerId = getUserConfig().getClientUserId();
+        org.telegram.messenger.ayu.AyuHistoryStorage.getQueue().postRunnable(ayuDeletedPreloadRunnable = () -> {
             final ArrayList<MessageObject> objects = new ArrayList<>();
             int coveredFrom = 0;
+            boolean failed = false;
             try {
                 final AyuMessagesController controller = AyuMessagesController.getInstance();
                 //perf: publish the count first - the UI thread can short-circuit on it already while
@@ -26497,16 +26620,32 @@ public class ChatActivity extends BaseFragment implements
                 }
             } catch (Throwable e) {
                 FileLog.e(e);
+                failed = true;
             }
             final int covered = coveredFrom;
+            final boolean preloadFailed = failed;
             AndroidUtilities.runOnUIThread(() -> {
                 ayuDeletedPreloadRunning = false;
-                ayuDeletedCache = objects;
-                ayuDeletedCacheCoveredFrom = covered;
+                ayuDeletedPreloadRunnable = null;
+                if (isFinished) {
+                    return;
+                }
+                if (account != currentAccount || dialogId != dialog_id || topicId != getTopicId()
+                        || ownerId != getUserConfig().getClientUserId()) {
+                    ayuDeletedPreloadStale = false;
+                    ayuDeletedPreloadFailed = true;
+                    ayuScheduleDeferredMessageLoads();
+                    return;
+                }
+                ayuDeletedPreloadFailed = preloadFailed;
                 if (ayuDeletedPreloadStale) {
                     ayuDeletedPreloadStale = false;
                     ayuPreloadDeletedMessages();
+                } else if (!preloadFailed) {
+                    ayuDeletedCache = objects;
+                    ayuDeletedCacheCoveredFrom = covered;
                 }
+                ayuScheduleDeferredMessageLoads();
             });
         });
     }
@@ -26541,12 +26680,12 @@ public class ChatActivity extends BaseFragment implements
 
     /** perf: coalesces many single-row refreshes into one visible-rows pass */
     private void ayuScheduleVisibleRowsUpdate() {
-        if (ayuVisibleRowsUpdateRunnable != null) {
-            AndroidUtilities.cancelRunOnUIThread(ayuVisibleRowsUpdateRunnable);
+        if (isFinished || ayuVisibleRowsUpdateRunnable != null) {
+            return;
         }
         AndroidUtilities.runOnUIThread(ayuVisibleRowsUpdateRunnable = () -> {
             ayuVisibleRowsUpdateRunnable = null;
-            if (chatAdapter != null) {
+            if (!isFinished && chatAdapter != null) {
                 updateVisibleRows();
             }
         });
@@ -26652,9 +26791,10 @@ public class ChatActivity extends BaseFragment implements
             if (stored.isEmpty()) {
                 return 0;
             }
-            //ayu: both lists are sorted from the newest to the oldest message, so one forward pass
-            //replaces the old "scan messArr from the beginning for every stored message"
+            // Both lists are newest first. Build a merged list once instead of shifting the page's
+            // backing array for every inserted archive message.
             int index = 0;
+            ArrayList<MessageObject> merged = null;
             for (int a = 0, N = stored.size(); a < N && inserted < AYU_DELETED_PAGE_LIMIT; a++) {
                 final MessageObject messageObject = stored.get(a);
                 final int id = messageObject.getId();
@@ -26667,12 +26807,21 @@ public class ChatActivity extends BaseFragment implements
                 }
                 existing.add(id);
                 messageObject.messageOwner.ayuDeleted = true;
-                while (index < messArr.size() && messArr.get(index).getId() >= id) {
-                    index++;
+                if (merged == null) {
+                    merged = new ArrayList<>(messArr.size() + Math.min(stored.size(), AYU_DELETED_PAGE_LIMIT));
                 }
-                messArr.add(index, messageObject);
-                index++;
+                while (index < messArr.size() && messArr.get(index).getId() >= id) {
+                    merged.add(messArr.get(index++));
+                }
+                merged.add(messageObject);
                 inserted++;
+            }
+            if (merged != null) {
+                while (index < messArr.size()) {
+                    merged.add(messArr.get(index++));
+                }
+                messArr.clear();
+                messArr.addAll(merged);
             }
         } catch (Exception e) {
             FileLog.e(e);
@@ -34646,7 +34795,10 @@ public class ChatActivity extends BaseFragment implements
                 break;
             }
             case OPTION_STATISTICS: {
-                presentFragment(new MessageStatisticActivity(selectedObject));
+                MessageObject statisticsMessage = getSelectedPostForStatistics();
+                if (statisticsMessage != null) {
+                    presentFragment(new MessageStatisticActivity(statisticsMessage, currentChat.id, false));
+                }
                 break;
             }
             case OPTION_SEND_NOW: {
@@ -46641,7 +46793,39 @@ public class ChatActivity extends BaseFragment implements
                 icons.add(deleteIconRes);
             }
         }
+        if (getSelectedPostForStatistics() != null && !options.contains(OPTION_STATISTICS)) {
+            items.add(LocaleController.getString(R.string.ViewStatistics));
+            options.add(OPTION_STATISTICS);
+            icons.add(R.drawable.msg_stats);
+        }
         fillAyuMessageMenu(message, ayuDeletedMessage, icons, items, options);
+    }
+
+    private MessageObject getSelectedPostForStatistics() {
+        if (chatMode == MODE_SCHEDULED || !ChatObject.isChannelAndNotMegaGroup(currentChat)
+                || !currentChat.broadcast || !isPublishedChannelPost(selectedObject)) {
+            return null;
+        }
+        // Album views and reactions belong to the same primary message used by the chat cell.
+        MessageObject message = selectedObjectGroup != null
+                ? selectedObjectGroup.findPrimaryMessageObject() : selectedObject;
+        if (message == null) {
+            message = selectedObject;
+        }
+        return isPublishedChannelPost(message) ? message : null;
+    }
+
+    private boolean isPublishedChannelPost(MessageObject message) {
+        if (message == null || message.messageOwner == null || message.getId() <= 0
+                || message.scheduled || message.deleted || message.isSponsored()
+                || message.messageOwner.ayuDeleted || message.messageOwner instanceof TLRPC.TL_messageEmpty
+                || message.messageOwner instanceof TLRPC.TL_messageService) {
+            return false;
+        }
+        TLRPC.Message owner = message.messageOwner;
+        return owner.post && owner.peer_id != null && owner.peer_id.channel_id == currentChat.id
+                && message.getDialogId() == -currentChat.id
+                && (owner.action == null || owner.action instanceof TLRPC.TL_messageActionEmpty);
     }
 
     /**

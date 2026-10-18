@@ -9554,6 +9554,8 @@ public class MessagesController extends BaseController implements NotificationCe
             channelId = 0;
         }
 
+        //ayu: started by the user in this app - a real deletion, not one to keep as a ghost
+        org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, messages);
         markDialogMessageAsDeleted(dialogId, messages);
         getMessagesStorage().deleteEphemeralMessages(dialogId, ephemeralMessage.getEphemeralId());
         getMessagesStorage().markMessagesAsDeleted(dialogId, messages, true, true, 0, topicId);
@@ -23462,6 +23464,8 @@ public class MessagesController extends BaseController implements NotificationCe
                 processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
                 getMessagesStorage().getStorageQueue().postRunnable(() -> {
                     ArrayList<Integer> dbMessages = getMessagesStorage().getCachedMessagesInRange(dialogId, minDate, maxDate);
+                    //ayu: "delete messages by date range" is started by the user in this app - a real deletion
+                    org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, dbMessages);
                     getMessagesStorage().markMessagesAsDeleted(dialogId, dbMessages, false, true, 0, 0);
                     getMessagesStorage().updateDialogsWithDeletedMessages(dialogId, 0, dbMessages, null);
                     AndroidUtilities.runOnUIThread(() -> {

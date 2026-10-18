@@ -1836,6 +1836,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     /** ox: "marked" state resolved once per bind (re-checked only when AyuMarkedMessages.getVersion() changes) */
     private boolean ayuMarked;
     private int ayuMarkedVersion;
+    private final Runnable ayuMarksLoaded = this::invalidate;
     private int ayuMarkedFilterColor;
     private PorterDuffColorFilter ayuMarkedFilter;
     /** ayu: whether this bubble is drawn dimmed (locally kept message deleted by its author), resolved per bind */
@@ -6534,6 +6535,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
 
+        org.telegram.messenger.ayu.AyuMarkedMessages.removeLoadListener(ayuMarksLoaded);
+
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.startSpoilers);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.stopSpoilers);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
@@ -6640,6 +6643,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+
+        org.telegram.messenger.ayu.AyuMarkedMessages.addLoadListener(ayuMarksLoaded);
 
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.startSpoilers);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.stopSpoilers);
@@ -18608,7 +18613,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         //ox/ayu: resolve per-bind flags that used to be looked up on every frame
         ayuMarkedVersion = org.telegram.messenger.ayu.AyuMarkedMessages.getVersion();
         ayuMarked = AyuConfig.markedMessagesEnabled && !messageObject.scheduled && messageObject.getId() != 0 && messageObject.getDialogId() != 0
-                && org.telegram.messenger.ayu.AyuMarkedMessages.isMarked(currentAccount, messageObject.getDialogId(), messageObject.getId());
+                && org.telegram.messenger.ayu.AyuMarkedMessages.isMarkedCached(currentAccount, messageObject.getDialogId(), messageObject.getId());
         ayuDimDeleted = messageObject.messageOwner.ayuDeleted && org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.dimDeletedMessages;
         if (messageObject.scheduled || messageObject.messageOwner.edit_hide) {
             edited = false;
@@ -23912,7 +23917,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             ayuMarkedVersion = version;
             final int mid = currentMessageObject.getId();
             final long did = currentMessageObject.getDialogId();
-            ayuMarked = mid != 0 && did != 0 && org.telegram.messenger.ayu.AyuMarkedMessages.isMarked(currentAccount, did, mid);
+            ayuMarked = !currentMessageObject.scheduled && mid != 0 && did != 0 && org.telegram.messenger.ayu.AyuMarkedMessages.isMarkedCached(currentAccount, did, mid);
         }
         if (!ayuMarked) {
             return;

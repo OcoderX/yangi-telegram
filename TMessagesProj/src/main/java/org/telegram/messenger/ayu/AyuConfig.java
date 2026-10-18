@@ -138,7 +138,7 @@ public class AyuConfig {
     /** true = show the "Marking message" bookmark entry and the bookmark badge */
     public static boolean markedMessagesEnabled = true;
 
-    // ---------------- AyuSync ----------------
+    // ---------------- Retired AyuSync settings (kept for compatibility) ----------------
     public static boolean syncEnabled = false;
     public static boolean useSecureConnection = true;
     public static String syncServerURL = AyuConstants.DEFAULT_AYUSYNC_SERVER;
@@ -225,7 +225,11 @@ public class AyuConfig {
         contextMenuOnTap = preferences.getBoolean("contextMenuOnTap", false);
         markedMessagesEnabled = preferences.getBoolean("markedMessagesEnabled", true);
 
-        syncEnabled = preferences.getBoolean("syncEnabled", false);
+        // The old server client has no settings UI and must not resume after an upgrade.
+        syncEnabled = false;
+        if (preferences.contains("syncEnabled")) {
+            preferences.edit().remove("syncEnabled").apply();
+        }
         useSecureConnection = preferences.getBoolean("useSecureConnection", true);
         syncServerURL = preferences.getString("syncServerURL", AyuConstants.DEFAULT_AYUSYNC_SERVER);
         syncServerToken = preferences.getString("syncServerToken", "");
@@ -364,7 +368,7 @@ public class AyuConfig {
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.dialogsNeedReload, true);
     }
 
-    public static void setSyncEnabled(boolean v) { syncEnabled = v; putBoolean("syncEnabled", v); }
+    public static void setSyncEnabled(boolean v) { syncEnabled = false; }
 
     // ---------------- AI Tools ----------------
     public static void setAiToolsEnabled(boolean v) { aiToolsEnabled = v; putBoolean("aiToolsEnabled", v); }

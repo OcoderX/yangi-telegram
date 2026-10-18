@@ -6,7 +6,6 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
-import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.ayu.AyuConfig;
 import org.telegram.messenger.ayu.AyuMessagesController;
 import org.telegram.tgnet.TLRPC;
@@ -73,14 +72,7 @@ public final class AyuAntiDelete {
         // updateDeleteMessages (private chats and basic groups) has no dialog id, so a second,
         // dialog-less key is needed. Channel ids are only unique per channel, and the channel
         // variant of the update always carries the channel id - so no wildcard key for those.
-        boolean wildcard = true;
-        if (DialogObject.isChatDialog(dialogId)) {
-            try {
-                TLRPC.Chat chat = MessagesController.getInstance(account).getChat(-dialogId);
-                wildcard = !ChatObject.isChannel(chat);
-            } catch (Throwable ignore) {
-            }
-        }
+        final boolean wildcard = !isChannelDialog(account, dialogId);
         final long deadline = SystemClock.elapsedRealtime() + LOCAL_WINDOW_MS;
         synchronized (localDeletions) {
             if (localDeletions.size() > MAX_TRACKED) {
@@ -119,9 +111,30 @@ public final class AyuAntiDelete {
                 if (deadline != null && deadline >= now) {
                     return true;
                 }
+                //ayu: a channel numbers its messages on its own, so id 42 of a channel has nothing to
+                //do with id 42 the user just deleted in a private chat - the dialog-less key would
+                //otherwise swallow (and really delete) an admin deletion that happens within the
+                //two minute window. Channel deletions always carry their dialog id, so the exact
+                //key above is the only one they may match.
+                if (isChannelDialog(account, dialogId)) {
+                    return false;
+                }
             }
             Long deadline = localDeletions.get(anyDialogKey(account, messageId));
             return deadline != null && deadline >= now;
+        }
+    }
+
+    /** true for a broadcast channel / supergroup dialog, whose message ids are only unique inside it */
+    private static boolean isChannelDialog(int account, long dialogId) {
+        if (!DialogObject.isChatDialog(dialogId)) {
+            return false;
+        }
+        try {
+            //cheap: an in-memory map lookup in MessagesController, no database access
+            return ChatObject.isChannel(MessagesController.getInstance(account).getChat(-dialogId));
+        } catch (Throwable ignore) {
+            return false;
         }
     }
 
@@ -165,6 +178,12 @@ public final class AyuAntiDelete {
      * Whether the anti-delete may keep this message once it is deleted. Consulted both when the
      * message is archived (AyuMessagesController) and when the bubble would stay on screen
      * (ChatActivity), so the two can never disagree.
+     * <p>
+     * ayu rule (same as the reference client): a message is kept whenever the deletion came from the
+     * server - the other side, an admin, or this very account from another device / client - and it is
+     * really deleted only when the user deleted it inside this app. Who wrote the message plays no
+     * part in the decision (own outgoing messages and Saved Messages included); the only opt-out is
+     * the per-chat "don't save here" exclusion.
      */
     public static boolean shouldKeepDeleted(int account, long dialogId, TLRPC.Message message) {
         if (!AyuConfig.saveDeletedMessages || message == null || message.id <= 0) {
@@ -177,37 +196,15 @@ public final class AyuAntiDelete {
         if (AyuAntiDeleteConfig.isExcluded(did)) {
             return false;
         }
-        if (isLocalDeletion(account, did, message.id)) {
-            // the user deleted it here - never keep a ghost of it
-            return false;
-        }
-        if (!AyuAntiDeleteConfig.keepOwnDeleted && isOwnMessage(account, message)) {
-            // our own message deleted somewhere (usually "delete for everyone" from another device):
-            // the user does not want to see their own message come back as "deleted by author"
-            return false;
-        }
-        return true;
+        // the only real deletion is the one the user performed in THIS app: everything else
+        // (the other side, an admin, another device / another client of this very account) is
+        // a server-side deletion and is kept, no matter who wrote the message.
+        return !isLocalDeletion(account, did, message.id);
     }
 
     /** {@link #shouldKeepDeleted} for an object that is already on screen */
     public static boolean shouldKeepInChat(int account, long dialogId, MessageObject messageObject) {
         return messageObject != null && shouldKeepDeleted(account, dialogId, messageObject.messageOwner);
-    }
-
-    /** true when the message was written by this account */
-    public static boolean isOwnMessage(int account, TLRPC.Message message) {
-        if (message == null) {
-            return false;
-        }
-        if (message.out) {
-            return true;
-        }
-        try {
-            final long selfId = UserConfig.getInstance(account).getClientUserId();
-            return selfId != 0 && message.from_id instanceof TLRPC.TL_peerUser && message.from_id.user_id == selfId;
-        } catch (Throwable ignore) {
-            return false;
-        }
     }
 
     // =================================================================================

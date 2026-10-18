@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxPostStatsRefresh">Refresh statistics</string>
+    <string name="OxPostStatsCopy">Copy summary</string>
+    <string name="OxPostStatsCopied">Statistics copied</string>
+    <string name="OxPostStatsTotalShares">Total shares</string>
+    <string name="OxPostStatsComments">Comments</string>
+    <string name="OxPostStatsPrivateEstimate">Other shares (estimate)</string>
+    <string name="OxPostStatsCached">Showing counters saved with this post.</string>
+    <string name="OxPostStatsRefreshing">Updating counters. Saved values remain visible.</string>
+    <string name="OxPostStatsCurrent">Post counters updated from Telegram.</string>
+    <string name="OxPostStatsRefreshFailed">Counters could not be updated. Saved values are shown. Tap Refresh to retry.</string>
+    <string name="OxPostStatsLoadingDetails">Loading detailed statistics…</string>
+    <string name="OxPostStatsNoAccess">Basic counters are available. Telegram only provides graphs and public share details to accounts with statistics access.</string>
+    <string name="OxPostStatsDetailsFailed">Detailed statistics are unavailable or access was denied. Basic counters remain available. Tap Refresh to retry.</string>
+    <string name="OxPostStatsDetailsReady">Detailed statistics received from Telegram.</string>
+    <string name="OxPostStatsForwardsFailed">Public share details could not be loaded completely. Tap Refresh to retry.</string>
+    <string name="OxPostStatsGraphFailed">This graph could not be loaded. Refresh statistics to retry.</string>
+    <string name="OxPostStatsNoGraphs">Telegram has no graph data for this post yet.</string>
+    <string name="OxPostStatsPublished">Published: %1$s</string>
+    <string name="OxPostStatsUpdated">Counters refreshed: %1$s</string>
+    <string name="OxPostStatsRates">Activity per view</string>
+    <string name="OxPostStatsReactionRate">Reactions / views</string>
+    <string name="OxPostStatsShareRate">Shares / views</string>
+    <string name="OxPostStatsEngagementRate">All actions / views</string>
+    <string name="OxPostStatsRateExplanation">Each rate = actions ÷ views × 100. All actions = reactions + shares + comments. These are counts, not unique people; rates can exceed 100%. With zero or unknown views, rates are unavailable (—).</string>
+    <string name="OxPostStatsPrivateExplanation">Other shares = total shares − public shares reported by Telegram. This is an estimate, not a list of private recipients. Unavailable or inconsistent counts appear as —.</string>
+    <string name="OxPostStatsReactionBreakdown">Reaction breakdown</string>
+    <string name="OxPostStatsReactionExplanation">Each percentage is the share of all reactions. Paid reactions count Stars, not people.</string>
+    <string name="OxPostStatsNoReactions">No reaction breakdown available.</string>
+    <string name="OxPostStatsPaidReaction">Paid reactions</string>
+    <string name="OxPostStatsCustomReaction">Custom emoji</string>
+</resources>

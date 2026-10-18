@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxPostStatsRefresh">Statistikani yangilash</string>
+    <string name="OxPostStatsCopy">Hisobotni nusxalash</string>
+    <string name="OxPostStatsCopied">Statistika nusxalandi</string>
+    <string name="OxPostStatsTotalShares">Jami ulashishlar</string>
+    <string name="OxPostStatsComments">Izohlar</string>
+    <string name="OxPostStatsPrivateEstimate">Boshqa ulashishlar (taxmin)</string>
+    <string name="OxPostStatsCached">Post bilan saqlangan hisoblagichlar ko‘rsatilmoqda.</string>
+    <string name="OxPostStatsRefreshing">Hisoblagichlar yangilanmoqda. Saqlangan qiymatlar ko‘rinib turadi.</string>
+    <string name="OxPostStatsCurrent">Post hisoblagichlari Telegram orqali yangilandi.</string>
+    <string name="OxPostStatsRefreshFailed">Hisoblagichlar yangilanmadi. Saqlangan qiymatlar ko‘rsatilmoqda. Qayta urinish uchun yangilashni bosing.</string>
+    <string name="OxPostStatsLoadingDetails">Batafsil statistika yuklanmoqda…</string>
+    <string name="OxPostStatsNoAccess">Asosiy hisoblagichlar mavjud. Telegram grafiklar va ochiq ulashishlar tafsilotlarini faqat statistikaga ruxsati bor akkauntlarga beradi.</string>
+    <string name="OxPostStatsDetailsFailed">Batafsil statistika mavjud emas yoki ruxsat berilmadi. Asosiy hisoblagichlar ko‘rinib turadi. Yangilash orqali qayta urinishingiz mumkin.</string>
+    <string name="OxPostStatsDetailsReady">Batafsil statistika Telegram orqali olindi.</string>
+    <string name="OxPostStatsForwardsFailed">Ochiq ulashishlar tafsilotlari to‘liq yuklanmadi. Qayta urinish uchun yangilashni bosing.</string>
+    <string name="OxPostStatsGraphFailed">Grafik yuklanmadi. Qayta urinish uchun statistikani yangilang.</string>
+    <string name="OxPostStatsNoGraphs">Telegramda bu post uchun grafik ma’lumotlari hali yo‘q.</string>
+    <string name="OxPostStatsPublished">E’lon qilingan: %1$s</string>
+    <string name="OxPostStatsUpdated">Hisoblagichlar yangilangan: %1$s</string>
+    <string name="OxPostStatsRates">Ko‘rishga nisbatan faollik</string>
+    <string name="OxPostStatsReactionRate">Reaksiyalar / ko‘rishlar</string>
+    <string name="OxPostStatsShareRate">Ulashishlar / ko‘rishlar</string>
+    <string name="OxPostStatsEngagementRate">Jami harakatlar / ko‘rishlar</string>
+    <string name="OxPostStatsRateExplanation">Har bir foiz = harakatlar ÷ ko‘rishlar × 100. Jami harakatlar = reaksiyalar + ulashishlar + izohlar. Bular alohida odamlar emas, harakatlar soni; natija 100% dan oshishi mumkin. Ko‘rishlar 0 yoki noma’lum bo‘lsa, foiz ko‘rsatilmaydi (—).</string>
+    <string name="OxPostStatsPrivateExplanation">Boshqa ulashishlar = jami ulashishlar − Telegram bergan ochiq ulashishlar. Bu taxminiy son, shaxsiy qabul qiluvchilar ro‘yxati emas. Noma’lum yoki o‘zaro mos kelmagan sonlar o‘rnida — ko‘rsatiladi.</string>
+    <string name="OxPostStatsReactionBreakdown">Reaksiyalar tarkibi</string>
+    <string name="OxPostStatsReactionExplanation">Har bir foiz jami reaksiyalardagi ulushni bildiradi. Pulli reaksiyalarda odamlar emas, Yulduzlar sanaladi.</string>
+    <string name="OxPostStatsNoReactions">Reaksiyalar tafsiloti mavjud emas.</string>
+    <string name="OxPostStatsPaidReaction">Pulli reaksiyalar</string>
+    <string name="OxPostStatsCustomReaction">Maxsus emoji</string>
+</resources>

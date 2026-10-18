@@ -13,18 +13,25 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.util.SparseArray;
+import android.view.DisplayCutout;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.view.WindowInsets;
 import android.view.animation.OvershootInterpolator;
 
 import androidx.core.content.ContextCompat;
@@ -49,6 +56,8 @@ import org.telegram.messenger.UserObject;
 import org.telegram.messenger.ayu.AyuConfig;
 import org.telegram.messenger.ayu.netdiag.NetDiagConfig;
 import org.telegram.messenger.ayu.netdiag.NetworkDiagnostics;
+import org.telegram.messenger.support.LongSparseIntArray;
+import org.telegram.messenger.support.LongSparseLongArray;
 import org.telegram.messenger.ayu.upload.AyuUploadManager;
 import org.telegram.messenger.ayu.upload.UploadQueueItem;
 import org.telegram.messenger.voip.VoIPService;
@@ -70,6 +79,7 @@ import org.telegram.ui.SecretMediaViewer;
 import org.telegram.ui.ayu.netdiag.NetworkDiagnosticsActivity;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * AyuGram: iPhone-style "Dynamic Island" drawn on top of the whole app window.
@@ -159,7 +169,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         return expanded ? EXPAND_SPRING.getInterpolation(t) : CubicBezierInterpolator.EASE_OUT_QUINT.getInterpolation(t);
     }
     private final AnimatedFloat contentT = new AnimatedFloat(this, 0, 180, CubicBezierInterpolator.EASE_OUT);
-    private final AnimatedFloat widthT = new AnimatedFloat(this, 0, 320, CubicBezierInterpolator.EASE_OUT_QUINT);
+    private final AnimatedFloat widthT = new AnimatedFloat(this, 0, 180, CubicBezierInterpolator.EASE_OUT_QUINT);
     private final AnimatedFloat heightT = new AnimatedFloat(this, 0, 320, CubicBezierInterpolator.EASE_OUT_QUINT);
     private final AnimatedFloat pressT = new AnimatedFloat(this, 0, 160, CubicBezierInterpolator.EASE_OUT);
     private final AnimatedFloat progressT = new AnimatedFloat(this, 0, 260, CubicBezierInterpolator.EASE_OUT);
@@ -176,6 +186,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private final RectF expandedRect = new RectF();
     private final RectF tmpRect = new RectF();
     private final ArrayList<IslandButton> buttons = new ArrayList<>();
+    private int buttonCount;
+    private final SparseArray<PorterDuffColorFilter> iconColorFilters = new SparseArray<>(4);
 
     private final ImageReceiver imageReceiver;
     private final AvatarDrawable avatarDrawable = new AvatarDrawable();
@@ -200,8 +212,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private long netActiveUntil;
     private boolean pressed;
     private float pressX, pressY;
+    /** event time of the ACTION_DOWN that started {@link #pressed}; guards the tap window */
+    private long pressTime;
     private int pressedButton;
     private final int touchSlop;
+    /** a finger that lifts inside this window and inside the slop is a tap, never a gesture */
+    private static final long TAP_WINDOW_MS = ViewConfiguration.getTapTimeout() * 2L;
 
     private String title = "";
     private String subtitle = "";
@@ -255,6 +271,20 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private final ArrayList<TransferRow> transfers = new ArrayList<>();
     //perf: rows are recycled between rebuilds, so a steady transfer costs no allocations
     private final ArrayList<TransferRow> transferPool = new ArrayList<>();
+    /**
+     * When a transfer last really moved (loading, or more bytes than the previous sample),
+     * keyed like {@link TransferRow#key}. A key that is missing here was never alive in this
+     * process, so it is a leftover of {@code DownloadController}'s database and not shown.
+     */
+    private final LongSparseLongArray transferActivity = new LongSparseLongArray();
+    /** transfers the user paused from the island itself: they stay until resumed or cancelled */
+    private final LongSparseIntArray transferUserPaused = new LongSparseIntArray();
+    /** a transfer that stopped moving and is not loading leaves the island after this */
+    private static final long TRANSFER_IDLE_MS = 60_000L;
+    /** a transfer that claims to be loading but never moves a byte leaves the island after this */
+    private static final long TRANSFER_STALL_MS = 180_000L;
+    /** above this many remembered keys the activity map is pruned of ancient entries */
+    private static final int TRANSFER_ACTIVITY_MAX = 32;
     private int transferDownloads, transferUploads;
     /** aggregate progress of every transfer, 0..1 */
     private float downloadProgress;
@@ -309,7 +339,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     };
 
     private static class IslandButton {
-        final int id;
+        int id;
         final RectF bounds = new RectF();
 
         IslandButton(int id) {
@@ -458,7 +488,41 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             AyuUploadManager.getInstance(a).addListener(this);
         }
+        ensureOnTop();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            requestApplyInsets();
+        }
         update();
+    }
+
+    @Override
+    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        updateCutoutFromInsets(insets);
+        invalidate();
+        return super.onApplyWindowInsets(insets);
+    }
+
+    @Override
+    protected void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        notchChecked = false;
+        postInvalidate();
+    }
+
+    /**
+     * Keeps the island the last child of its parent, so it is drawn above everything and - more
+     * importantly - is offered touches first. Fragments, overlays and the theme-switch view are
+     * added to the same container after us, which would otherwise bury the pill.
+     */
+    //perf: one child lookup, and bringToFront() only runs when the order is actually wrong
+    private void ensureOnTop() {
+        ViewParent parent = getParent();
+        if (parent instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) parent;
+            if (group.getChildAt(group.getChildCount() - 1) != this) {
+                bringToFront();
+            }
+        }
     }
 
     @Override
@@ -510,8 +574,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     @Override
     protected void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);
-        // pauses / resumes the network sampler together with the window
+        // Pause polling and sampling while hidden; rebuild live state when the window returns.
         update();
+    }
+
+    private boolean isIslandActive() {
+        return AyuConfig.dynamicIsland && isAttachedToWindow() && getWindowVisibility() == VISIBLE;
     }
 
     @Override
@@ -585,7 +653,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     /** Coalesces a burst of file-loader notifications into a single {@link #update()}. */
     //perf: one update per FILE_UPDATE_DELAY instead of one per loaded file
     private void scheduleFileUpdate() {
-        if (fileUpdateScheduled) {
+        if (fileUpdateScheduled || !isIslandActive()) {
             return;
         }
         fileUpdateScheduled = true;
@@ -595,6 +663,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     /** true when a finished / failed file could change what the island shows */
     private boolean isDownloadStateRelevant() {
+        if (!isIslandActive()) {
+            return false;
+        }
         if (mode == MODE_DOWNLOAD || targetMode == MODE_DOWNLOAD) {
             return true;
         }
@@ -624,6 +695,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     @Override
     public void onNetworkSample(NetworkDiagnostics.Sample sample) {
+        if (!isIslandActive()) {
+            return;
+        }
         netSample = sample;
         if (sample != null && isTransferring(sample)) {
             netActiveUntil = System.currentTimeMillis() + NET_HOLD_MS;
@@ -781,7 +855,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     private void scheduleTick() {
         removeCallbacks(tickRunnable);
-        if (targetMode == MODE_CALL || targetMode == MODE_RECORDING || targetMode == MODE_DOWNLOAD) {
+        if (isIslandActive() && (targetMode == MODE_CALL || targetMode == MODE_RECORDING || targetMode == MODE_DOWNLOAD)) {
             postDelayed(tickRunnable, 500);
         }
     }
@@ -857,6 +931,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     private void clearTransfers() {
+        // nothing is transferring any more, so no remembered activity can still be relevant
+        if (transferActivity.size() > 0) {
+            transferActivity.clear();
+        }
+        if (transferUserPaused.size() > 0) {
+            transferUserPaused.clear();
+        }
         if (transfers.isEmpty()) {
             return;
         }
@@ -911,6 +992,49 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         row.lastBytes = row.loaded;
     }
 
+    /**
+     * Decides whether a transfer may occupy the island.
+     * <p>
+     * {@code DownloadController.downloadingFiles} is a persisted list: it also holds entries that
+     * were cancelled, failed, or restored from the database at startup and never resumed. Those
+     * sit at 0 % forever and used to keep the pill on screen for hours. The island therefore only
+     * shows a transfer that is really moving, that the user paused from the island itself, or that
+     * moved recently - anything else is dropped from the island (it stays in the Downloads screen).
+     */
+    private boolean keepTransfer(long key, boolean loading, boolean moved, boolean userPaused, long now) {
+        long last = transferActivity.get(key, 0L);
+        if (moved || userPaused || (last == 0L && loading)) {
+            // moving, held by the user, or seen loading for the first time in this process
+            transferActivity.put(key, now);
+            return true;
+        }
+        if (last == 0L) {
+            // never alive here: a leftover of the download database
+            return false;
+        }
+        // a job that claims to be loading gets a longer rope than a plainly stopped one
+        return now - last <= (loading ? TRANSFER_STALL_MS : TRANSFER_IDLE_MS);
+    }
+
+    /** gives a rejected row back to the pool so the next rebuild can reuse it */
+    private void discardRow(TransferRow row) {
+        if (transferPool.size() < TRANSFER_POOL_MAX) {
+            transferPool.add(row);
+        }
+    }
+
+    /** keeps {@link #transferActivity} from growing with keys nobody will ask about again */
+    private void pruneTransferActivity(long now) {
+        if (transferActivity.size() <= TRANSFER_ACTIVITY_MAX) {
+            return;
+        }
+        for (int i = transferActivity.size() - 1; i >= 0; i--) {
+            if (now - transferActivity.valueAt(i) > TRANSFER_STALL_MS * 2) {
+                transferActivity.removeAt(i);
+            }
+        }
+    }
+
     /** Rebuilds {@link #transfers} from every account's download list and upload queue. */
     private int collectTransfers() {
         recycleTransfers();
@@ -939,6 +1063,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                         row.attachName = FileLoader.getAttachFileName(document);
                         row.name = safe(FileLoader.getDocumentFileName(document));
                     }
+                    final long prevLoaded = row.loaded;
+                    final boolean known = transferActivity.indexOfKey(document.id) >= 0;
                     long[] sizes = ImageLoader.getInstance().getFileProgressSizes(row.attachName);
                     if (sizes != null && sizes[1] > 0) {
                         row.loaded = sizes[0];
@@ -948,7 +1074,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                         row.total = document.size;
                         row.progress = Math.max(row.progress, 0f);
                     }
-                    row.paused = !FileLoader.getInstance(a).isLoadingFile(row.attachName);
+                    boolean loading = FileLoader.getInstance(a).isLoadingFile(row.attachName);
+                    row.paused = !loading;
+                    if (!keepTransfer(document.id, loading, known && row.loaded > prevLoaded,
+                            transferUserPaused.get(document.id, 0) != 0, now)) {
+                        discardRow(row);
+                        continue;
+                    }
                     if (row.paused) {
                         row.speed = 0;
                         row.lastTime = 0;
@@ -977,10 +1109,20 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                         row.upload = item;
                         row.name = safe(item.name);
                     }
+                    final long prevLoaded = row.loaded;
+                    final boolean known = transferActivity.indexOfKey(key) >= 0;
                     row.loaded = item.uploadedBytes;
                     row.total = Math.max(item.totalBytes, item.uploadedBytes);
                     row.progress = row.total > 0 ? Math.max(0f, Math.min(1f, row.loaded / (float) row.total)) : 0f;
                     row.paused = item.state == UploadQueueItem.STATE_PAUSED;
+                    // "live" means the item is really enqueued in this process' FileLoader;
+                    // an item restored from the queue file that never started is not.
+                    boolean uploading = item.state == UploadQueueItem.STATE_ACTIVE || item.live;
+                    if (!keepTransfer(key, uploading, known && row.loaded > prevLoaded,
+                            transferUserPaused.get(key, 0) != 0, now)) {
+                        discardRow(row);
+                        continue;
+                    }
                     row.speed = row.paused ? 0 : item.speed;
                     transfers.add(row);
                     transferUploads++;
@@ -993,6 +1135,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         while (transferPool.size() > TRANSFER_POOL_MAX) {
             transferPool.remove(transferPool.size() - 1);
         }
+        pruneTransferActivity(now);
         int count = transfers.size();
         downloadProgress = count == 0 ? 0f : sumProgress / count;
         transferSignature = signature * 31 + count;
@@ -1000,24 +1143,41 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     public void update() {
-        //perf: a disabled or detached island must not walk the download lists or sample the network
-        if (!AyuConfig.dynamicIsland || !isAttachedToWindow()) {
+        // Hidden windows must not poll transfers or rebuild strings for content they cannot draw.
+        if (!isIslandActive()) {
             setNetSampling(false);
+            unregisterCallListener();
+            AndroidUtilities.cancelRunOnUIThread(fileUpdateRunnable);
+            fileUpdateScheduled = false;
+            removeCallbacks(tickRunnable);
+            removeCallbacks(collapseRunnable);
+            removeCallbacks(netQuietRunnable);
+            pressed = false;
+            pressedButton = 0;
+            seeking = false;
+            buttonCount = 0;
+            compactPlayRect.setEmpty();
+            seekRect.setEmpty();
+            // A temporary window hide must retain paused rows and their activity history.
+            if (!AyuConfig.dynamicIsland || !isAttachedToWindow()) {
+                clearTransfers();
+            }
             if (targetMode != MODE_NONE || idle) {
                 targetMode = MODE_NONE;
                 idle = false;
-                unregisterCallListener();
                 if (expanded) {
                     setExpanded(false);
                 }
-                clearTransfers();
-                removeCallbacks(tickRunnable);
                 invalidate();
             }
             return;
         }
         int newMode = computeMode();
         boolean wasNone = targetMode == MODE_NONE;
+        if (wasNone && newMode != MODE_NONE) {
+            // something became live: make sure nothing added meanwhile sits on top of the pill
+            ensureOnTop();
+        }
         targetMode = newMode;
         idle = (newMode == MODE_NONE || newMode == MODE_NETWORK) && AyuConfig.dynamicIsland && AyuConfig.islandIdle;
 
@@ -1213,7 +1373,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
         if (NetDiagConfig.islandShowUp) {
             if (sb.length() > 0) {
-                sb.append("  ");
+                sb.append(" ");
             }
             sb.append("▲ ").append(NetworkDiagnostics.formatSpeed(s.upSpeed));
         }
@@ -1329,17 +1489,39 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     // ------------------------------------------------------------------ geometry
 
+    /** height of the system status bar, 0 while it is hidden (fullscreen, some landscape modes) */
+    //perf: a single static int read, cheap enough to call from onDraw
     private int statusBarHeight() {
-        int h = AndroidUtilities.statusBarHeight;
-        return h > 0 ? h : dp(24);
+        return Math.max(0, AndroidUtilities.statusBarHeight);
     }
 
     private float compactHeight() {
-        return dp(26);
+        final int sbH = statusBarHeight();
+        if (sbH > 0 && sbH < dp(28)) {
+            return Math.max(dp(20), sbH - dp(4));
+        }
+        return dp(24);
+    }
+
+    private float islandTop() {
+        final int sbH = statusBarHeight();
+        if (sbH <= 0) {
+            return dp(4);
+        }
+        checkNotch();
+        if (notchInfo != null && notchInfo.bounds != null && notchInfo.bounds.height() > 0) {
+            float notchTop = notchInfo.bounds.top;
+            float notchH = notchInfo.bounds.height();
+            float ch = compactHeight();
+            return Math.max(dp(2), notchTop + (notchH - ch) / 2f);
+        }
+        float ch = compactHeight();
+        float top = (sbH - ch) / 2f;
+        return Math.max(dp(2), top);
     }
 
     private float compactTop() {
-        return Math.max(dp(4), (statusBarHeight() - compactHeight()) / 2f);
+        return islandTop();
     }
 
     private float leftIconSize() {
@@ -1376,18 +1558,24 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (m == MODE_NONE) {
             return idleRectWidth();
         }
-        float textMax = m == MODE_NETWORK ? dp(200) : dp(150);
+        int screen = getMeasuredWidth() > 0 ? getMeasuredWidth() : AndroidUtilities.displaySize.x;
+        float rightW = measureRightWidth(m);
+        float iconW = hasLeftIcon(m) ? leftIconSize() + dp(8) : 0;
+        float chromeW = dp(24) + iconW + (rightW > 0 ? dp(8) : 0) + rightW;
+        float maxAvailableText = Math.max(dp(60), (screen - dp(40)) - chromeW);
+        if (m == MODE_NETWORK) {
+            maxAvailableText = Math.min(maxAvailableText, dp(260));
+        } else {
+            maxAvailableText = Math.min(maxAvailableText, dp(180));
+        }
         String text = compactText(m);
         //perf: same cache-per-string trick for the pill's own label
         if (!TextUtils.equals(measuredCompactText, text)) {
             measuredCompactText = text;
             measuredCompactWidth = compactPaint.measureText(text);
         }
-        float textW = Math.min(textMax, measuredCompactWidth);
-        float rightW = measureRightWidth(m);
-        float iconW = hasLeftIcon(m) ? leftIconSize() + dp(8) : 0;
-        float w = dp(12) + iconW + textW + (rightW > 0 && textW > 0 ? dp(8) : 0) + rightW + dp(12);
-        int screen = getMeasuredWidth() > 0 ? getMeasuredWidth() : AndroidUtilities.displaySize.x;
+        float textW = Math.min(maxAvailableText, measuredCompactWidth);
+        float w = chromeW + textW;
         return Math.min(w, screen - dp(40));
     }
 
@@ -1417,6 +1605,42 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
     }
 
+    private void updateCutoutFromInsets(WindowInsets insets) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || insets == null) {
+            return;
+        }
+        try {
+            DisplayCutout cutout = insets.getDisplayCutout();
+            if (cutout != null) {
+                List<Rect> rects = cutout.getBoundingRects();
+                if (rects != null && !rects.isEmpty()) {
+                    int w = getWidth() > 0 ? getWidth() : AndroidUtilities.displaySize.x;
+                    float midX = w / 2f;
+                    Rect bestRect = null;
+                    float bestDist = Float.MAX_VALUE;
+                    for (Rect r : rects) {
+                        if (r.top <= statusBarHeight() + dp(4)) {
+                            float dist = Math.abs(r.centerX() - midX);
+                            if (dist < bestDist) {
+                                bestDist = dist;
+                                bestRect = r;
+                            }
+                        }
+                    }
+                    if (bestRect != null && bestDist < dp(48)) {
+                        if (notchInfo == null) {
+                            notchInfo = new NotchInfoUtils.NotchInfo();
+                            notchInfo.gravity = Gravity.CENTER;
+                        }
+                        notchInfo.bounds = new RectF(bestRect);
+                        notchInfo.isLikelyCircle = Math.abs(bestRect.width() - bestRect.height()) <= dp(6);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void checkNotch() {
         if (notchChecked) {
             return;
@@ -1430,6 +1654,15 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         } catch (Throwable t) {
             notchInfo = null;
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                WindowInsets insets = getRootWindowInsets();
+                if (insets != null) {
+                    updateCutoutFromInsets(insets);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     private float idleRectWidth() {
@@ -1442,24 +1675,27 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     private void computeIdleRect(RectF out, int width) {
         checkNotch();
+        // same top as every other state: below the status bar, never over the system icons
+        final float top = islandTop();
+        float w, h, cx;
         if (notchInfo != null && notchInfo.bounds != null) {
-            float cx = notchInfo.bounds.centerX();
-            float h = Math.max(dp(26), notchInfo.bounds.height() + dp(8));
-            float top = Math.max(dp(2), notchInfo.bounds.top - dp(4));
-            float w = notchInfo.bounds.width() + dp(20);
-            out.set(cx - w / 2f, top, cx + w / 2f, top + h);
+            // keep the cut-out's width / centre so the idle blob still reads as "the island"
+            w = notchInfo.bounds.width() + dp(20);
+            h = Math.max(compactHeight(), notchInfo.bounds.height() + dp(8));
+            cx = notchInfo.bounds.centerX();
         } else {
-            float w = dp(84), h = dp(26);
-            float top = Math.max(dp(4), (statusBarHeight() - h) / 2f);
-            out.set((width - w) / 2f, top, (width + w) / 2f, top + h);
+            w = dp(84);
+            h = compactHeight();
+            cx = width / 2f;
         }
+        out.set(cx - w / 2f, top, cx + w / 2f, top + h);
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         // tall enough for the biggest card plus the spring overshoot; touches outside the pill fall through
-        setMeasuredDimension(width, dp(300));
+        setMeasuredDimension(width, (int) islandTop() + dp(320));
     }
 
     // ------------------------------------------------------------------ drawing
@@ -1505,11 +1741,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (target == MODE_NONE && idle) {
             computeIdleRect(compactRect, width);
         } else {
-            compactRect.set((width - cw) / 2f, ctop, (width + cw) / 2f, ctop + ch);
+            float cx = (notchInfo != null && notchInfo.bounds != null) ? notchInfo.bounds.centerX() : width / 2f;
+            compactRect.set(cx - cw / 2f, ctop, cx + cw / 2f, ctop + ch);
         }
         // Expanded rect.
         float eh = heightT.set(measureExpandedHeight());
-        expandedRect.set(dp(10), ctop, width - dp(10), ctop + eh);
+        float expTop = Math.max(dp(4), ctop);
+        expandedRect.set(dp(12), expTop, width - dp(12), expTop + eh);
 
         rect.left = Math.max(dp(4), AndroidUtilities.lerp(compactRect.left, expandedRect.left, expand));
         rect.top = compactRect.top;
@@ -1532,7 +1770,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             path.rewind();
             path.addRoundRect(rect, radius, radius, Path.Direction.CW);
             canvas.clipPath(path);
-            buttons.clear();
+            buttonCount = 0;
             compactPlayRect.setEmpty();
             seekRect.setEmpty();
             marqueeActive = false;
@@ -1671,7 +1909,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 canvas.restore();
                 marqueeActive = true;
             } else {
-                CharSequence text = fullW <= textMax ? full : TextUtils.ellipsize(full, compactPaint, textMax, TextUtils.TruncateAt.END);
+                CharSequence text = fullW <= textMax + dp(2) ? full : TextUtils.ellipsize(full, compactPaint, textMax, TextUtils.TruncateAt.END);
                 canvas.drawText(text, 0, text.length(), x, baseline, compactPaint);
             }
         }
@@ -1758,14 +1996,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         float by = t + avatar + dp(18);
         float bs = dp(48);
         float span = r - l;
-        float[] centers = {l + span * 0.2f, l + span * 0.5f, l + span * 0.8f};
         VoIPService service = VoIPService.getSharedInstance();
         boolean muted = service != null && service.isMicMute();
         boolean speaker = service != null && service.isSpeakerphoneOn();
 
-        drawRoundButton(canvas, BTN_MUTE, centers[0], by + bs / 2f, bs, muted ? COLOR_TEXT : COLOR_BUTTON, muted, muted ? muteDrawable : unmuteDrawable, muted ? COLOR_BG : COLOR_TEXT, a, alpha);
-        drawRoundButton(canvas, BTN_SPEAKER, centers[1], by + bs / 2f, bs, speaker ? COLOR_TEXT : COLOR_BUTTON, speaker, soundDrawable, speaker ? COLOR_BG : COLOR_TEXT, a, alpha);
-        drawRoundButton(canvas, BTN_HANGUP, centers[2], by + bs / 2f, bs, COLOR_RED, true, hangupDrawable, COLOR_TEXT, a, alpha);
+        drawRoundButton(canvas, BTN_MUTE, l + span * 0.2f, by + bs / 2f, bs, muted ? COLOR_TEXT : COLOR_BUTTON, muted, muted ? muteDrawable : unmuteDrawable, muted ? COLOR_BG : COLOR_TEXT, a, alpha);
+        drawRoundButton(canvas, BTN_SPEAKER, l + span * 0.5f, by + bs / 2f, bs, speaker ? COLOR_TEXT : COLOR_BUTTON, speaker, soundDrawable, speaker ? COLOR_BG : COLOR_TEXT, a, alpha);
+        drawRoundButton(canvas, BTN_HANGUP, l + span * 0.8f, by + bs / 2f, bs, COLOR_RED, true, hangupDrawable, COLOR_TEXT, a, alpha);
     }
 
     private void drawExpandedPlayer(Canvas canvas, float l, float t, float r, int a, float alpha) {
@@ -2035,9 +2272,16 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     // ------------------------------------------------------------------ primitives
 
     private IslandButton button(int id, float l, float t, float r, float b) {
-        IslandButton btn = new IslandButton(id);
+        final IslandButton btn;
+        if (buttonCount < buttons.size()) {
+            btn = buttons.get(buttonCount);
+            btn.id = id;
+        } else {
+            btn = new IslandButton(id);
+            buttons.add(btn);
+        }
+        buttonCount++;
         btn.bounds.set(l, t, r, b);
-        buttons.add(btn);
         return btn;
     }
 
@@ -2081,7 +2325,14 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (d == null) {
             return;
         }
-        d.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        PorterDuffColorFilter colorFilter = iconColorFilters.get(color);
+        if (colorFilter == null) {
+            colorFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
+            iconColorFilters.put(color, colorFilter);
+        }
+        if (d.getColorFilter() != colorFilter) {
+            d.setColorFilter(colorFilter);
+        }
         d.setAlpha(a);
         int half = (int) (size / 2f);
         d.setBounds((int) cx - half, (int) cy - half, (int) cx + half, (int) cy + half);
@@ -2176,11 +2427,23 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     // ------------------------------------------------------------------ touch
 
     private boolean insideIsland(float x, float y) {
-        return showT.get() > 0f && effectiveTargetMode() != MODE_NONE && rect.contains(x, y);
+        if (showT.get() <= 0f || effectiveTargetMode() == MODE_NONE) {
+            return false;
+        }
+        if (rect.contains(x, y)) {
+            return true;
+        }
+        // The collapsed pill is only 26 dp tall: accept a finger that lands slightly beside it,
+        // otherwise a perfectly reasonable tap reads as "nothing happened".
+        if (expanded) {
+            return false;
+        }
+        return x >= rect.left - dp(8) && x <= rect.right + dp(8)
+                && y >= rect.top - dp(4) && y <= rect.bottom + dp(3);
     }
 
     private IslandButton findButton(float x, float y) {
-        for (int i = 0; i < buttons.size(); i++) {
+        for (int i = 0; i < buttonCount; i++) {
             IslandButton b = buttons.get(i);
             if (b.bounds.contains(x, y)) {
                 return b;
@@ -2209,6 +2472,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                     pressed = true;
                     pressX = x;
                     pressY = y;
+                    pressTime = event.getEventTime();
                     if (expanded) {
                         IslandButton b = findButton(x, y);
                         pressedButton = b != null ? b.id : 0;
@@ -2238,8 +2502,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 if (pressed) {
                     float dx = x - pressX;
                     float dy = y - pressY;
+                    // A short, steady finger is still a tap: no gesture may take it away.
+                    if (Math.abs(dx) <= touchSlop && Math.abs(dy) <= touchSlop
+                            && event.getEventTime() - pressTime < TAP_WINDOW_MS) {
+                        return true;
+                    }
                     boolean vertical = Math.abs(dy) > Math.abs(dx) * 1.5f;
-                    if (vertical && expanded && dy < -touchSlop * 2) {
+                    if (vertical && expanded && pressedButton == 0 && dy < -touchSlop * 2) {
                         // swipe up on the open card: close it
                         pressed = false;
                         pressedButton = 0;
@@ -2421,6 +2690,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             return;
         }
         TransferRow row = transfers.get(index);
+        // a hold placed here is the user's, so the row stays on the card until it is resumed
+        if (row.paused) {
+            transferUserPaused.delete(row.key);
+        } else {
+            transferUserPaused.put(row.key, 1);
+        }
         try {
             if (row.upload != null) {
                 AyuUploadManager.getInstance(row.account).setPaused(row.upload, !row.paused, false);
@@ -2452,6 +2727,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private final ArrayList<MessageObject> cancelTmp = new ArrayList<>(1);
 
     private void cancelTransferRow(TransferRow row) {
+        transferUserPaused.delete(row.key);
+        transferActivity.delete(row.key);
         try {
             if (row.upload != null) {
                 AyuUploadManager.getInstance(row.account).cancel(row.upload);

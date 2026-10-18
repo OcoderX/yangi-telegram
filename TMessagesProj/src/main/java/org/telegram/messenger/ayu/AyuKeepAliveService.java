@@ -19,7 +19,6 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
-import org.telegram.messenger.ayu.sync.AyuSyncController;
 import org.telegram.messenger.ayu.upload.AyuUploadConfig;
 import org.telegram.messenger.ayu.upload.AyuUploadManager;
 import org.telegram.ui.LaunchActivity;
@@ -126,8 +125,8 @@ public class AyuKeepAliveService extends Service {
     private static NotificationCenter.NotificationCenterDelegate configObserver;
 
     /**
-     * Applies the current AyuGram options once and keeps the keep-alive service and the AyuSync
-     * client in step with later changes to them (posted as
+     * Applies the current AyuGram options once and keeps the keep-alive service
+     * in step with later changes to them (posted as
      * {@link NotificationCenter#ayuConfigChanged}). Called once from ApplicationLoader.
      */
     public static void init(final Context context) {
@@ -141,11 +140,6 @@ public class AyuKeepAliveService extends Service {
                     return;
                 }
                 checkState(ApplicationLoader.applicationContext);
-                try {
-                    AyuSyncController.getInstance().checkState();
-                } catch (Throwable e) {
-                    FileLog.e(e);
-                }
             };
             try {
                 NotificationCenter.getGlobalInstance().addObserver(configObserver, NotificationCenter.ayuConfigChanged);

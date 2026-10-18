@@ -543,6 +543,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         dynamicIslandView = new org.telegram.ui.ayu.DynamicIslandView(this);
         frameLayout.addView(dynamicIslandView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         setupActionBarLayout();
+        // the island must stay the topmost child: it is drawn above every fragment and, above all,
+        // it has to be offered touches before them
+        dynamicIslandView.bringToFront();
         drawerLayoutContainer.setParentActionBarLayout(actionBarLayout);
         actionBarLayout.setDrawerLayoutContainer(drawerLayoutContainer);
         actionBarLayout.setFragmentStack(mainFragmentsStack);

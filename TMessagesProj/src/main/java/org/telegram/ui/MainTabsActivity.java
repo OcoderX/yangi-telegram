@@ -1232,7 +1232,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void blur3_updateFadeColors() {
-        iBlur3SourceColor.setColor(getEstBackgroundColor());
+        final int color = getEstBackgroundColor();
+        if (iBlur3SourceColor.getColor() == color) {
+            return;
+        }
+        iBlur3SourceColor.setColor(color);
         if (fadeView != null) {
             fadeView.invalidate();
         }

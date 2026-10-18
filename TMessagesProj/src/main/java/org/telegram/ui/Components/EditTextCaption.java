@@ -79,6 +79,8 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
     private EditTextCaptionDelegate delegate;
     private int selectionStart = -1;
     private int selectionEnd = -1;
+    private int actionModeSelectionStart = -1;
+    private int actionModeSelectionEnd = -1;
     private boolean allowTextEntitiesIntersection;
     private int lineCount;
     private boolean isInitLineCount;
@@ -97,7 +99,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
         addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-
+                clearActionModeSelection();
             }
 
             @Override
@@ -193,23 +195,12 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
     // exclusive with every other inline style, and sub/superscript exclude each other (same rules the
     // rich editor uses), so there's no conflict between mono and the rest.
     public void toggleStyleForSelection(int flag) {
-        final Editable editable = getText();
-        if (editable == null) {
+        final int[] selection = getFormattingSelection();
+        if (selection == null) {
             return;
         }
-        int start = getSelectionStart();
-        int end = getSelectionEnd();
-        if (start < 0 || end < 0) {
-            return;
-        }
-        if (start > end) {
-            final int tmp = start;
-            start = end;
-            end = tmp;
-        }
-        if (start >= end) {
-            return;
-        }
+        final int start = selection[0];
+        final int end = selection[1];
         final boolean add = (getCurrentStyle(start, end) & flag) == 0;
         if (add) {
             int clearMask;
@@ -234,37 +225,38 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
     }
 
     public void makeSelectedQuote(boolean collapse) {
-        int start, end;
-        if (selectionStart >= 0 && selectionEnd >= 0) {
-            start = selectionStart;
-            end = selectionEnd;
-            selectionStart = selectionEnd = -1;
-        } else {
-            start = getSelectionStart();
-            end = getSelectionEnd();
+        final int[] selection = getFormattingSelection();
+        if (selection == null) {
+            return;
         }
-        final int setSelection = QuoteSpan.putQuoteToEditable(getText(), start, end, collapse);
+        final int setSelection = QuoteSpan.putQuoteToEditable(getText(), selection[0], selection[1], collapse);
         if (setSelection >= 0) {
             setSelection(setSelection);
             resetFontMetricsCache();
         }
         invalidateQuotes(true);
         invalidateSpoilers();
+        notifySpansChanged();
     }
 
     public void makeSelectedDate() {
-        int start, end;
-        if (selectionStart >= 0 && selectionEnd >= 0) {
-            start = selectionStart;
-            end = selectionEnd;
-            selectionStart = selectionEnd = -1;
-        } else {
-            start = getSelectionStart();
-            end = getSelectionEnd();
+        final int[] selection = getFormattingSelection();
+        if (selection == null) {
+            return;
         }
+        final Editable source = getText();
 
         AlertsCreator.createFormattedDatePickerDialog(getContext(), (scheduleDate, flags) -> {
             Editable editable = getText();
+            if (editable == null || editable != source) {
+                return;
+            }
+            final int[] range = normalizeFormattingSelection(selection[0], selection[1], editable.length());
+            if (range == null) {
+                return;
+            }
+            final int start = range[0];
+            final int end = range[1];
 
             TextStyleSpan.TextStyleRun run = new TextStyleSpan.TextStyleRun();
             run.flags |= TextStyleSpan.FLAG_STYLE_URL;
@@ -288,15 +280,12 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
     }
 
     public void translateSelected() {
-        int start, end;
-        if (selectionStart >= 0 && selectionEnd >= 0) {
-            start = selectionStart;
-            end = selectionEnd;
-            selectionStart = selectionEnd = -1;
-        } else {
-            start = getSelectionStart();
-            end = getSelectionEnd();
+        final int[] selection = getFormattingSelection();
+        if (selection == null) {
+            return;
         }
+        final int start = selection[0];
+        final int end = selection[1];
 
         final CharSequence text = getText().subSequence(start, end);
 
@@ -314,6 +303,11 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
     }
 
     public void makeSelectedUrl() {
+        final int[] selection = getFormattingSelection();
+        if (selection == null) {
+            return;
+        }
+        final Editable source = getText();
         AlertDialog.Builder builder;
         if (adaptiveCreateLinkDialog) {
             builder = new AlertDialogDecor.Builder(getContext(), resourcesProvider);
@@ -413,19 +407,17 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
 
         builder.setView(container);
 
-        final int start;
-        final int end;
-        if (selectionStart >= 0 && selectionEnd >= 0) {
-            start = selectionStart;
-            end = selectionEnd;
-            selectionStart = selectionEnd = -1;
-        } else {
-            start = getSelectionStart();
-            end = getSelectionEnd();
-        }
-
         builder.setPositiveButton(LocaleController.getString(R.string.OK), (dialogInterface, i) -> {
             Editable editable = getText();
+            if (editable == null || editable != source) {
+                return;
+            }
+            final int[] range = normalizeFormattingSelection(selection[0], selection[1], editable.length());
+            if (range == null) {
+                return;
+            }
+            final int start = range[0];
+            final int end = range[1];
             CharacterStyle[] spans = editable.getSpans(start, end, CharacterStyle.class);
             if (spans != null && spans.length > 0) {
                 for (int a = 0; a < spans.length; a++) {
@@ -498,6 +490,61 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
     public void setSelectionOverride(int start, int end) {
         selectionStart = start;
         selectionEnd = end;
+    }
+
+    private static int[] normalizeFormattingSelection(int start, int end, int length) {
+        if (start < 0 || end < 0) {
+            return null;
+        }
+        final int from = Math.min(Math.min(start, end), length);
+        final int to = Math.min(Math.max(start, end), length);
+        return from < to ? new int[] { from, to } : null;
+    }
+
+    private int[] getFormattingSelection() {
+        final Editable editable = getText();
+        if (editable == null) {
+            selectionStart = selectionEnd = -1;
+            return null;
+        }
+        if (selectionStart >= 0 && selectionEnd >= 0) {
+            final int start = selectionStart;
+            final int end = selectionEnd;
+            selectionStart = selectionEnd = -1;
+            return normalizeFormattingSelection(start, end, editable.length());
+        }
+        final int[] selection = normalizeFormattingSelection(getSelectionStart(), getSelectionEnd(), editable.length());
+        if (selection != null) {
+            return selection;
+        }
+        // A toolbar/focus change can collapse the live selection before its click is dispatched.
+        return copyPasteShowed
+                ? normalizeFormattingSelection(actionModeSelectionStart, actionModeSelectionEnd, editable.length())
+                : null;
+    }
+
+    private void rememberActionModeSelection() {
+        if (!copyPasteShowed) {
+            return;
+        }
+        final Editable editable = getText();
+        final int start = getSelectionStart();
+        final int end = getSelectionEnd();
+        if (editable != null && start >= 0 && end >= 0 && start != end
+                && start <= editable.length() && end <= editable.length()) {
+            actionModeSelectionStart = Math.min(start, end);
+            actionModeSelectionEnd = Math.max(start, end);
+        }
+    }
+
+    private void clearActionModeSelection() {
+        actionModeSelectionStart = actionModeSelectionEnd = -1;
+    }
+
+    @Override
+    protected void onSelectionChanged(int selStart, int selEnd) {
+        super.onSelectionChanged(selStart, selEnd);
+        rememberActionModeSelection();
     }
 
     private static final int[] STYLE_FLAGS = {
@@ -626,16 +673,12 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
     }
 
     private void applyTextStyleToSelection(TextStyleSpan span) {
-        int start;
-        int end;
-        if (selectionStart >= 0 && selectionEnd >= 0) {
-            start = selectionStart;
-            end = selectionEnd;
-            selectionStart = selectionEnd = -1;
-        } else {
-            start = getSelectionStart();
-            end = getSelectionEnd();
+        final int[] selection = getFormattingSelection();
+        if (selection == null) {
+            return;
         }
+        final int start = selection[0];
+        final int end = selection[1];
         MediaDataController.addStyleToText(span, start, end, getText(), allowTextEntitiesIntersection);
 
         if (span == null) {
@@ -686,13 +729,22 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
             @Override
             public boolean onCreateActionMode(ActionMode mode, Menu menu) {
                 copyPasteShowed = true;
+                rememberActionModeSelection();
                 onContextMenuOpen();
-                return callback.onCreateActionMode(mode, menu);
+                final boolean created = callback.onCreateActionMode(mode, menu);
+                if (!created) {
+                    copyPasteShowed = false;
+                    clearActionModeSelection();
+                }
+                return created;
             }
 
             @Override
             public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                return callback.onPrepareActionMode(mode, menu);
+                rememberActionModeSelection();
+                final boolean changed = callback.onPrepareActionMode(mode, menu);
+                rememberActionModeSelection();
+                return changed;
             }
 
             @Override
@@ -712,6 +764,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
             @Override
             public void onDestroyActionMode(ActionMode mode) {
                 copyPasteShowed = false;
+                clearActionModeSelection();
                 onContextMenuClose();
                 callback.onDestroyActionMode(mode);
             }
@@ -933,6 +986,9 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
 
     @Override
     public boolean onTextContextMenuItem(int id) {
+        if (performMenuAction(id)) {
+            return true;
+        }
         if (id == android.R.id.paste) {
             ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData clipData = clipboard.getPrimaryClip();

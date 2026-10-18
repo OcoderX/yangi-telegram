@@ -277,14 +277,9 @@ public class ApplicationLoader extends Application {
         }
         BillingController.getInstance().startConnection();
 
-        // AyuGram: background keep-alive service + AyuSync client, both driven by AyuConfig
+        // AyuGram: background keep-alive service, driven by AyuConfig
         try {
             org.telegram.messenger.ayu.AyuKeepAliveService.init(applicationContext);
-        } catch (Throwable e) {
-            FileLog.e(e);
-        }
-        try {
-            org.telegram.messenger.ayu.sync.AyuSyncController.getInstance().checkState();
         } catch (Throwable e) {
             FileLog.e(e);
         }

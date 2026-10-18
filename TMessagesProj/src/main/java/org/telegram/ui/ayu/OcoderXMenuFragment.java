@@ -24,11 +24,14 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
+import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
+import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.tl.TL_stars;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
@@ -51,7 +54,12 @@ import org.telegram.ui.InviteContactsActivity;
 import org.telegram.ui.LaunchActivity;
 import org.telegram.ui.LoginActivity;
 import org.telegram.ui.MainTabsActivity;
+import org.telegram.ui.PremiumPreviewFragment;
+import org.telegram.ui.ProfileActivity;
+import org.telegram.ui.SelectAnimatedEmojiDialog;
 import org.telegram.ui.SettingsActivity;
+import org.telegram.ui.Stars.StarGiftSheet;
+import org.telegram.ui.Stars.StarsController;
 import org.telegram.ui.ThemeActivity;
 import org.telegram.ui.ayu.menu.OxDrawerProfileCell;
 import org.telegram.ui.ayu.menu.OxDrawerUserCell;
@@ -102,6 +110,10 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
     private static final int ID_DUPLICATES = 20;
     private static final int ID_SYNC = 21;
     private static final int ID_ALL_SETTINGS = 22;
+    private static final int ID_MY_PROFILE = 23;
+    private static final int ID_CHANGE_STATUS = 24;
+
+    private SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow selectAnimatedEmojiDialog;
 
     private RecyclerListView listView;
     private ListAdapter adapter;
@@ -275,10 +287,16 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
             items.add(Item.divider());
         }
 
+        final boolean bot = getUserConfig().isBotAccount();
+        if (!bot) {
+            items.add(Item.action(ID_MY_PROFILE, R.drawable.msg_openprofile, getString(R.string.MyProfile)));
+            items.add(Item.action(ID_CHANGE_STATUS, R.drawable.msg_change_status, getString(R.string.ChangeEmojiStatus)));
+            items.add(Item.divider());
+        }
+
         items.add(Item.check(ID_NIGHT_MODE, R.drawable.menu_night_mode_24, getString(R.string.SwitchThemeToNight)));
         items.add(Item.divider());
 
-        final boolean bot = getUserConfig().isBotAccount();
         if (!bot) {
             // a bot can neither create chats nor write to itself, and has no contacts of its own
             items.add(Item.action(ID_NEW_GROUP, R.drawable.msg_groups, getString(R.string.NewGroup)));
@@ -354,6 +372,21 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
             return;
         }
         switch (item.id) {
+            case ID_MY_PROFILE: {
+                Bundle args = new Bundle();
+                args.putLong("user_id", getUserConfig().getClientUserId());
+                args.putBoolean("my_profile", true);
+                presentFragment(new ProfileActivity(args));
+                break;
+            }
+            case ID_CHANGE_STATUS: {
+                if (!getUserConfig().isPremium()) {
+                    presentFragment(new PremiumPreviewFragment("emoji_status"));
+                } else {
+                    showSelectStatusDialog(view);
+                }
+                break;
+            }
             case ID_NIGHT_MODE:
                 toggleNightMode(view);
                 break;
@@ -566,6 +599,91 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
         } else if (!UserConfig.hasPremiumOnAccounts() && getContext() != null) {
             showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
         }
+    }
+
+    private void showSelectStatusDialog(View anchorView) {
+        if (selectAnimatedEmojiDialog != null) {
+            return;
+        }
+        final SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow[] popup = new SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow[1];
+        final TLRPC.User user = getUserConfig().getCurrentUser();
+        int xoff = dp(16);
+        SelectAnimatedEmojiDialog popupLayout = new SelectAnimatedEmojiDialog(this, getContext(), true, xoff, SelectAnimatedEmojiDialog.TYPE_EMOJI_STATUS, getResourceProvider()) {
+            @Override
+            protected boolean willApplyEmoji(View view, Long documentId, TLRPC.Document document, TL_stars.TL_starGiftUnique gift, Integer until) {
+                if (gift != null) {
+                    final TL_stars.SavedStarGift savedStarGift = StarsController.getInstance(currentAccount).findUserStarGift(gift.id);
+                    return savedStarGift == null || MessagesController.getGlobalMainSettings().getInt("statusgiftpage", 0) >= 2;
+                }
+                return true;
+            }
+
+            @Override
+            protected void onEmojiSelected(View emojiView, Long documentId, TLRPC.Document document, TL_stars.TL_starGiftUnique gift, Integer until) {
+                final TLRPC.EmojiStatus emojiStatus;
+                if (documentId == null) {
+                    emojiStatus = new TLRPC.TL_emojiStatusEmpty();
+                } else if (gift != null) {
+                    final TL_stars.SavedStarGift savedStarGift = StarsController.getInstance(currentAccount).findUserStarGift(gift.id);
+                    if (savedStarGift != null && MessagesController.getGlobalMainSettings().getInt("statusgiftpage", 0) < 2) {
+                        MessagesController.getGlobalMainSettings().edit().putInt("statusgiftpage", MessagesController.getGlobalMainSettings().getInt("statusgiftpage", 0) + 1).apply();
+                        new StarGiftSheet(getContext(), currentAccount, UserConfig.getInstance(currentAccount).getClientUserId(), getResourceProvider())
+                            .set(savedStarGift, null)
+                            .setupWearPage()
+                            .show();
+                        if (popup[0] != null) {
+                            selectAnimatedEmojiDialog = null;
+                            popup[0].dismiss();
+                        }
+                        return;
+                    }
+                    final TLRPC.TL_inputEmojiStatusCollectible status = new TLRPC.TL_inputEmojiStatusCollectible();
+                    status.collectible_id = gift.id;
+                    if (until != null) {
+                        status.flags |= 1;
+                        status.until = until;
+                    }
+                    emojiStatus = status;
+                } else {
+                    final TLRPC.TL_emojiStatus status = new TLRPC.TL_emojiStatus();
+                    status.document_id = documentId;
+                    if (until != null) {
+                        status.flags |= 1;
+                        status.until = until;
+                    }
+                    emojiStatus = status;
+                }
+                getMessagesController().updateEmojiStatus(emojiStatus, gift);
+                if (popup[0] != null) {
+                    selectAnimatedEmojiDialog = null;
+                    popup[0].dismiss();
+                }
+            }
+        };
+        if (user != null && DialogObject.getEmojiStatusUntil(user.emoji_status) > 0) {
+            popupLayout.setExpireDateHint(DialogObject.getEmojiStatusUntil(user.emoji_status));
+        }
+        Long selectedStatusDocumentId = null;
+        if (user != null && user.emoji_status instanceof TLRPC.TL_emojiStatus) {
+            selectedStatusDocumentId = ((TLRPC.TL_emojiStatus) user.emoji_status).document_id;
+        }
+        if (selectedStatusDocumentId != null) {
+            popupLayout.setSelected(selectedStatusDocumentId);
+        }
+        popupLayout.setSaveState(1);
+        popup[0] = selectAnimatedEmojiDialog = new SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow(popupLayout, LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT) {
+            @Override
+            public void dismiss() {
+                super.dismiss();
+                selectAnimatedEmojiDialog = null;
+            }
+        };
+        if (anchorView != null) {
+            popup[0].showAsDropDown(anchorView, dp(16), 0, Gravity.TOP);
+        } else if (fragmentView != null) {
+            popup[0].showAtLocation(fragmentView, Gravity.CENTER, 0, 0);
+        }
+        popup[0].dimBehind();
     }
 
     // ------------------------------------------------------------------ adapter

@@ -20,6 +20,52 @@ dependencies {
     implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
 }
 
+def privateSigningProperties = new Properties()
+def privateSigningPropertiesFile = rootProject.file('local.properties')
+if (privateSigningPropertiesFile.isFile()) {
+    privateSigningPropertiesFile.withInputStream { privateSigningProperties.load(it) }
+}
+def distributionSigning = ['OX_RELEASE_STORE_FILE', 'OX_RELEASE_STORE_PASSWORD',
+                           'OX_RELEASE_KEY_ALIAS', 'OX_RELEASE_KEY_PASSWORD'].collectEntries { name ->
+    def environmentValue = System.getenv(name)
+    [(name): environmentValue != null ? environmentValue : privateSigningProperties.getProperty(name)]
+}
+def distributionStoreFile = distributionSigning.OX_RELEASE_STORE_FILE
+        ? rootProject.file(distributionSigning.OX_RELEASE_STORE_FILE) : null
+
+def validateDistributionSigning = tasks.register('validateDistributionSigning') {
+    group = 'verification'
+    description = 'Checks private distribution signing credentials and rejects the public dummy certificate.'
+    doLast {
+        def missing = distributionSigning.findAll { name, value -> value == null || value.isEmpty() }.keySet()
+        if (!missing.isEmpty()) {
+            throw new GradleException('Set private distribution signing values in local.properties or the environment: ' + missing.join(', '))
+        }
+        if (!distributionStoreFile.isFile()) {
+            throw new GradleException('OX_RELEASE_STORE_FILE must point to an existing private keystore.')
+        }
+        try {
+            def keyStore = java.security.KeyStore.getInstance(distributionStoreFile,
+                    distributionSigning.OX_RELEASE_STORE_PASSWORD.toCharArray())
+            def alias = distributionSigning.OX_RELEASE_KEY_ALIAS
+            def certificate = keyStore.getCertificate(alias)
+            def key = keyStore.getKey(alias, distributionSigning.OX_RELEASE_KEY_PASSWORD.toCharArray())
+            if (certificate == null || !(key instanceof java.security.PrivateKey)) {
+                throw new GradleException('OX_RELEASE_KEY_ALIAS must identify a private signing key and certificate.')
+            }
+            def fingerprint = java.security.MessageDigest.getInstance('SHA-256')
+                    .digest(certificate.encoded).encodeHex().toString()
+            if (fingerprint == 'a08d7dc323ddf71ef3201944397e0d3cce7d40847263e11f328b68bbe19229ab') {
+                throw new GradleException('Distribution signing cannot use the public upstream dummy certificate. Supply your own private signing key.')
+            }
+        } catch (GradleException error) {
+            throw error
+        } catch (Exception ignored) {
+            throw new GradleException('Cannot unlock the distribution signing key. Check the keystore, alias and passwords.')
+        }
+    }
+}
+
 android {
     compileSdkVersion 35
     buildToolsVersion '35.0.0'
@@ -54,6 +100,13 @@ android {
             storePassword RELEASE_STORE_PASSWORD
             keyAlias RELEASE_KEY_ALIAS
             keyPassword RELEASE_KEY_PASSWORD
+        }
+
+        distribution {
+            storeFile distributionStoreFile
+            storePassword distributionSigning.OX_RELEASE_STORE_PASSWORD
+            keyAlias distributionSigning.OX_RELEASE_KEY_ALIAS
+            keyPassword distributionSigning.OX_RELEASE_KEY_PASSWORD
         }
     }
 
@@ -92,6 +145,22 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
             ndk.debugSymbolLevel = 'FULL'
         }
+
+        performance {
+            initWith release
+            applicationIdSuffix ".beta"
+            signingConfig signingConfigs.debug
+            // Keep TL names: bot method guards and message details inspect them at runtime.
+            setProguardFiles([getDefaultProguardFile('proguard-android-optimize.txt'),
+                              file('../TMessagesProj/proguard-rules.pro'),
+                              file('../TMessagesProj/proguard-rules-beta.pro')])
+        }
+
+        distribution {
+            initWith performance
+            matchingFallbacks = ['performance']
+            signingConfig signingConfigs.distribution
+        }
     }
 
     sourceSets.debug {
@@ -104,6 +173,14 @@ android {
 
     sourceSets.release {
         manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
+    }
+
+    sourceSets.performance {
+        manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
+    }
+
+    sourceSets.distribution {
+        manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
     }
 
     flavorDimensions "minApi"
@@ -157,6 +234,11 @@ android {
     defaultConfig.versionCode = Integer.parseInt(APP_VERSION_CODE)
 
     applicationVariants.all { variant ->
+        if (variant.buildType.name == 'distribution') {
+            variant.preBuildProvider.configure {
+                dependsOn validateDistributionSigning
+            }
+        }
         variant.outputs.all { output ->
             outputFileName = "app.apk"
             output.versionCodeOverride = defaultConfig.versionCode * 10 + variant.productFlavors.get(0).abiVersionCode
@@ -196,6 +278,10 @@ android {
     lintOptions {
         checkReleaseBuilds false
     }
+}
+
+tasks.matching { it.name == 'validateSigningAfatDistribution' }.configureEach {
+    dependsOn validateDistributionSigning
 }
 
 apply plugin: 'com.google.gms.google-services'

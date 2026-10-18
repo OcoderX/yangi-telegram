@@ -23,4 +23,6 @@
     <string name="AyuDrawerSync">OcoderX-sync</string>
     <string name="AyuDrawerAllSettings">Все настройки OcoderX</string>
     <string name="OxMenuDownloadManager">Менеджер загрузок</string>
+    <string name="MyProfile">Мой профиль</string>
+    <string name="ChangeEmojiStatus">Изменить статус</string>
 </resources>

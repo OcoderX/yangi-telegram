@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxPostStatsRefresh">Обновить статистику</string>
+    <string name="OxPostStatsCopy">Скопировать отчёт</string>
+    <string name="OxPostStatsCopied">Статистика скопирована</string>
+    <string name="OxPostStatsTotalShares">Всего пересылок</string>
+    <string name="OxPostStatsComments">Комментарии</string>
+    <string name="OxPostStatsPrivateEstimate">Другие пересылки (оценка)</string>
+    <string name="OxPostStatsCached">Показаны счётчики, сохранённые с публикацией.</string>
+    <string name="OxPostStatsRefreshing">Обновление счётчиков. Сохранённые значения остаются видимыми.</string>
+    <string name="OxPostStatsCurrent">Счётчики публикации обновлены через Telegram.</string>
+    <string name="OxPostStatsRefreshFailed">Не удалось обновить счётчики. Показаны сохранённые значения. Нажмите «Обновить», чтобы повторить.</string>
+    <string name="OxPostStatsLoadingDetails">Загрузка подробной статистики…</string>
+    <string name="OxPostStatsNoAccess">Основные счётчики доступны. Telegram предоставляет графики и подробности публичных пересылок только аккаунтам с доступом к статистике.</string>
+    <string name="OxPostStatsDetailsFailed">Подробная статистика недоступна или доступ отклонён. Основные счётчики остаются видимыми. Нажмите «Обновить», чтобы повторить.</string>
+    <string name="OxPostStatsDetailsReady">Подробная статистика получена из Telegram.</string>
+    <string name="OxPostStatsForwardsFailed">Подробности публичных пересылок загружены не полностью. Нажмите «Обновить», чтобы повторить.</string>
+    <string name="OxPostStatsGraphFailed">Не удалось загрузить график. Обновите статистику, чтобы повторить.</string>
+    <string name="OxPostStatsNoGraphs">У Telegram пока нет данных для графиков этой публикации.</string>
+    <string name="OxPostStatsPublished">Опубликовано: %1$s</string>
+    <string name="OxPostStatsUpdated">Счётчики обновлены: %1$s</string>
+    <string name="OxPostStatsRates">Активность на просмотр</string>
+    <string name="OxPostStatsReactionRate">Реакции / просмотры</string>
+    <string name="OxPostStatsShareRate">Пересылки / просмотры</string>
+    <string name="OxPostStatsEngagementRate">Все действия / просмотры</string>
+    <string name="OxPostStatsRateExplanation">Каждый процент = действия ÷ просмотры × 100. Все действия = реакции + пересылки + комментарии. Это действия, а не уникальные люди; результат может превышать 100%. При нулевом или неизвестном числе просмотров процент недоступен (—).</string>
+    <string name="OxPostStatsPrivateExplanation">Другие пересылки = все пересылки − публичные пересылки по данным Telegram. Это оценка, а не список личных получателей. Неизвестные или несогласованные значения показаны как —.</string>
+    <string name="OxPostStatsReactionBreakdown">Состав реакций</string>
+    <string name="OxPostStatsReactionExplanation">Каждый процент — доля от всех реакций. В платных реакциях считаются Звёзды, а не люди.</string>
+    <string name="OxPostStatsNoReactions">Подробности реакций недоступны.</string>
+    <string name="OxPostStatsPaidReaction">Платные реакции</string>
+    <string name="OxPostStatsCustomReaction">Пользовательский эмодзи</string>
+</resources>

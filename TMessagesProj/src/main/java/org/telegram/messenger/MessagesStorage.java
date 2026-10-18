@@ -2124,6 +2124,8 @@ public class MessagesStorage extends BaseController {
                 cursor.dispose();
                 cursor = null;
                 if (!mids.isEmpty()) {
+                    //ayu: deleting a saved sub-dialog is a deliberate action in this app - real deletion
+                    org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, selfId, mids);
                     markMessagesAsDeletedInternal(selfId, mids, true, 0, 0);
                     updateDialogsWithDeletedMessages(selfId, -selfId, mids, null);
                     AndroidUtilities.runOnUIThread(() -> {
@@ -4293,6 +4295,9 @@ public class MessagesStorage extends BaseController {
                     getFileLoader().cancelLoadFiles(namesToDelete);
                     getMessagesController().markDialogMessageAsDeleted(dialogId, mids);
                 });
+                //ayu: "delete all messages from this user" is started by the user in this app, so it
+                //is a real deletion - the anti-delete must not turn those messages into ghosts
+                org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, mids);
                 markMessagesAsDeletedInternal(dialogId, mids, false, 0, 0);
                 updateDialogsWithDeletedMessagesInternal(dialogId, DialogObject.isChatDialog(dialogId) ? -dialogId : 0, mids, null);
                 getFileLoader().deleteFiles(filesToDelete, 0);

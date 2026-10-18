@@ -2683,6 +2683,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                                         final long dialogId = MessageObject.getPeerId(newMsgObj1.peer_id);
                                                         final ArrayList<Integer> messagesToDelete = new ArrayList<>(1);
                                                         messagesToDelete.add(newMsgObj1.id);
+                                                        //ayu: the ephemeral message is removed by this client right after it was sent - a real
+                                                        //deletion, not something the anti-delete should keep as a "deleted" ghost
+                                                        org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, messagesToDelete);
                                                         getMessagesStorage().markMessagesAsDeleted(dialogId, messagesToDelete, false, false, mode, (int) MessageObject.getTopicId(currentAccount, newMsgObj1, 0));
                                                         getMessagesStorage().updateDialogsWithDeletedMessages(dialogId, -dialogId, messagesToDelete, null);
                                                         AndroidUtilities.runOnUIThread(() -> getMessagesController().markDialogMessageAsDeleted(dialogId, messagesToDelete));
@@ -7708,6 +7711,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                     final long dialogId = MessageObject.getPeerId(newMsgObj.peer_id);
                                     final ArrayList<Integer> messagesToDelete = new ArrayList<>(1);
                                     messagesToDelete.add(newMsgObj.id);
+                                    //ayu: the ephemeral message is removed by this client right after it was sent - a real
+                                    //deletion, not something the anti-delete should keep as a "deleted" ghost
+                                    org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, messagesToDelete);
                                     getMessagesStorage().markMessagesAsDeleted(dialogId, messagesToDelete, false, false, mode, (int) MessageObject.getTopicId(currentAccount, newMsgObj, 0));
                                     getMessagesStorage().updateDialogsWithDeletedMessages(dialogId, -dialogId, messagesToDelete, null);
                                     AndroidUtilities.runOnUIThread(() -> getMessagesController().markDialogMessageAsDeleted(dialogId, messagesToDelete));
@@ -8272,6 +8278,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                         final long dialogId = MessageObject.getPeerId(newMsgObj.peer_id);
                                         final ArrayList<Integer> messagesToDelete = new ArrayList<>(1);
                                         messagesToDelete.add(newMsgObj.id);
+                                        //ayu: the ephemeral message is removed by this client right after it was sent - a real
+                                        //deletion, not something the anti-delete should keep as a "deleted" ghost
+                                        org.telegram.messenger.ayu.antidelete.AyuAntiDelete.markLocalDeletion(currentAccount, dialogId, messagesToDelete);
                                         getMessagesStorage().markMessagesAsDeleted(dialogId, messagesToDelete, false, false, mode, (int) MessageObject.getTopicId(currentAccount, newMsgObj, 0));
                                         getMessagesStorage().updateDialogsWithDeletedMessages(dialogId, -dialogId, messagesToDelete, null);
                                         AndroidUtilities.runOnUIThread(() -> getMessagesController().markDialogMessageAsDeleted(dialogId, messagesToDelete));

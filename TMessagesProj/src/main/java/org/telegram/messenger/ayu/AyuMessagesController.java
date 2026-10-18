@@ -544,12 +544,6 @@ public class AyuMessagesController {
             if (message == null) {
                 continue;
             }
-            //ayu: rows archived before "keep my own deleted messages" was turned off must not come
-            //back into the chat either - the setting is applied on read, so it stays reversible
-            if (!AyuAntiDeleteConfig.keepOwnDeleted
-                    && org.telegram.messenger.ayu.antidelete.AyuAntiDelete.isOwnMessage(currentAccount, message)) {
-                continue;
-            }
             result.add(message);
         }
         return result;
@@ -904,8 +898,8 @@ public class AyuMessagesController {
     }
 
     /**
-     * ayu: {@link #shouldSave} plus everything that only applies to the anti-delete (a deletion the
-     * user started on this device, own outgoing messages when {@code keepOwnDeleted} is off).
+     * ayu: {@link #shouldSave} plus everything that only applies to the anti-delete (currently a
+     * single rule: a deletion the user started inside this app is a real deletion and is not kept).
      * <p>
      * Deliberately <b>not</b> folded into {@link #shouldSave}: that one also guards the edit-history
      * capture, which must keep working for our own messages.

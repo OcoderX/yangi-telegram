@@ -111,8 +111,7 @@
 -keep class ru.noties.jlatexmath.** { *; }
 -dontwarn org.scilab.forge.jlatexmath.**
 
-# Use -keep to explicitly keep any other classes shrinking would remove
--dontoptimize
+# Optimization is selected by each build type's default ProGuard configuration.
 -dontobfuscate
 # AyuGram: keep feature classes, MessageDetailsSheet dumps fields reflectively
 -keep class org.telegram.messenger.ayu.** { *; }

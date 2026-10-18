@@ -81,6 +81,25 @@ dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 }
 
+def botLoginAppIdValue = (getProps("BOT_LOGIN_APP_ID") ?: "").trim()
+def botLoginAppHash = (getProps("BOT_LOGIN_APP_HASH") ?: "").trim()
+def botLoginAppId = 0
+if (botLoginAppIdValue == "0") {
+    botLoginAppIdValue = ""
+}
+if (botLoginAppIdValue || botLoginAppHash) {
+    if (!botLoginAppIdValue || !botLoginAppHash) {
+        throw new GradleException("Set both BOT_LOGIN_APP_ID and BOT_LOGIN_APP_HASH in local.properties, or leave both unset.")
+    }
+    if (!(botLoginAppIdValue ==~ /[0-9]+/) || !botLoginAppIdValue.isInteger() || botLoginAppIdValue.toInteger() <= 0) {
+        throw new GradleException("BOT_LOGIN_APP_ID in local.properties must be a positive decimal integer no greater than 2147483647.")
+    }
+    if (!(botLoginAppHash ==~ /[0-9a-fA-F]{32}/)) {
+        throw new GradleException("BOT_LOGIN_APP_HASH in local.properties must contain exactly 32 hexadecimal characters from my.telegram.org/apps.")
+    }
+    botLoginAppId = botLoginAppIdValue.toInteger()
+}
+
 def isWindows = String.valueOf(DefaultNativePlatform.currentOperatingSystem.toFamilyName() == OperatingSystemFamily.WINDOWS)
 android {
     compileSdkVersion 35
@@ -112,6 +131,9 @@ android {
     defaultConfig {
         minSdkVersion 21
         targetSdkVersion 35
+
+        buildConfigField "int", "BOT_LOGIN_APP_ID", botLoginAppId.toString()
+        buildConfigField "String", "BOT_LOGIN_APP_HASH", "\"" + botLoginAppHash + "\""
 
         vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 
@@ -223,6 +245,12 @@ android {
             buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
             buildConfigField "int", "VERSION_NUM", "7"
         }
+
+        performance {
+            initWith release
+            // Optimize once in the application, with the complete dependency graph.
+            minifyEnabled false
+        }
     }
 
     namespace 'org.telegram.messenger'
@@ -244,7 +272,7 @@ apply plugin: 'com.google.gms.google-services'
 task checkVisibility {
     doFirst {
         def isPrivateBuild = project.gradle.startParameter.taskNames.find {
-            it.contains("HA_private") || it.contains("HA_hardcore") || it.contains("Debug") || it.contains("Release")
+            it.contains("HA_private") || it.contains("HA_hardcore") || it.contains("Debug") || it.contains("Release") || it.contains("Performance")
         }
         def isPublicAllowed = !project.hasProperty("IS_PRIVATE") || !project.property("IS_PRIVATE").toBoolean()
         if (!isPrivateBuild && !isPublicAllowed) {

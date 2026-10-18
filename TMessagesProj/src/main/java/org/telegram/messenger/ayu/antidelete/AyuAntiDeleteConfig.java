@@ -45,15 +45,6 @@ public class AyuAntiDeleteConfig {
     /** keep the tail of a dialog when the whole dialog is deleted / left (ayu: off by default, see above) */
     public static boolean keepOnDeleteDialog = false;
     /**
-     * keep our own outgoing messages when they are deleted somewhere else (typically "delete for
-     * everyone" from another device or another client).
-     * <p>
-     * ayu: off by default - a message the user wrote themselves coming back as
-     * "🧹 deleted by author" is confusing and can not be explained by the feature's purpose
-     * (seeing what the <i>other</i> side deleted).
-     */
-    public static boolean keepOwnDeleted = false;
-    /**
      * put the saved photo copies back into the place {@code FileLoader} looks at, so a restored photo
      * still opens after Telegram evicted it from its cache. Documents do not need this (they are
      * resolved through {@code TLRPC.Document.localPath} / {@code attachPath}).
@@ -73,7 +64,6 @@ public class AyuAntiDeleteConfig {
             dimDeletedMessages = preferences.getBoolean("dimDeletedMessages", true);
             keepOnClearHistory = preferences.getBoolean("keepOnClearHistory", false);
             keepOnDeleteDialog = preferences.getBoolean("keepOnDeleteDialog", false);
-            keepOwnDeleted = preferences.getBoolean("keepOwnDeleted", false);
             restoreMediaToCache = preferences.getBoolean("restoreMediaToCache", true);
             excludedDialogs = parse(preferences.getString("excludedDialogs", ""));
         } catch (Throwable e) {
@@ -143,12 +133,6 @@ public class AyuAntiDeleteConfig {
     public static void setKeepOnDeleteDialog(boolean v) {
         keepOnDeleteDialog = v;
         putBoolean("keepOnDeleteDialog", v);
-    }
-
-    /** ayu: "also keep my own messages when they are deleted elsewhere" */
-    public static void setKeepOwnDeleted(boolean v) {
-        keepOwnDeleted = v;
-        putBoolean("keepOwnDeleted", v);
     }
 
     public static void setRestoreMediaToCache(boolean v) {
