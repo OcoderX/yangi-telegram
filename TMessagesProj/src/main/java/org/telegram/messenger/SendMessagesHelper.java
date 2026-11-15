@@ -1534,6 +1534,35 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         getNotificationCenter().postNotificationName(NotificationCenter.replaceMessagesObjects, object.getDialogId(), arrayList);
     }
 
+    boolean cancelVideoSendingFromNotification(MessageObject object, long owner, long dialogId, int messageId, long randomId, String path) {
+        if (object == null || object.messageOwner == null || object.currentAccount != currentAccount
+                || !getUserConfig().isClientActivated() || getUserConfig().getClientUserId() != owner || owner == 0
+                || object.getDialogId() != dialogId || object.getId() != messageId
+                || object.messageOwner.random_id != randomId || !TextUtils.equals(object.messageOwner.attachPath, path)) {
+            return false;
+        }
+        boolean pending = sendingMessages.get(messageId) == object.messageOwner
+                || editingMessages.get(messageId) == object.messageOwner;
+        if (!pending) {
+            for (ArrayList<DelayedMessage> messages : delayedMessages.values()) {
+                for (DelayedMessage message : messages) {
+                    if (message.obj == object || message.messageObjects != null && message.messageObjects.contains(object)) {
+                        pending = true;
+                        break;
+                    }
+                }
+                if (pending) {
+                    break;
+                }
+            }
+        }
+        if (!pending) {
+            return false;
+        }
+        cancelSendingMessage(object);
+        return true;
+    }
+
     public void cancelSendingMessage(MessageObject object) {
         ArrayList<MessageObject> arrayList = new ArrayList<>();
         arrayList.add(object);
@@ -4123,8 +4152,16 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     public boolean isSendingCallback(MessageObject messageObject, TLRPC.KeyboardButton button) {
+        return isSendingCallback(getCallbackKey(messageObject, button));
+    }
+
+    public boolean isSendingCallback(String callbackKey) {
+        return callbackKey != null && waitingForCallback.containsKey(callbackKey);
+    }
+
+    public static String getCallbackKey(MessageObject messageObject, TLRPC.KeyboardButton button) {
         if (messageObject == null || button == null) {
-            return false;
+            return null;
         }
         int type;
         if (button instanceof TLRPC.TL_keyboardButtonUrlAuth) {
@@ -4136,8 +4173,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         } else {
             type = 0;
         }
-        final String key = messageObject.getDialogId() + "_" + messageObject.getId() + "_" + Utilities.bytesToHex(button.data) + "_" + type;
-        return waitingForCallback.containsKey(key);
+        return messageObject.getDialogId() + "_" + messageObject.getId() + "_" + Utilities.bytesToHex(button.data) + "_" + type;
     }
 
     public void sendGame(TLRPC.InputPeer peer, TLRPC.TL_inputMediaGame game, long random_id, final long taskId) {
@@ -4330,12 +4366,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             params.put("pollMediaIndex", Integer.toString(pollIndex));
         }
 
-        if (AyuConfig.useScheduledMessages && scheduleDate == 0 && encryptedChat == null && retryMessageObject == null
+        if (org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).useScheduledMessages && scheduleDate == 0 && encryptedChat == null && retryMessageObject == null
                 && quick_reply_shortcut == null && quick_reply_shortcut_id == 0 && peer != myId && !DialogObject.isEncryptedDialog(peer)) {
             // ghost mode: send everything as a scheduled message so that no "online" status leaks
             final int ayuDelay = AyuGhostHelper.getScheduledDelay(document, photo, videoEditedInfo, path);
             scheduleDate = getConnectionsManager().getCurrentTime() + ayuDelay;
-            AyuState.markAutomaticallyScheduled(peer, ayuDelay);
+            AyuState.markAutomaticallyScheduled(currentAccount, peer, ayuDelay);
         }
 
         try {
@@ -11175,7 +11211,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                     document.size = videoEditedInfo.estimatedSize;
                                 } else {
                                     if (temp.exists()) {
-                                        document.size = (int) temp.length();
+                                        document.size = temp.length();
                                     }
                                     fillVideoAttribute(info.path, attributeVideo, null);
                                 }
@@ -12012,7 +12048,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         document.size = videoEditedInfo.estimatedSize;
                     } else {
                         if (temp.exists()) {
-                            document.size = (int) temp.length();
+                            document.size = temp.length();
                         }
                         fillVideoAttribute(videoPath, attributeVideo, null);
                     }

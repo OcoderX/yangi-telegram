@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxHiddenTitle">Hidden chats</string>
+    <string name="OxHiddenHideChat">Hide chat</string>
+    <string name="OxHiddenUnhideChat">Unhide chat</string>
+    <string name="OxHiddenHideInfo">This chat will appear only in Hidden chats. Its notifications will be hidden on this device. Messages remain in your Telegram account.</string>
+    <string name="OxHiddenUnhideInfo">Move this chat back to the normal chat list?</string>
+    <string name="OxHiddenSetup">Set hidden chats password</string>
+    <string name="OxHiddenSetupInfo">Choose a separate password of 4–256 characters and confirm it. This password cannot be recovered. Hiding applies only on this device; it does not encrypt messages or hide them in other Telegram apps.</string>
+    <string name="OxHiddenPassword">Hidden chats password</string>
+    <string name="OxHiddenPasswordInfo">Enter the separate password for hidden chats.</string>
+    <string name="OxHiddenOldPassword">Current password</string>
+    <string name="OxHiddenNewPassword">New password</string>
+    <string name="OxHiddenConfirmPassword">Confirm new password</string>
+    <string name="OxHiddenChangePassword">Change password</string>
+    <string name="OxHiddenChangeInfo">Enter your current password, then set and confirm a new password.</string>
+    <string name="OxHiddenUnlock">Unlock hidden chats</string>
+    <string name="OxHiddenLock">Lock</string>
+    <string name="OxHiddenAddChat">Add chat</string>
+    <string name="OxHiddenSettings">Hidden chats settings</string>
+    <string name="OxHiddenEmpty">No hidden chats yet. Tap Add chat to choose one.</string>
+    <string name="OxHiddenListInfo">Long press a chat to unhide it. Hidden chats lock when the app goes into the background.</string>
+    <string name="OxHiddenUnhideHint">Long press to unhide</string>
+    <string name="OxHiddenUnavailableChat">Chat unavailable</string>
+    <string name="OxHiddenBiometric">Biometrics</string>
+    <string name="OxHiddenEnableBiometric">Enable biometric unlock</string>
+    <string name="OxHiddenDisableBiometric">Disable biometric unlock</string>
+    <string name="OxHiddenBiometricUnavailable">Strong biometric authentication is not available. Set up fingerprint or face authentication in your device settings, then try again.</string>
+    <string name="OxHiddenUsePassword">Use password</string>
+    <string name="OxHiddenPasswordFallback">You can enter your password to continue.</string>
+    <string name="OxHiddenDisable">Disable hidden chats</string>
+    <string name="OxHiddenDisableInfo">All hidden chats will return to the normal list. Your messages will remain. Enter your password in the next step to confirm.</string>
+    <string name="OxHiddenPasswordMismatch">Passwords do not match.</string>
+    <string name="OxHiddenPasswordLength">Use 4–256 characters.</string>
+    <string name="OxHiddenWrongPassword">Incorrect password. Try again.</string>
+    <string name="OxHiddenTryLater">Too many attempts. Wait a moment, then try again.</string>
+    <string name="OxHiddenChecking">Checking…</string>
+    <string name="OxHiddenStorageError">Could not save or read hidden chats settings. Try again.</string>
+    <string name="OxHiddenCorrupt">Hidden chats settings could not be read. Chats remain protected. Restore the app data from a trusted backup.</string>
+    <string name="OxHiddenSessionExpired">Hidden chats were locked. Enter your password again.</string>
+</resources>
+

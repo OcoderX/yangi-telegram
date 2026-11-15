@@ -20,7 +20,7 @@
     <string name="AyuIslandGhostOn">Ghost mode is on</string>
     <string name="AyuIslandGhostInfo">Read receipts, online status and typing are hidden</string>
     <string name="AyuIslandGhostOff">Turn off</string>
-    <!-- Ox-gram: pro island - uploads, per-transfer controls, dismiss, gestures -->
+    <!-- OcoderX-gram: pro island - uploads, per-transfer controls, dismiss, gestures -->
     <string name="AyuIslandUploads">Uploads</string>
     <string name="AyuIslandUploadingFiles_one">Uploading %1$d file</string>
     <string name="AyuIslandUploadingFiles_other">Uploading %1$d files</string>

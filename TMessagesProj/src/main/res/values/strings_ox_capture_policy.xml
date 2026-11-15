@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxCaptureScopeInfo">Deleted messages and edit history are saved automatically in personal chats, groups and channels. Bots require enabling in the chat menu. Individual chat exclusions and global saving switches still apply. Only messages received by this app can be kept; existing archives are preserved.</string>
+    <string name="OxCaptureMediaInfo">Global media saving must be on. Individually enabled chats also keep their media; the categories below apply to chats enabled by default.</string>
+    <string name="OxCaptureEnable">Save deleted and edited messages</string>
+    <string name="OxCaptureDisable">Stop saving deleted and edited messages</string>
+    <string name="OxCaptureEnableWholeChat">Enable deleted/edit history for whole chat</string>
+    <string name="OxCaptureDisableWholeChat">Disable deleted/edit history for whole chat</string>
+    <string name="OxCaptureEnabledInfo">Future deleted messages and edit history are enabled for this whole chat, subject to global saving switches. Existing archives are kept.</string>
+    <string name="OxCaptureDisabledInfo">Future deleted messages and edit history will not be saved for this whole chat. Existing archives are kept.</string>
+    <string name="OxCaptureEnabledChats">Enabled for this account</string>
+    <string name="OxCaptureDisabledChats">Disabled for this account</string>
+    <string name="OxCaptureEnabledChatsInfo">Tap a chat to stop future deleted-message and edit-history capture for this account. Global saving switches still apply.</string>
+    <string name="OxCaptureDisabledChatsInfo">Tap a chat to enable future deleted-message and edit-history capture for this account. Global saving switches still apply.</string>
+    <string name="OxCaptureLegacyChats">Previous exclusions</string>
+    <string name="OxCaptureLegacyInfo">Previous exclusions are preserved for all accounts. Individual choices above take precedence for this account. Tap a chat here to enable its future deleted-message and edit-history capture for this account.</string>
+</resources>

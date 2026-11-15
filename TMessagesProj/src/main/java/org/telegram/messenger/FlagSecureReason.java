@@ -11,10 +11,17 @@ public class FlagSecureReason {
 
     private final Window window;
     private final FlagSecureCondition condition;
+    private final boolean mandatory;
 
     public FlagSecureReason(Window window, FlagSecureCondition condition) {
+        this(window, condition, false);
+    }
+
+    /** Local privacy locks must remain secure even when content capture is enabled. */
+    public FlagSecureReason(Window window, FlagSecureCondition condition, boolean mandatory) {
         this.window = window;
         this.condition = condition;
+        this.mandatory = mandatory;
     }
 
     private boolean attached = false;
@@ -24,7 +31,7 @@ public class FlagSecureReason {
         boolean newValue = attached && condition != null && condition.run();
         // AyuGram: allow screenshots. This single early-out covers every FlagSecureReason,
         // i.e. secret chats / secret (TTL) media as well as noforwards-protected content.
-        if (org.telegram.messenger.ayu.AyuConfig.allowScreenshotsInSecretChats) {
+        if (!mandatory && org.telegram.messenger.ayu.AyuConfig.allowScreenshotsInSecretChats) {
             newValue = false;
         }
         if (newValue != value) {

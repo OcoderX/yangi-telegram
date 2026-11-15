@@ -81,6 +81,7 @@ import org.telegram.ui.Stories.DialogStoriesCell;
 import org.telegram.ui.Stories.StoriesController;
 import org.telegram.ui.Stories.StoriesListPlaceProvider;
 import org.telegram.ui.community.CommunityUtils;
+import org.telegram.ui.ayu.OxUnreadByThemConfig;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -115,53 +116,17 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             VIEW_TYPE_DIALOG_COMMUNITY = 23,
             VIEW_TYPE_UNREAD_BY_THEM = 24;
 
-    /** Folder (dialog filter) ids whose "unread by them" toggle is switched on. Session-scoped. */
-    public static final HashSet<Integer> unreadByThemFolders = new HashSet<>();
     private boolean hasUnreadByThemToggle;
+    private int unreadByThemTogglePosition = -1;
 
-    public static boolean isUnreadByThemActive(MessagesController.DialogFilter filter) {
-        return filter != null && !unreadByThemFolders.isEmpty() && unreadByThemFolders.contains(filter.id);
+    private boolean canShowUnreadByThemToggle() {
+        return !isOnlySelect && requestPeerType == null && communityId == 0 && parentFragment != null
+                && parentFragment.supportsUnreadByThem(dialogsType, folderId);
     }
 
     public boolean isUnreadByThemActive() {
-        return isUnreadByThemActive(getCurrentFilter());
-    }
-
-    /**
-     * Keeps only chats whose last message is outgoing, sent, and not yet read by the
-     * other side (same rule DialogCell uses to draw a single tick). Sorted newest first.
-     */
-    public static ArrayList<TLRPC.Dialog> filterUnreadByThem(int currentAccount, ArrayList<TLRPC.Dialog> source) {
-        ArrayList<TLRPC.Dialog> result = new ArrayList<>();
-        if (source == null) {
-            return result;
-        }
-        MessagesController messagesController = MessagesController.getInstance(currentAccount);
-        long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-        for (int i = 0, n = source.size(); i < n; i++) {
-            TLRPC.Dialog dialog = source.get(i);
-            if (dialog == null || dialog.id == selfId || dialog.isFolder || DialogObject.isEncryptedDialog(dialog.id)) {
-                continue;
-            }
-            if (DialogObject.isChatDialog(dialog.id)) {
-                TLRPC.Chat chat = messagesController.getChat(-dialog.id);
-                if (chat == null || ChatObject.isChannel(chat) && !chat.megagroup) {
-                    continue;
-                }
-            }
-            ArrayList<MessageObject> messages = messagesController.dialogMessage.get(dialog.id);
-            MessageObject message = messages == null || messages.isEmpty() ? null : messages.get(0);
-            if (message == null || !message.isOut() || !message.isSent() || message.messageOwner == null || message.messageOwner.action != null) {
-                continue;
-            }
-            int readOutboxMaxId = dialog.read_outbox_max_id;
-            boolean read = (readOutboxMaxId > 0 && readOutboxMaxId >= message.getId()) || !message.isUnread();
-            if (!read) {
-                result.add(dialog);
-            }
-        }
-        Collections.sort(result, (a, b) -> Integer.compare(b.last_message_date, a.last_message_date));
-        return result;
+        return canShowUnreadByThemToggle() && OxUnreadByThemConfig.isActive(currentAccount,
+                OxUnreadByThemConfig.scope(dialogsType, getCurrentFilter()));
     }
 
     private Context mContext;
@@ -234,10 +199,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     }
 
     public int fixPosition(int position) {
-        if (hasChatlistHint) {
+        if (hasUnreadByThemToggle && position > unreadByThemTogglePosition) {
             position--;
         }
-        if (hasUnreadByThemToggle) {
+        if (hasChatlistHint) {
             position--;
         }
         if (hasHints) {
@@ -261,6 +226,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     public void setDialogsType(int type) {
         dialogsType = type;
         notifyDataSetChanged();
+    }
+
+    private int getCellDialogsType() {
+        return org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType) ? DialogsActivity.DIALOGS_TYPE_DEFAULT : dialogsType;
     }
 
     public void setAllowForwardAsStories(boolean allowForwardAsStories) {
@@ -301,7 +270,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     public int fixScrollGap(RecyclerListView animationSupportListView, int p, int offset, boolean hasHiddenArchive, boolean hasStories, boolean hasTabs, boolean oppened) {
 //        int itemsToEnd = getItemCount() - p;
-        int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(dialogsType);
+        int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(getCellDialogsType());
 //        int bottom = offset + animationSupportListView.getPaddingTop() + itemsToEnd * cellHeight + itemsToEnd - 1;
         //fix height changed
         int top = offset + animationSupportListView.getPaddingTop() - p * cellHeight - p;
@@ -598,7 +567,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     }
 
     public void updateHasHints() {
-        hasHints = folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect && !MessagesController.getInstance(currentAccount).hintDialogs.isEmpty();
+        hasHints = folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect && !isUnreadByThemActive() && !MessagesController.getInstance(currentAccount).hintDialogs.isEmpty();
     }
 
     boolean isCalculatingDiff;
@@ -905,14 +874,11 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             case VIEW_TYPE_UNREAD_BY_THEM: {
                 UnreadByThemToggleCell toggleCell = new UnreadByThemToggleCell(mContext);
                 toggleCell.setOnToggle(() -> {
-                    MessagesController.DialogFilter filter = getCurrentFilter();
-                    if (filter == null) {
+                    if (!canShowUnreadByThemToggle() || dialogsListFrozen) {
                         return;
                     }
-                    if (!unreadByThemFolders.remove(filter.id)) {
-                        unreadByThemFolders.add(filter.id);
-                    }
-                    toggleCell.setActive(unreadByThemFolders.contains(filter.id));
+                    OxUnreadByThemConfig.toggle(currentAccount, OxUnreadByThemConfig.scope(dialogsType, getCurrentFilter()));
+                    toggleCell.setActive(isUnreadByThemActive());
                     notifyDataSetChanged();
                 });
                 view = toggleCell;
@@ -951,7 +917,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     public int lastDialogsEmptyType = -1;
 
     public int dialogsEmptyType() {
-        if (dialogsType == 7 || dialogsType == 8) {
+        if (dialogsType == 7 || dialogsType == 8 || org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType)) {
             if (MessagesController.getInstance(currentAccount).isDialogsEndReached(folderId)) {
                 return DialogsEmptyCell.TYPE_FILTER_NO_CHATS_TO_DISPLAY;
             } else {
@@ -1094,7 +1060,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     } else {
                         cell.setCustomMessage(null);
                     }
-                    cell.setDialog(dialog, dialogsType, folderId);
+                    cell.setDialog(dialog, getCellDialogsType(), org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType) ? dialog.folder_id : folderId);
                     cell.checkHeight();
                     if (cell.collapsed != collapsedView) {
                         cell.collapsed = collapsedView;
@@ -1110,7 +1076,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 DialogsEmptyCell cell = (DialogsEmptyCell) holder.itemView;
                 int fromDialogsEmptyType = lastDialogsEmptyType;
                 cell.setType(lastDialogsEmptyType = dialogsEmptyType(), isOnlySelect);
-                if (dialogsType != 7 && dialogsType != 8) {
+                if (dialogsType != 7 && dialogsType != 8 && !org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType)) {
                     cell.setOnUtyanAnimationEndListener(() -> parentFragment.setScrollDisabled(false));
                     cell.setOnUtyanAnimationUpdateListener(progress -> parentFragment.setContactsAlpha(progress));
                     if (!cell.isUtyanAnimationTriggered() && dialogsCount == 0) {
@@ -1288,8 +1254,19 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         ArrayList<TLRPC.Dialog> dialogs = parentFragment.getDialogsArray(currentAccount, dialogsType, folderId, false);
         int fromIndex = fixPosition(fromPosition);
         int toIndex = fixPosition(toPosition);
+        if (fromIndex < 0 || toIndex < 0 || fromIndex >= dialogs.size() || toIndex >= dialogs.size()) return;
         TLRPC.Dialog fromDialog = dialogs.get(fromIndex);
         TLRPC.Dialog toDialog = dialogs.get(toIndex);
+        boolean category = org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType);
+        ArrayList<TLRPC.Dialog> nativeDialogs = null;
+        int nativeFrom = -1, nativeTo = -1;
+        if (category) {
+            if (fromDialog.folder_id != toDialog.folder_id || !fromDialog.pinned || !toDialog.pinned) return;
+            nativeDialogs = MessagesController.getInstance(currentAccount).getDialogs(fromDialog.folder_id);
+            nativeFrom = nativeDialogs.indexOf(fromDialog);
+            nativeTo = nativeDialogs.indexOf(toDialog);
+            if (nativeFrom < 0 || nativeTo < 0) return;
+        }
         if (dialogsType == 7 || dialogsType == 8) {
             MessagesController.DialogFilter filter = MessagesController.getInstance(currentAccount).selectedDialogFilter[dialogsType == 8 ? 1 : 0];
             int idx1 = filter.pinnedDialogs.get(fromDialog.id);
@@ -1302,6 +1279,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             toDialog.pinnedNum = oldNum;
         }
         Collections.swap(dialogs, fromIndex, toIndex);
+        if (category) Collections.swap(nativeDialogs, nativeFrom, nativeTo);
         updateList(null);
     }
 
@@ -1543,7 +1521,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             int size = itemInternals.size();
-            boolean hasArchive = folderId == 0 && dialogsType == 0 && MessagesController.getInstance(currentAccount).dialogs_dict.get(DialogObject.makeFolderDialogId(1)) != null;
+            boolean hasArchive = folderId == 0 && dialogsType == 0 && !isUnreadByThemActive() && MessagesController.getInstance(currentAccount).dialogs_dict.get(DialogObject.makeFolderDialogId(1)) != null;
             View parent = (View) getParent();
             int height;
             int blurOffset = 0;
@@ -1576,17 +1554,19 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     height = AndroidUtilities.displaySize.y - ActionBar.getCurrentActionBarHeight() - AndroidUtilities.statusBarHeight;
                 }
                 height -= blurOffset;
-                int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(dialogsType);
+                int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(getCellDialogsType());
                 int dialogsHeight = 0;
                 for (int i = 0; i < size; i++) {
                     if (itemInternals.get(i).viewType == VIEW_TYPE_DIALOG) {
                         if (itemInternals.get(i).isForumCell && !collapsedView) {
-                            dialogsHeight += AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91) + DialogCell.getCardExtraHeight(dialogsType);
+                            dialogsHeight += AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91) + DialogCell.getCardExtraHeight(getCellDialogsType());
                         } else {
                             dialogsHeight += cellHeight;
                         }
                     } else  if (itemInternals.get(i).viewType == VIEW_TYPE_FLICKER) {
                         dialogsHeight += cellHeight;
+                    } else if (itemInternals.get(i).viewType == VIEW_TYPE_UNREAD_BY_THEM) {
+                        dialogsHeight += AndroidUtilities.dp(48);
                     }
                 }
                 dialogsHeight += size - 1;
@@ -1697,6 +1677,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         if (communityId != 0) {
             array = messagesController.getDialogsByCommunity(communityId);
         } else {
+            parentFragment.prepareUnreadByThemDialogs(currentAccount, dialogsType, folderId, dialogsListFrozen);
             array = parentFragment.getDialogsArray(currentAccount, dialogsType, folderId, dialogsListFrozen);
             if (array == null) {
                 array = new ArrayList<>();
@@ -1704,13 +1685,14 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         }
 
         dialogsCount = array.size();
+        if (org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType) || isUnreadByThemActive()) onlineContacts = null;
         isEmpty = false;
-        if (dialogsCount == 0 && parentFragment.isArchive()) {
+        if (dialogsCount == 0 && parentFragment.isArchive() && !org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType)) {
             itemInternals.add(new ItemInternal(VIEW_TYPE_ARCHIVE_FULLSCREEN));
             return;
         }
 
-        if (!hasHints && dialogsType == 0 && folderId == 0 && messagesController.isDialogsEndReached(folderId) && !forceUpdatingContacts) {
+        if (!isUnreadByThemActive() && !hasHints && dialogsType == 0 && folderId == 0 && messagesController.isDialogsEndReached(folderId) && !forceUpdatingContacts) {
             if (messagesController.getAllFoldersDialogsCount() <= 10 && ContactsController.getInstance(currentAccount).doneLoadingContacts && !ContactsController.getInstance(currentAccount).contacts.isEmpty()) {
                 onlineContacts = new ArrayList<>(ContactsController.getInstance(currentAccount).contacts);
                 long selfId = UserConfig.getInstance(currentAccount).clientUserId;
@@ -1733,7 +1715,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         }
 
         final MessagesController.DialogFilter filter = getCurrentFilter();
-        if ((filter == null || filter.isDefault()) && parentFragment != null && parentFragment.isReplyTo && parentFragment.replyMessageAuthor != 0) {
+        if (!org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType) && (filter == null || filter.isDefault()) && parentFragment != null && parentFragment.isReplyTo && parentFragment.replyMessageAuthor != 0) {
             itemInternals.add(new ItemInternal(VIEW_TYPE_GRAY_SECTION));
             TLRPC.Dialog foundDialog = null;
             for (int i = 0; i < array.size(); ++i) {
@@ -1777,9 +1759,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             }
         }
         hasUnreadByThemToggle = false;
-        if ((dialogsType == 7 || dialogsType == 8) && filter != null && !isOnlySelect && communityId == 0
-                && parentFragment != null && parentFragment.getType() == DialogsActivity.DIALOGS_TYPE_DEFAULT) {
+        unreadByThemTogglePosition = -1;
+        if (canShowUnreadByThemToggle()) {
             hasUnreadByThemToggle = true;
+            unreadByThemTogglePosition = itemInternals.size();
             itemInternals.add(new ItemInternal(VIEW_TYPE_UNREAD_BY_THEM));
         }
 
@@ -1796,11 +1779,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 }
             }
             itemInternals.add(new ItemInternal(VIEW_TYPE_LAST_EMPTY));
+            placeUnreadByThemToggle();
             return;
         }
 
         boolean stopUpdate = false;
-        if (dialogsCount == 0 && forceUpdatingContacts) {
+        if (dialogsCount == 0 && forceUpdatingContacts && !isUnreadByThemActive() && !org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType)) {
             isEmpty = true;
             if (requestPeerType != null) {
                 itemInternals.add(new ItemInternal(VIEW_TYPE_REQUIRED_EMPTY));
@@ -1863,7 +1847,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 }
             }
 
-            if (communityId == 0 && !forceShowEmptyCell && dialogsType != 7 && dialogsType != 8 && !MessagesController.getInstance(currentAccount).isDialogsEndReached(folderId)) {
+            if (communityId == 0 && !forceShowEmptyCell && dialogsType != 7 && dialogsType != 8 && !org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType) && !MessagesController.getInstance(currentAccount).isDialogsEndReached(folderId)) {
                 if (dialogsCount != 0) {
                     itemInternals.add(new ItemInternal(VIEW_TYPE_FLICKER));
                 }
@@ -1892,14 +1876,32 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 }
             }
         }
+        placeUnreadByThemToggle();
+    }
+
+    /** Keep the archive at its original position so native archive pull/hide still works. */
+    private void placeUnreadByThemToggle() {
+        if (!hasUnreadByThemToggle) return;
+        int togglePosition = -1, archivePosition = -1;
+        for (int i = 0; i < itemInternals.size(); i++) {
+            ItemInternal item = itemInternals.get(i);
+            if (item.viewType == VIEW_TYPE_UNREAD_BY_THEM) togglePosition = i;
+            if (item.dialog != null && item.dialog.isFolder) archivePosition = i;
+        }
+        if (togglePosition >= 0 && archivePosition > togglePosition && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT) {
+            ItemInternal toggle = itemInternals.remove(togglePosition);
+            itemInternals.add(archivePosition, toggle);
+            togglePosition = archivePosition;
+        }
+        unreadByThemTogglePosition = togglePosition;
     }
 
     public int getItemHeight(int position) {
         if (itemInternals.get(position).viewType == VIEW_TYPE_DIALOG) {
             if (itemInternals.get(position).isForumCell && !collapsedView) {
-                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91) + 1 + DialogCell.getCardExtraHeight(dialogsType);
+                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91) + 1 + DialogCell.getCardExtraHeight(getCellDialogsType());
             } else {
-                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + 1 + DialogCell.getCardExtraHeight(dialogsType);
+                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + 1 + DialogCell.getCardExtraHeight(getCellDialogsType());
             }
         }
         return 0;

@@ -198,6 +198,7 @@ import org.telegram.messenger.utils.PhotoUtilities;
 import org.telegram.messenger.utils.RectFMergeBounding;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
 import org.telegram.messenger.utils.tlutils.TlUtils;
+import org.telegram.messenger.utils.tlutils.TLKeyboardHelper;
 import org.telegram.messenger.voip.VoIPService;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
@@ -205,6 +206,7 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_account;
 import org.telegram.tgnet.tl.TL_bots;
 import org.telegram.tgnet.tl.TL_iv;
+import org.telegram.tgnet.tl.TL_keyboard;
 import org.telegram.tgnet.tl.TL_phone;
 import org.telegram.tgnet.tl.TL_stats;
 import org.telegram.tgnet.tl.TL_stories;
@@ -475,6 +477,25 @@ public class ChatActivity extends BaseFragment implements
     private HintView2 guestBotHintView;
     private HintView2 bottomSuggestHintView;
     private ChatActivityTopPanelLayout topPanelLayout;
+    private View dynamicIslandLane;
+    private boolean dynamicIslandTransition;
+
+    public View getDynamicIslandLane() {
+        return dynamicIslandLane;
+    }
+
+    public boolean canHostDynamicIsland() {
+        return !isPaused() && !dynamicIslandTransition && !inPreviewMode && !isInsideContainer
+            && dynamicIslandLane != null && topPanelLayout != null
+            && topPanelLayout.getVisibility() == View.VISIBLE;
+    }
+
+    public void setDynamicIslandLaneVisible(boolean visible) {
+        if (topPanelLayout == null || dynamicIslandLane == null
+            || topPanelLayout.isViewVisible(dynamicIslandLane) == visible) return;
+        topPanelLayout.setViewVisible(dynamicIslandLane, visible, false);
+        invalidateChatListViewTopPadding();
+    }
 
     private boolean ignoreItemAnimation;
     private ChatActivityChannelButtonsLayout bottomChannelButtonsLayout;
@@ -659,6 +680,9 @@ public class ChatActivity extends BaseFragment implements
     private int pinBullerinTag;
     protected boolean openKeyboardOnAttachMenuClose;
     private FlagSecureReason flagSecure;
+    private FlagSecureReason hiddenChatSecure;
+    private boolean hiddenChatAuthorizationPending;
+    private static final int ox_hidden_chat_action = 0x6f010001;
     public boolean isFullyVisible;
 
     private MessageObject hintMessageObject;
@@ -1707,6 +1731,9 @@ public class ChatActivity extends BaseFragment implements
     /** ox: "Marked messages" overflow entry */
     private final static int ayu_marked_messages = 77;
 
+    private final static int ayu_export_history = 78;
+    private org.telegram.ui.ayu.chatexport.ChatExportController chatExportController;
+
     private final static int id_chat_compose_panel = 1000;
 
     RecyclerListView.OnItemLongClickListenerExtended onItemLongClickListener = new RecyclerListView.OnItemLongClickListenerExtended() {
@@ -2693,6 +2720,11 @@ public class ChatActivity extends BaseFragment implements
         final long chatId = arguments.getLong("chat_id", 0);
         final long userId = arguments.getLong("user_id", 0);
         final int encId = arguments.getInt("enc_id", 0);
+        final long requestedDialogId = encId != 0 ? DialogObject.makeEncryptedDialogId(encId) : chatId != 0 ? -chatId : userId;
+        org.telegram.messenger.ayu.hidden.HiddenChatsController hiddenChats = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount);
+        if (hiddenChats.isHidden(requestedDialogId) && !hiddenChats.isUnlocked()) {
+            return false;
+        }
         dialogFolderId = arguments.getInt("dialog_folder_id", 0);
         dialogFilterId = arguments.getInt("dialog_filter_id", 0);
         chatMode = arguments.getInt("chatMode", 0);
@@ -3383,7 +3415,20 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onFragmentDestroy() {
+        org.telegram.ui.ayu.hidden.HiddenChatsUi.cancelAuthorization(this);
+        if (ayuMediaSaveController != null) {
+            ayuMediaSaveController.cancelAll();
+            ayuMediaSaveController = null;
+        }
+        ayuPendingMediaSave = null;
+        if (hiddenChatSecure != null) hiddenChatSecure.detach();
+        if (chatExportController != null) {
+            chatExportController.destroy();
+            chatExportController = null;
+        }
         super.onFragmentDestroy();
+        dynamicIslandTransition = true;
+        org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
         if (ayuVisibleRowsUpdateRunnable != null) {
             AndroidUtilities.cancelRunOnUIThread(ayuVisibleRowsUpdateRunnable);
             ayuVisibleRowsUpdateRunnable = null;
@@ -3756,6 +3801,16 @@ public class ChatActivity extends BaseFragment implements
                             finishFragment();
                         }
                     }
+                } else if (id == ox_hidden_chat_action) {
+                    org.telegram.messenger.ayu.hidden.HiddenChatsController hiddenChats = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount);
+                    if (hiddenChats.isHidden(dialog_id)) {
+                        org.telegram.ui.ayu.hidden.HiddenChatsUi.unhideChat(ChatActivity.this, dialog_id, () -> finishFragment());
+                    } else {
+                        org.telegram.ui.ayu.hidden.HiddenChatsUi.hideChat(ChatActivity.this, dialog_id, () -> {
+                            if (hiddenChatSecure != null) hiddenChatSecure.invalidate();
+                            finishFragment();
+                        });
+                    }
                 } else if (id == view_as_topics) {
                     if (getUserConfig().getClientUserId() == dialog_id) {
                         getMessagesController().setSavedViewAs(true);
@@ -3878,15 +3933,40 @@ public class ChatActivity extends BaseFragment implements
                     }
                     showDialog(AlertsCreator.createTTLAlert(getParentActivity(), currentEncryptedChat, themeDelegate).create());
                 } else if (id == ayu_dont_save_here) {
-                    final boolean excluded = org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.toggleExcluded(dialog_id);
+                    final boolean enabled = !org.telegram.messenger.ayu.AyuChatCapturePolicy.isEnabled(currentAccount, dialog_id);
+                    org.telegram.messenger.ayu.AyuChatCapturePolicy.setEnabled(currentAccount, dialog_id, enabled);
                     if (ayuDontSaveHereItem != null) {
-                        ayuDontSaveHereItem.setText(LocaleController.getString(excluded ? R.string.AyuSaveHere : R.string.AyuDontSaveHere));
+                        ayuDontSaveHereItem.setText(LocaleController.getString(ayuCaptureMenuText(enabled)));
                     }
                     BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.chats_infotip,
-                        LocaleController.getString(excluded ? R.string.AyuDontSaveHereEnabled : R.string.AyuDontSaveHereDisabled)).show();
+                        LocaleController.getString(enabled ? R.string.OxCaptureEnabledInfo : R.string.OxCaptureDisabledInfo)).show();
                 } else if (id == ayu_marked_messages) {
                     //ox: open the local bookmark list of this chat
                     ayuOpenMarkedMessages();
+                } else if (id == ayu_export_history) {
+                    if (getParentActivity() == null) return;
+                    if (currentEncryptedChat != null) {
+                        showDialog(new AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                            .setTitle(getString(R.string.OxExportTitle)).setMessage(getString(R.string.OxExportUnsupported))
+                            .setPositiveButton(getString(R.string.OK), null).create());
+                        return;
+                    }
+                    org.telegram.messenger.ayu.chatexport.ChatHistoryExporter.Scope scope = chatMode == MODE_SAVED
+                        ? org.telegram.messenger.ayu.chatexport.ChatHistoryExporter.Scope.SAVED_DIALOG
+                        : ChatObject.isMonoForum(currentChat) ? org.telegram.messenger.ayu.chatexport.ChatHistoryExporter.Scope.MONOFORUM
+                        : org.telegram.messenger.ayu.chatexport.ChatHistoryExporter.Scope.CHAT;
+                    long topicId = scope == org.telegram.messenger.ayu.chatexport.ChatHistoryExporter.Scope.CHAT ? getTopicId() : getThreadId();
+                    if (chatExportController != null && !chatExportController.matches(currentAccount, dialog_id, topicId, scope)) {
+                        chatExportController.destroy();
+                        chatExportController = null;
+                    }
+                    if (chatExportController == null) {
+                        String title = actionBar.getTitle() == null ? "" : actionBar.getTitle().toString();
+                        chatExportController = new org.telegram.ui.ayu.chatexport.ChatExportController(ChatActivity.this,
+                            new org.telegram.messenger.ayu.chatexport.ChatHistoryExporter.Request(currentAccount, dialog_id, topicId,
+                                topicId == 0 && scope == org.telegram.messenger.ayu.chatexport.ChatHistoryExporter.Scope.CHAT ? mergeDialogId : 0, title, scope));
+                    }
+                    chatExportController.show();
                 } else if (id == clear_history || id == delete_chat || id == auto_delete_timer) {
                     if (getParentActivity() == null) {
                         return;
@@ -4189,7 +4269,29 @@ public class ChatActivity extends BaseFragment implements
             return false;
         });
 
-        topPanelLayout = new ChatActivityTopPanelLayout(context);
+        topPanelLayout = new ChatActivityTopPanelLayout(context) {
+            @Override
+            public boolean dispatchTouchEvent(MotionEvent event) {
+                if (dynamicIslandLane != null && isViewVisible(dynamicIslandLane)
+                    && event.getY() >= dynamicIslandLane.getY()
+                    && event.getY() < dynamicIslandLane.getY() + dynamicIslandLane.getHeight()) return false;
+                return super.dispatchTouchEvent(event);
+            }
+
+            @Override
+            public void setTranslationY(float translationY) {
+                float delta = translationY - getTranslationY();
+                super.setTranslationY(translationY);
+                org.telegram.ui.ayu.DynamicIslandView.offsetChatPlacement(ChatActivity.this, delta);
+            }
+        };
+        dynamicIslandLane = new View(context);
+        dynamicIslandLane.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        topPanelLayout.addView(dynamicIslandLane, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+        topPanelLayout.setTransparentLeadingSpacer(dynamicIslandLane);
+        topPanelLayout.addOnLayoutChangeListener((islandView, islandLeft, islandTop, islandRight, islandBottom,
+                                                 islandOldLeft, islandOldTop, islandOldRight, islandOldBottom) ->
+            org.telegram.ui.ayu.DynamicIslandView.onChatLayoutChanged(ChatActivity.this));
         topPanelLayout.setOnAnimatedHeightChangedListener(() -> {
             invalidateChatListViewTopPadding();
             invalidateMessagesVisiblePart();
@@ -4365,6 +4467,11 @@ public class ChatActivity extends BaseFragment implements
             headerItem = menu.addItem(chat_menu_options, otherIcon);
             otherIcon.addView(headerItem.getIconView());
             headerItem.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
+            if (dialog_id != 0 && chatMode == 0) {
+                boolean hidden = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialog_id);
+                headerItem.lazilyAddSubItem(ox_hidden_chat_action, R.drawable.msg_secret,
+                        getString(hidden ? R.string.OxHiddenUnhideChat : R.string.OxHiddenHideChat));
+            }
 
             if (currentUser != null && currentUser.self && chatMode != MODE_SAVED) {
                 savedChatsItem = headerItem.lazilyAddSubItem(view_as_topics, R.drawable.msg_topics, LocaleController.getString(R.string.SavedViewAsChats));
@@ -4496,11 +4603,10 @@ public class ChatActivity extends BaseFragment implements
                 clearHistoryItem = headerItem.lazilyAddSubItem(clear_history, R.drawable.msg_clear,
                     LocaleController.getString(UserObject.isBotForum(currentUser) ? R.string.ClearAllHistory : R.string.ClearHistory));
             }
-            //ayu: per-chat opt-out of the AyuGram deleted-message archive
-            if (!isTopic && currentEncryptedChat == null && dialog_id != 0) {
+            // The capture choice belongs to the whole dialog, including all forum topics.
+            if (chatMode == MODE_DEFAULT && currentEncryptedChat == null && dialog_id != 0) {
                 ayuDontSaveHereItem = headerItem.lazilyAddSubItem(ayu_dont_save_here, R.drawable.msg_clearcache,
-                    LocaleController.getString(org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig.isExcluded(dialog_id)
-                        ? R.string.AyuSaveHere : R.string.AyuDontSaveHere));
+                    LocaleController.getString(ayuCaptureMenuText(org.telegram.messenger.ayu.AyuChatCapturePolicy.isEnabled(currentAccount, dialog_id))));
             }
             //ox: local bookmarks of this chat
             if (dialog_id != 0 && chatMode == 0 && AyuConfig.markedMessagesEnabled) {
@@ -4556,6 +4662,16 @@ public class ChatActivity extends BaseFragment implements
             headerItem.lazilyAddSubItem(share_business_link, R.drawable.msg_share, getString(R.string.LinkActionShare));
             headerItem.lazilyAddSubItem(rename_business_link, R.drawable.msg_edit, getString(R.string.Rename));
             headerItem.lazilyAddSubItem(delete_business_link, R.drawable.msg_delete, getString(R.string.Delete)).setColors(Theme.getColor(Theme.key_text_RedRegular), Theme.getColor(Theme.key_text_RedRegular));
+        }
+        if ((chatMode == MODE_DEFAULT && (threadMessageId == 0 || isTopic || ChatObject.isMonoForum(currentChat)) || chatMode == MODE_SAVED)
+                && dialog_id != 0 && (currentUser != null || currentChat != null) && !isReport() && !isComments
+                && !isSubscriberSuggestions && !inPreviewMode && !UserObject.isReplyUser(currentUser)) {
+            if (headerItem == null) {
+                headerItem = menu.addItem(chat_menu_options, otherIcon);
+                otherIcon.addView(headerItem.getIconView());
+                headerItem.setContentDescription(getString(R.string.AccDescrMoreOptions));
+            }
+            headerItem.lazilyAddSubItem(ayu_export_history, R.drawable.msg_download, getString(R.string.OxExportTitle));
         }
         if (ChatObject.isForum(currentChat) && isTopic && getParentLayout() != null && getParentLayout().getFragmentStack() != null && chatMode == MODE_DEFAULT) {
             boolean hasMyForum = false;
@@ -4616,6 +4732,9 @@ public class ChatActivity extends BaseFragment implements
         }
         removingFromParent = false;
         fragmentView = contentView = new ChatActivityFragmentView(context, parentLayout);
+        contentView.addOnLayoutChangeListener((islandView, islandLeft, islandTop, islandRight, islandBottom,
+                                               islandOldLeft, islandOldTop, islandOldRight, islandOldBottom) ->
+            org.telegram.ui.ayu.DynamicIslandView.onChatLayoutChanged(ChatActivity.this));
         invalidateBlurredSourcesView = new OnPostDrawView(context, true, this::invalidateMergedVisibleBlurredPositionsAndSourcesImpl);
         contentView.addView(invalidateBlurredSourcesView);
 
@@ -7578,7 +7697,8 @@ public class ChatActivity extends BaseFragment implements
             fragmentContextView = new FragmentContextView(context, this, null, false, themeDelegate) {
                 @Override
                 public void setVisibility(int visibility) {
-                    topPanelLayout.setViewVisible(fragmentContextViewWrapper, visibility == VISIBLE);
+                    topPanelLayout.setViewVisible(fragmentContextViewWrapper, visibility == VISIBLE,
+                        visibility == VISIBLE || !isMusicPlayerReplacedByIsland());
                 }
             };
             topPanelLayout.setCallFragmentContextView(fragmentContextView);
@@ -8725,6 +8845,10 @@ public class ChatActivity extends BaseFragment implements
             currentEncryptedChat != null ||
             isPeerNoForwards()
         );
+        if (hiddenChatSecure != null) hiddenChatSecure.detach();
+        hiddenChatSecure = new FlagSecureReason(getParentActivity().getWindow(),
+                () -> org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialog_id), true);
+        hiddenChatSecure.attach();
 
         if (oldMessage != null) {
             chatActivityEnterView.setFieldText(oldMessage);
@@ -11176,7 +11300,8 @@ public class ChatActivity extends BaseFragment implements
                     args.putInt("messagesCount", messagePreviewParams.forwardMessages == null ? 0 : messagePreviewParams.forwardMessages.messages.size());
                     args.putBoolean("canSelectTopics", true);
                     final DialogsActivity fragment = new DialogsActivity(args);
-                    fragment.setDelegate(ChatActivity.this);
+                    if (forward) setForwardSelectionDelegate(fragment);
+                    else fragment.setDelegate(ChatActivity.this);
                     presentFragment(fragment);
                 }
             }
@@ -12377,7 +12502,9 @@ public class ChatActivity extends BaseFragment implements
         args.putBoolean("hasInvoice", hasInvoice);
         args.putBoolean("canSelectTopics", true);
         DialogsActivity fragment = new DialogsActivity(args);
-        fragment.setDelegate(ChatActivity.this);
+        forwardingMessage = null;
+        forwardingMessageGroup = null;
+        setForwardSelectionDelegate(fragment);
         presentFragment(fragment);
     }
 
@@ -17156,6 +17283,13 @@ public class ChatActivity extends BaseFragment implements
 
     public class ChatActivityFragmentView extends SizeNotifierFrameLayout {
 
+        @Override
+        public void setTranslationY(float translationY) {
+            float delta = translationY - getTranslationY();
+            super.setTranslationY(translationY);
+            org.telegram.ui.ayu.DynamicIslandView.offsetChatPlacement(ChatActivity.this, delta);
+        }
+
         public ChatActivity getChatActivity() {
             return ChatActivity.this;
         }
@@ -18879,6 +19013,7 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onRequestPermissionsResultFragment(int requestCode, String[] permissions, int[] grantResults) {
+        ayuResumeMediaSaveAfterPermission(requestCode, permissions, grantResults);
         if (chatActivityEnterView != null) {
             chatActivityEnterView.onRequestPermissionsResultFragment(requestCode, permissions, grantResults);
         }
@@ -20370,6 +20505,7 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        if (chatExportController != null && chatExportController.onActivityResult(requestCode, resultCode, data)) return;
         if (resultCode == Activity.RESULT_OK) {
             if (requestCode == 0 || requestCode == 2) {
                 createChatAttachView();
@@ -22090,7 +22226,7 @@ public class ChatActivity extends BaseFragment implements
                 int mode = (Integer) args[3];
                 if (mode != chatMode && chatMode != MODE_SAVED && chatMode != MODE_SUGGESTIONS) {
                     if (chatMode != MODE_SCHEDULED && mode == MODE_SCHEDULED && !isPaused && LaunchActivity.getSafeLastFragment() == this && messagePreviewParams == null
-                            && !org.telegram.messenger.ayu.AyuState.isAutomaticallyScheduled(dialog_id)) {
+                            && !org.telegram.messenger.ayu.AyuState.isAutomaticallyScheduled(currentAccount, dialog_id)) {
                         if (!arr.isEmpty() && arr.get(0).getId() < 0) {
                             openScheduledMessages(arr.get(0).getId(), arr.get(0).messageOwner != null && arr.get(0).messageOwner.video_processing_pending);
                         }
@@ -22498,6 +22634,7 @@ public class ChatActivity extends BaseFragment implements
                 if (ayuType == 0) {
                     if (AyuConfig.saveDeletedMessages && !obj.messageOwner.ayuDeleted) {
                         obj.messageOwner.ayuDeleted = true;
+                        obj.messageOwner.ayuDeletedDate = (int) (System.currentTimeMillis() / 1000L);
                         changed = true;
                     }
                     //ayu: the bubble stays but its cache file was just unlinked - point it at our copy
@@ -26444,6 +26581,13 @@ public class ChatActivity extends BaseFragment implements
     /** ids the user explicitly asked to remove locally; they bypass the "keep deleted messages" filter */
     private final HashSet<Integer> ayuLocallyDeletingIds = new HashSet<>();
 
+    private int ayuCaptureMenuText(boolean enabled) {
+        if (isTopic) {
+            return enabled ? R.string.OxCaptureDisableWholeChat : R.string.OxCaptureEnableWholeChat;
+        }
+        return enabled ? R.string.OxCaptureDisable : R.string.OxCaptureEnable;
+    }
+
     private boolean ayuCanKeepDeletedMessages() {
         return AyuConfig.saveDeletedMessages
                 && currentEncryptedChat == null
@@ -26475,6 +26619,7 @@ public class ChatActivity extends BaseFragment implements
             }
             if (!obj.messageOwner.ayuDeleted) {
                 obj.messageOwner.ayuDeleted = true;
+                obj.messageOwner.ayuDeletedDate = (int) (System.currentTimeMillis() / 1000L);
                 obj.forceUpdate = true;
                 changed = true;
             }
@@ -26668,8 +26813,12 @@ public class ChatActivity extends BaseFragment implements
                     continue;
                 }
                 message.ayuDeleted = true;
+                if (message.ayuDeletedDate == 0) {
+                    message.ayuDeletedDate = (int) (System.currentTimeMillis() / 1000L);
+                }
                 final MessageObject messageObject = new MessageObject(account, message, true, true);
                 messageObject.messageOwner.ayuDeleted = true;
+                messageObject.messageOwner.ayuDeletedDate = message.ayuDeletedDate;
                 result.add(messageObject);
             }
         } catch (Exception e) {
@@ -26807,6 +26956,9 @@ public class ChatActivity extends BaseFragment implements
                 }
                 existing.add(id);
                 messageObject.messageOwner.ayuDeleted = true;
+                if (messageObject.messageOwner.ayuDeletedDate == 0) {
+                    messageObject.messageOwner.ayuDeletedDate = (int) (System.currentTimeMillis() / 1000L);
+                }
                 if (merged == null) {
                     merged = new ArrayList<>(messArr.size() + Math.min(stored.size(), AYU_DELETED_PAGE_LIMIT));
                 }
@@ -27604,6 +27756,8 @@ public class ChatActivity extends BaseFragment implements
     public void onBecomeFullyVisible() {
         isFullyVisible = true;
         super.onBecomeFullyVisible();
+        dynamicIslandTransition = false;
+        org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
         if (showCloseChatDialogLater) {
             showDialog(closeChatDialog);
         }
@@ -27800,6 +27954,8 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onTransitionAnimationStart(boolean isOpen, boolean backward) {
         super.onTransitionAnimationStart(isOpen, backward);
+        dynamicIslandTransition = true;
+        org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
         startMs = System.currentTimeMillis();
         int[] alowedNotifications = null;
         if (isOpen) {
@@ -27841,6 +27997,8 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onTransitionAnimationEnd(boolean isOpen, boolean backward) {
         super.onTransitionAnimationEnd(isOpen, backward);
+        dynamicIslandTransition = false;
+        org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
         if (isOpen) {
             if (backward) {
                 if (showPinBulletin && pinBulletin != null) {
@@ -30316,7 +30474,31 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onResume() {
+        org.telegram.messenger.ayu.hidden.HiddenChatsController hiddenChats = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount);
+        if (hiddenChats.isHidden(dialog_id) && !hiddenChats.isUnlocked()) {
+            if (fragmentView != null) fragmentView.setVisibility(View.INVISIBLE);
+            if (!hiddenChatAuthorizationPending) {
+                hiddenChatAuthorizationPending = true;
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (isFinished || getParentActivity() == null) {
+                        hiddenChatAuthorizationPending = false;
+                        return;
+                    }
+                    org.telegram.ui.ayu.hidden.HiddenChatsUi.authorize(this, () -> {
+                        hiddenChatAuthorizationPending = false;
+                        if (!isFinished) onResume();
+                    }, () -> {
+                        hiddenChatAuthorizationPending = false;
+                        if (!isFinished) finishFragment(false);
+                    });
+                });
+            }
+            return;
+        }
+        if (fragmentView != null) fragmentView.setVisibility(View.VISIBLE);
+        if (hiddenChatSecure != null) hiddenChatSecure.invalidate();
         super.onResume();
+        org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();
         if (openImport && getSendMessagesHelper().getImportingHistory(dialog_id) != null) {
@@ -30528,7 +30710,12 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onPause() {
+        if (ApplicationLoader.mainInterfacePaused && fragmentView != null
+                && org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialog_id)) {
+            fragmentView.setVisibility(View.INVISIBLE);
+        }
         super.onPause();
+        org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
         scrolling = false;
         if (scrimPopupWindow != null) {
             scrimPopupWindow.setPauseNotifications(false);
@@ -32387,169 +32574,47 @@ public class ChatActivity extends BaseFragment implements
                         processSelectedOption(options.get(i));
                     });
                     if (option == OPTION_TRANSLATE) {
-                        final boolean translateEnabled = getMessagesController().getTranslateController().isContextTranslateEnabled();
-                        String toLangDefault = LocaleController.getInstance().getCurrentLocale().getLanguage();
-                        String toLang = TranslateAlert2.getToLanguage();
-                        int[] messageIdToTranslate = new int[] { message.getId() };
-                        final CharSequence finalMessageText = message.getMessageTextToTranslate(groupedMessages, messageIdToTranslate);
-                        Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress = (link) -> {
-                            didPressMessageUrl(link, false, selectedObject, v instanceof ChatMessageCell ? (ChatMessageCell) v : null);
+                        final MessageObject translationMessage = message;
+                        final int translationAccount = currentAccount;
+                        final long translationOwner = getUserConfig().getClientUserId();
+                        final int[] translationMessageId = {translationMessage.getId()};
+                        final CharSequence translationText = translationMessage.getMessageTextToTranslate(groupedMessages, translationMessageId);
+                        final TL_iv.RichMessage translationRich = translationMessage.type == MessageObject.TYPE_ARTICLE
+                                ? translationMessage.messageOwner.rich_message : null;
+                        final TLRPC.InputPeer translationPeer = translationMessage.isPoll() || translationMessage.isVoiceTranscriptionOpen()
+                                || translationMessage.isSponsored() || translationMessage.scheduled || translationMessage.getId() <= 0
+                                || currentEncryptedChat != null || chatMode == MODE_QUICK_REPLIES
+                                ? null : getMessagesController().getInputPeer(dialog_id);
+                        final ArrayList<TLRPC.MessageEntity> translationEntities = translationMessage.messageOwner.entities == null
+                                ? null : new ArrayList<>(translationMessage.messageOwner.entities);
+                        final String translationSource = translationMessage.messageOwner.originalLanguage;
+                        final boolean translationSummary = translationMessage.summarized;
+                        final boolean translationProtected = noforwardsOrPaidMedia;
+                        final Utilities.CallbackReturn<URLSpan, Boolean> translationLinkPress = link -> {
+                            if (isFinished || currentAccount != translationAccount
+                                    || UserConfig.getInstance(translationAccount).getClientUserId() != translationOwner) return false;
+                            didPressMessageUrl(link, false, translationMessage, null);
                             return true;
                         };
-                        TLRPC.InputPeer inputPeer = selectedObject != null && (selectedObject.isPoll() || selectedObject.isVoiceTranscriptionOpen() || selectedObject.isSponsored() || selectedObject.scheduled || chatMode == MODE_QUICK_REPLIES) ? null : getMessagesController().getInputPeer(dialog_id);
-//                        final boolean shouldTranslateByText = selectedObject != null && (selectedObject.isPoll() || selectedObject.isVoiceTranscriptionOpen() || selectedObject.isSponsored() || selectedObject.scheduled || chatMode == MODE_QUICK_REPLIES);
-                        final TL_iv.RichMessage richMessageToTranslate = selectedObject != null && selectedObject.type == MessageObject.TYPE_ARTICLE && selectedObject.messageOwner != null ? selectedObject.messageOwner.rich_message : null;
-                        if (richMessageToTranslate != null) {
-                            final String fromLang = selectedObject.messageOwner.originalLanguage;
-                            cell.setVisibility(View.VISIBLE);
-                            cell.setOnClickListener(e -> {
-                                if (selectedObject == null || i >= options.size() || getParentActivity() == null) {
-                                    return;
-                                }
-                                String toLangValue = fromLang != null && fromLang.equals(toLang) ? toLangDefault : toLang;
-                                TranslateAlert2 alert = TranslateAlert2.showAlert(getParentActivity(), this, currentAccount, inputPeer, messageIdToTranslate[0], fromLang, toLangValue, richMessageToTranslate, noforwardsOrPaidMedia, onLinkPress, () -> dimBehindView(false));
-                                alert.setDimBehind(false);
-                                closeMenu(false);
-
-                                int hintCount = MessagesController.getNotificationsSettings(currentAccount).getInt("dialog_show_translate_count" + getDialogId(), 5);
-                                if (hintCount > 0) {
-                                    hintCount--;
-                                    MessagesController.getNotificationsSettings(currentAccount).edit().putInt("dialog_show_translate_count" + getDialogId(), hintCount).apply();
-                                    updateTopPanel(true);
-                                }
-                            });
-                        } else if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.originalLanguage != null) {
-                            waitForLangDetection.set(false);
-                            String fromLang = selectedObject.messageOwner.originalLanguage;
-                            cell.setVisibility(
-                                fromLang != null && (!fromLang.equals(toLang) || !fromLang.equals(toLangDefault) || fromLang.equals(TranslateController.UNKNOWN_LANGUAGE)) && (
-                                    translateEnabled && !RestrictedLanguagesSelectActivity.getRestrictedLanguages().contains(fromLang) ||
-                                    (currentChat != null && (currentChat.has_link || ChatObject.isPublic(currentChat)) || selectedObject.messageOwner.fwd_from != null) && ("uk".equals(fromLang) || "ru".equals(fromLang))
-                                ) ? View.VISIBLE : View.GONE
-                            );
-                            cell.setOnClickListener(e -> {
-                                if (selectedObject == null || i >= options.size() || getParentActivity() == null) {
-                                    return;
-                                }
-
-                                String toLangValue = fromLang != null && fromLang.equals(toLang) ? toLangDefault : toLang;
-                                ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
-                                TranslateAlert2 alert = TranslateAlert2.showAlert(getParentActivity(), this, currentAccount, inputPeer, messageIdToTranslate[0], selectedObject.summarized, fromLang, toLangValue, finalMessageText, entities, noforwardsOrPaidMedia, onLinkPress, () -> dimBehindView(false));
-                                alert.setDimBehind(false);
-                                closeMenu(false);
-                                
-//                                final TranslateAlert3 alert =
-//                                    new TranslateAlert3(getContext(), resourceProvider)
-//                                        .setText(fromLang, finalMessageText)
-//                                        .setMessage(dialog_id, shouldTranslateByText ? 0 : messageIdToTranslate[0], selectedObject.summarized)
-//                                        .setToLanguage(fromLang != null && fromLang.equals(toLang) ? toLangDefault : toLang)
-//                                        .setNoforwards(noforwardsOrPaidMedia)
-//                                        .setOnLinkPress(onLinkPress);
-//                                alert.setOnDismissListener(() -> dimBehindView(false));
-//                                alert.setDimBehind(false);
-//                                alert.show();
-//                                closeMenu(false);
-
-                                int hintCount = MessagesController.getNotificationsSettings(currentAccount).getInt("dialog_show_translate_count" + getDialogId(), 5);
-                                if (hintCount > 0) {
-                                    hintCount--;
-                                    MessagesController.getNotificationsSettings(currentAccount).edit().putInt("dialog_show_translate_count" + getDialogId(), hintCount).apply();
-                                    updateTopPanel(true);
-                                }
-                            });
-                        } else if (LanguageDetector.hasSupport()) {
-                            final String[] fromLang = {null};
-                            cell.setVisibility(View.GONE);
-                            waitForLangDetection.set(true);
-                            LanguageDetector.detectLanguage(
-                                finalMessageText.toString(),
-                                (String lang) -> {
-                                    fromLang[0] = lang;
-                                    if (fromLang[0] != null && (!fromLang[0].equals(toLang) || !fromLang[0].equals(toLangDefault) || fromLang[0].equals(TranslateController.UNKNOWN_LANGUAGE)) && (
-                                        translateEnabled && !RestrictedLanguagesSelectActivity.getRestrictedLanguages().contains(fromLang[0]) ||
-                                        (currentChat != null && (currentChat.has_link || ChatObject.isPublic(currentChat)) || selectedObject.messageOwner.fwd_from != null) && ("uk".equals(fromLang[0]) || "ru".equals(fromLang[0]))
-                                    )) {
-                                        cell.setVisibility(View.VISIBLE);
-                                    }
-                                    waitForLangDetection.set(false);
-                                    if (onLangDetectionDone.get() != null) {
-                                        onLangDetectionDone.get().run();
-                                        onLangDetectionDone.set(null);
-                                    }
-                                },
-                                (Exception e) -> {
-                                    FileLog.e("mlkit: failed to detect language in message");
-                                    waitForLangDetection.set(false);
-                                    if (onLangDetectionDone.get() != null) {
-                                        onLangDetectionDone.get().run();
-                                        onLangDetectionDone.set(null);
-                                    }
-                                }
-                            );
-                            cell.setOnClickListener(e -> {
-                                if (selectedObject == null || i >= options.size() || getParentActivity() == null) {
-                                    return;
-                                }
-                                String toLangValue = fromLang[0] != null && fromLang[0].equals(toLang) ? toLangDefault : toLang;
-                                ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
-                                TranslateAlert2 alert = TranslateAlert2.showAlert(getParentActivity(), this, currentAccount, inputPeer, messageIdToTranslate[0], selectedObject.summarized, fromLang[0], toLangValue, finalMessageText, entities, noforwardsOrPaidMedia, onLinkPress, () -> dimBehindView(false));
-                                alert.setDimBehind(false);
-                                closeMenu(false);
-
-//                                final TranslateAlert3 alert =
-//                                    new TranslateAlert3(getContext(), resourceProvider)
-//                                        .setText(fromLang[0], finalMessageText)
-//                                        .setMessage(dialog_id, shouldTranslateByText ? 0 : messageIdToTranslate[0], selectedObject.summarized)
-//                                        .setToLanguage(fromLang[0] != null && fromLang[0].equals(toLang) ? toLangDefault : toLang)
-//                                        .setNoforwards(noforwardsOrPaidMedia)
-//                                        .setOnLinkPress(onLinkPress);
-//                                alert.setOnDismissListener(() -> dimBehindView(false));
-//                                alert.setDimBehind(false);
-//                                alert.show();
-//                                closeMenu(false);
-
-                                int hintCount = MessagesController.getNotificationsSettings(currentAccount).getInt("dialog_show_translate_count" + getDialogId(), 5);
-                                if (hintCount > 0) {
-                                    hintCount--;
-                                    MessagesController.getNotificationsSettings(currentAccount).edit().putInt("dialog_show_translate_count" + getDialogId(), hintCount).apply();
-                                    updateTopPanel(true);
-                                }
-                            });
-                            cell.postDelayed(() -> {
-                                if (onLangDetectionDone.get() != null) {
-                                    onLangDetectionDone.getAndSet(null).run();
-                                }
-                            }, 250);
-                        } else if (translateEnabled) {
-                            cell.setOnClickListener(e -> {
-                                if (selectedObject == null || i >= options.size() || getParentActivity() == null) {
-                                    return;
-                                }
-
-                                TranslateAlert2 alert = TranslateAlert2.showAlert(getParentActivity(), this, currentAccount, inputPeer, messageIdToTranslate[0], selectedObject.summarized, "und", toLang, finalMessageText, null, noforwardsOrPaidMedia, onLinkPress, () -> dimBehindView(false));
-                                alert.setDimBehind(false);
-                                closeMenu(false);
-
-//                                final TranslateAlert3 alert = new TranslateAlert3(getContext(), getResourceProvider())
-//                                    .setMessage(dialog_id, shouldTranslateByText ? 0 : messageIdToTranslate[0], selectedObject.summarized)
-//                                    .setText(finalMessageText)
-//                                    .setNoforwards(noforwardsOrPaidMedia)
-//                                    .setOnLinkPress(onLinkPress);
-//                                alert.setOnDismissListener(() ->  dimBehindView(false));
-//                                alert.setDimBehind(false);
-//                                alert.show();
-//                                closeMenu(false);
-
-                                int hintCount = MessagesController.getNotificationsSettings(currentAccount).getInt("dialog_show_translate_count" + getDialogId(), 5);
-                                if (hintCount > 0) {
-                                    hintCount--;
-                                    MessagesController.getNotificationsSettings(currentAccount).edit().putInt("dialog_show_translate_count" + getDialogId(), hintCount).apply();
-                                    updateTopPanel(true);
-                                }
-                            });
-                        } else {
-                            cell.setVisibility(View.GONE);
-                        }
+                        cell.setVisibility(View.VISIBLE);
+                        cell.setOnClickListener(e -> {
+                            if (isFinished || getParentActivity() == null || currentAccount != translationAccount
+                                    || UserConfig.getInstance(translationAccount).getClientUserId() != translationOwner) {
+                                return;
+                            }
+                            final TranslateAlert2 alert;
+                            if (translationRich != null) {
+                                alert = TranslateAlert2.showAlert(getParentActivity(), this, translationAccount, translationPeer,
+                                        translationMessageId[0], translationSource, TranslateAlert2.getToLanguage(), translationRich,
+                                        translationProtected, translationLinkPress, () -> dimBehindView(false));
+                            } else {
+                                alert = TranslateAlert2.showAlert(getParentActivity(), this, translationAccount, translationPeer,
+                                        translationMessageId[0], translationSummary, translationSource, TranslateAlert2.getToLanguage(),
+                                        translationText, translationEntities, translationProtected, translationLinkPress, () -> dimBehindView(false));
+                            }
+                            if (alert != null) alert.setDimBehind(false);
+                            closeMenu(false);
+                        });
                     }
                 }
                 if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.video_processing_pending) {
@@ -33993,7 +34058,7 @@ public class ChatActivity extends BaseFragment implements
                 args.putBoolean("hasInvoice", forwardingMessage.isInvoice());
                 args.putBoolean("canSelectTopics", true);
                 DialogsActivity fragment = new DialogsActivity(args);
-                fragment.setDelegate(this);
+                setForwardSelectionDelegate(fragment);
                 presentFragment(fragment);
                 break;
             }
@@ -34270,6 +34335,12 @@ public class ChatActivity extends BaseFragment implements
                 break;
             }
             case OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC: {
+                if (selectedObject != null && selectedObject.getDocument() != null && !selectedObject.isPoll() && !selectedObject.isLivePhoto()
+                        && org.telegram.ui.ayu.AyuMediaSaveController.canSave(selectedObject)
+                        && (selectedObjectGroup == null || !selectedObject.isMusic() && !selectedObject.isDocument())) {
+                    ayuSaveDocument(selectedObject);
+                    break;
+                }
                 if (Build.VERSION.SDK_INT >= 23 && (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE) && getParentActivity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                     getParentActivity().requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 4);
                     selectedObject = null;
@@ -35202,6 +35273,170 @@ public class ChatActivity extends BaseFragment implements
             }
         }
         return true;
+    }
+
+    private ForwardSelectionRequest activeForwardSelection;
+
+    private static class ForwardSelectionRequest {
+        final int account;
+        final long sourceDialogId;
+        final long sourceUserId;
+        final DialogsActivity picker;
+        final ArrayList<MessageObject> messages;
+        final boolean hideSender, hideCaption, silent;
+        final org.telegram.messenger.ayu.AyuForwarder.EditPayload edits;
+        int confirmationGeneration;
+        boolean sent;
+
+        ForwardSelectionRequest(int account, long sourceDialogId, long sourceUserId, DialogsActivity picker, ArrayList<MessageObject> messages,
+                                boolean hideSender, boolean hideCaption, boolean silent, org.telegram.messenger.ayu.AyuForwarder.EditPayload edits) {
+            this.account = account;
+            this.sourceDialogId = sourceDialogId;
+            this.sourceUserId = sourceUserId;
+            this.picker = picker;
+            this.messages = messages;
+            this.hideSender = hideSender;
+            this.hideCaption = hideCaption;
+            this.silent = silent;
+            this.edits = edits;
+        }
+    }
+
+    private ArrayList<MessageObject> collectForwardSelectionMessages() {
+        ArrayList<MessageObject> result = new ArrayList<>();
+        if (forwardingMessage != null) {
+            if (forwardingMessageGroup != null) result.addAll(forwardingMessageGroup.messages);
+            else result.add(forwardingMessage);
+        } else {
+            for (int a = 1; a >= 0; a--) {
+                ArrayList<Integer> ids = new ArrayList<>();
+                for (int b = 0; b < selectedMessagesIds[a].size(); b++) ids.add(selectedMessagesIds[a].keyAt(b));
+                Collections.sort(ids);
+                for (int id : ids) {
+                    MessageObject object = selectedMessagesIds[a].get(id);
+                    if (object != null) result.add(object);
+                }
+            }
+        }
+        return result;
+    }
+
+    private void setForwardSelectionDelegate(DialogsActivity picker) {
+        setForwardSelectionDelegate(picker, null);
+    }
+
+    private void setForwardSelectionDelegate(DialogsActivity picker, org.telegram.messenger.ayu.AyuForwarder.EditPayload edits) {
+        picker.getArguments().putBoolean("forwardMultiSelect", true);
+        picker.setCurrentAccount(currentAccount);
+        final boolean special = ayuSpecialForwardPending;
+        final boolean edited = edits != null && !edits.isEmpty();
+        final ForwardSelectionRequest request = new ForwardSelectionRequest(currentAccount, dialog_id, getUserConfig().getClientUserId(), picker, collectForwardSelectionMessages(),
+                edited || (special ? ayuSpecialForwardHideSender : messagePreviewParams != null && messagePreviewParams.hideForwardSendersName),
+                special ? ayuSpecialForwardHideCaption : messagePreviewParams != null && messagePreviewParams.hideCaption,
+                special && ayuSpecialForwardWithoutSound, edits);
+        activeForwardSelection = request;
+        boolean hasCaption = false;
+        boolean canHideSender = !edited;
+        for (int i = 0; i < request.messages.size(); i++) {
+            MessageObject object = request.messages.get(i);
+            hasCaption |= edited && (object.getDocument() != null || object.isPhoto()) ? !TextUtils.isEmpty(edits.textAt(i)) : !TextUtils.isEmpty(object.caption);
+            if (!getUserConfig().isPremium() && object.type == MessageObject.TYPE_ARTICLE) canHideSender = false;
+        }
+        picker.setForwardOptions(request.hideSender, request.hideCaption, hasCaption, canHideSender);
+        ayuSpecialForwardPending = false;
+        picker.setDelegate((fragment, targets, comment, param, notify, date, repeat, topics) ->
+                sendForwardSelection(request, targets, comment, notify, date, repeat));
+    }
+
+    private boolean isForwardSelectionCurrent(ForwardSelectionRequest request) {
+        return activeForwardSelection == request && !request.sent && !isFinished && !request.picker.isFinished
+                && currentAccount == request.account && request.picker.getCurrentAccount() == request.account
+                && UserConfig.selectedAccount == request.account
+                && dialog_id == request.sourceDialogId && getUserConfig().isClientActivated()
+                && request.sourceUserId == getUserConfig().getClientUserId();
+    }
+
+    private MessageObject forwardTargetTopic(MessagesStorage.TopicKey key) {
+        if (key.topicId == 0 || getMessagesController().isMonoForum(key.dialogId)) return null;
+        TLRPC.TL_forumTopic topic = getMessagesController().getTopicsController().findTopic(-key.dialogId, key.topicId);
+        TLRPC.Message root = topic == null ? null : topic.topicStartMessage;
+        if (root == null) {
+            root = new TLRPC.TL_message();
+            root.id = (int) key.topicId;
+            root.peer_id = getMessagesController().getPeer(key.dialogId);
+            root.message = "";
+        }
+        MessageObject message = new MessageObject(currentAccount, root, false, false);
+        message.isTopicMainMessage = true;
+        return message;
+    }
+
+    private boolean sendForwardSelection(ForwardSelectionRequest request, ArrayList<MessagesStorage.TopicKey> selectedTargets,
+                                         CharSequence comment, boolean notify, int date, int repeat) {
+        if (!isForwardSelectionCurrent(request) || request.messages.isEmpty() || !request.picker.validateForwardTargets(selectedTargets)
+                || request.edits != null && !request.edits.isValidFor(request.account, request.messages)) return false;
+        final ArrayList<MessagesStorage.TopicKey> targets = new ArrayList<>();
+        for (MessagesStorage.TopicKey target : selectedTargets) targets.add(MessagesStorage.TopicKey.of(target.dialogId, target.topicId));
+        final String text = TextUtils.isEmpty(comment) ? null : comment.toString();
+        final boolean hideSender = request.picker.isForwardSenderHidden();
+        final boolean hideCaption = request.picker.isForwardCaptionHidden();
+        for (MessagesStorage.TopicKey target : targets) {
+            TLRPC.Chat chat = getMessagesController().getChat(-target.dialogId);
+            if (chat != null) for (MessageObject object : request.messages) {
+                int error = SendMessagesHelper.canSendMessageToChat(chat, object);
+                if (error != 0) {
+                    AlertsCreator.showSendMediaAlert(error, request.picker, null);
+                    return false;
+                }
+            }
+        }
+        final int generation = ++request.confirmationGeneration;
+        AlertsCreator.ensurePaidMessagesMultiConfirmationTopicKeys(request.account, targets, request.messages.size() + (text == null ? 0 : 1), prices -> {
+            if (!isForwardSelectionCurrent(request) || generation != request.confirmationGeneration || !request.picker.validateForwardTargets(targets)
+                    || request.edits != null && !request.edits.isValidFor(request.account, request.messages)) return;
+            request.sent = true;
+            final boolean withSound = notify && !request.silent;
+            for (MessagesStorage.TopicKey target : targets) {
+                final long did = target.dialogId;
+                final Long paid = prices == null ? null : prices.get(did);
+                final long price = paid == null ? 0 : paid;
+                final long monoPeer = getMessagesController().isMonoForum(did) ? target.topicId : 0;
+                final MessageObject topic = forwardTargetTopic(target);
+                if (text != null) {
+                    SendMessagesHelper.SendMessageParams params = SendMessagesHelper.SendMessageParams.of(text, did, topic, topic, null, true, null, null, null, withSound, date, repeat, null, false);
+                    params.payStars = price;
+                    params.monoForumPeer = monoPeer;
+                    getSendMessagesHelper().sendMessage(params);
+                }
+                if (request.edits != null && !request.edits.isEmpty() || org.telegram.messenger.ayu.AyuForwarder.needsAyuForward(request.messages)) {
+                    org.telegram.messenger.ayu.AyuForwarder.forwardMessages(request.account, request.messages, did, topic,
+                            hideSender, hideCaption, withSound, date, repeat, price, monoPeer, request.edits, null);
+                } else {
+                    getSendMessagesHelper().sendMessage(request.messages, did, hideSender, hideCaption, withSound, date, repeat, topic, -1, price, monoPeer, null);
+                }
+            }
+            if (request.messages.equals(collectForwardSelectionMessages())) {
+                forwardingMessage = null;
+                forwardingMessageGroup = null;
+                for (int a = 0; a < 2; a++) {
+                    selectedMessagesCanCopyIds[a].clear();
+                    selectedMessagesCanStarIds[a].clear();
+                    selectedMessagesIds[a].clear();
+                }
+                hideActionMode();
+                messagePreviewParams = null;
+                hideFieldPanel(false);
+                updatePinnedMessageView(true);
+                updateVisibleRows();
+            }
+            request.picker.finishFragment();
+            createUndoView();
+            if (undoView != null) {
+                if (targets.size() == 1) undoView.showWithAction(targets.get(0).dialogId, UndoView.ACTION_FWD_MESSAGES, request.messages.size());
+                else undoView.showWithAction(0, UndoView.ACTION_FWD_MESSAGES, request.messages.size(), targets.size(), null, null);
+            }
+        });
+        return false;
     }
 
     public boolean checkRecordLocked(boolean invoked, boolean forceCloseOnDiscard) {
@@ -40110,6 +40345,76 @@ public class ChatActivity extends BaseFragment implements
         }
 
         @Override
+        public boolean canSaveRichDocument(ChatMessageCell cell) {
+            final MessageObject messageObject = cell == null ? null : cell.getMessageObject();
+            return canSaveRichDocument(messageObject);
+        }
+
+        private boolean canSaveRichDocument(MessageObject messageObject) {
+            return messageObject != null
+                && messageObject.messageOwner != null
+                && chatMode != MODE_SCHEDULED
+                && !isPeerNoForwards()
+                && !messageObject.messageOwner.noforwards
+                && messageObject.type != MessageObject.TYPE_PAID_MEDIA;
+        }
+
+        @Override
+        public void didPressRichDocumentOptions(ChatMessageCell cell, TLRPC.Document document, float x, float y) {
+            final MessageObject source = cell == null ? null : cell.getMessageObject();
+            if (cell == null || document == null || getParentLayout() == null || !canSaveRichDocument(source)) {
+                return;
+            }
+            ItemOptions.makeOptions(ChatActivity.this, cell)
+                .add(R.drawable.msg_download, getString(R.string.SaveToDownloads), () -> saveRichDocument(source, document))
+                .setDrawScrim(false)
+                .show();
+        }
+
+        private void saveRichDocument(MessageObject source, TLRPC.Document document) {
+            if (getParentActivity() == null || document == null || !canSaveRichDocument(source)) {
+                return;
+            }
+            if (Build.VERSION.SDK_INT >= 23 && (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE)
+                && getParentActivity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                getParentActivity().requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 4);
+                return;
+            }
+            final TLRPC.TL_message message = new TLRPC.TL_message();
+            message.out = source.isOutOwner();
+            message.id = source.getId();
+            message.realId = source.getRealId();
+            message.dialog_id = source.getDialogId();
+            message.peer_id = source.messageOwner.peer_id;
+            message.from_id = source.messageOwner.from_id;
+            message.date = source.messageOwner.date;
+            message.message = "";
+            message.media = new TLRPC.TL_messageMediaDocument();
+            message.media.flags |= 3;
+            message.media.document = document;
+            message.flags |= TLRPC.MESSAGE_FLAG_HAS_MEDIA;
+            if (message.from_id != null) {
+                message.flags |= TLRPC.MESSAGE_FLAG_HAS_FROM_ID;
+            }
+            final ArrayList<MessageObject> documents = new ArrayList<>();
+            documents.add(new MessageObject(currentAccount, message, false, true));
+            final Runnable save = () -> {
+                if (getParentActivity() == null || source.messageOwner.noforwards || isPeerNoForwards()) return;
+                MediaController.saveFilesFromMessages(getParentActivity(), getAccountInstance(), documents, count -> {
+                    if (count > 0 && getParentActivity() != null && fragmentView != null) {
+                        BulletinFactory.of(ChatActivity.this)
+                            .createDownloadBulletin(BulletinFactory.FileType.UNKNOWNS, count, themeDelegate)
+                            .show();
+                    }
+                });
+            };
+            if (!org.telegram.ui.ayu.firewall.FirewallAlerts.guardDocumentTap(getParentActivity(), getResourceProvider(),
+                currentAccount, source, document, save)) {
+                save.run();
+            }
+        }
+
+        @Override
         public void didPressSponsoredClose(ChatMessageCell cell) {
             selectedObject = cell.getMessageObject();
             hideAds();
@@ -40514,7 +40819,27 @@ public class ChatActivity extends BaseFragment implements
         }
 
         @Override
+        public void didPressRichButton(ChatMessageCell cell, TL_keyboard.KeyboardButtonProto button) {
+            if (TLKeyboardHelper.isDisabled(button)) return;
+            final TLRPC.KeyboardButton legacyButton = TLKeyboardHelper.toLegacyButton(button);
+            if (legacyButton != null) didPressBotButton(cell, legacyButton);
+        }
+
+        @Override
+        public void didLongPressRichButton(ChatMessageCell cell, TL_keyboard.KeyboardButtonProto button) {
+            if (TLKeyboardHelper.isDisabled(button)) return;
+            final TLRPC.KeyboardButton legacyButton = TLKeyboardHelper.toLegacyButton(button);
+            if (legacyButton != null) didLongPressBotButton(cell, legacyButton);
+        }
+
+        @Override
+        public void didPressAppUpdateButton() {
+            Browser.openUrl(getContext(), "https://github.com/OcoderX/yangi-telegram/releases");
+        }
+
+        @Override
         public void didPressBotButton(ChatMessageCell cell, TLRPC.KeyboardButton button) {
+            if (button == null || button.disabled) return;
             if (chatMode == MODE_QUICK_REPLIES) return;
             if (getParentActivity() == null || bottomChannelButtonsLayout.getVisibility() == View.VISIBLE &&
                     !(button instanceof TLRPC.TL_keyboardButtonSwitchInline) && !(button instanceof TLRPC.TL_keyboardButtonCallback) &&
@@ -40708,6 +41033,7 @@ public class ChatActivity extends BaseFragment implements
 
         @Override
         public void didLongPressBotButton(ChatMessageCell cell, TLRPC.KeyboardButton button) {
+            if (button == null || button.disabled) return;
             if (chatMode == MODE_QUICK_REPLIES) return;
             if (getParentActivity() == null || bottomChannelButtonsLayout.getVisibility() == View.VISIBLE &&
                     !(button instanceof TLRPC.TL_keyboardButtonSwitchInline) && !(button instanceof TLRPC.TL_keyboardButtonCallback) &&
@@ -46842,11 +47168,11 @@ public class ChatActivity extends BaseFragment implements
         final long threadId = getThreadId();
         // 1. local state: the dialog is marked as read up to this message. The queued read task is
         //    still suppressed by ghost mode, that is fine - step 2 sends the receipt itself.
-        org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, true, false);
+        org.telegram.messenger.ayu.AyuState.setAllowReadPacket(currentAccount, did, true, false);
         try {
             getMessagesController().markDialogAsRead(did, mid, mid, date, false, threadId, 0, true, 0);
         } finally {
-            org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, false, false);
+            org.telegram.messenger.ayu.AyuState.setAllowReadPacket(currentAccount, did, false, false);
         }
         // 2. the actual receipt: messages.readHistory / channels.readHistory / readDiscussion,
         //    sent directly so it cannot be swallowed by the ghost-mode guard in completeReadTask()
@@ -46884,6 +47210,52 @@ public class ChatActivity extends BaseFragment implements
     }
 
     // ---------------------------------------------------------------- ox: message menu extras
+
+    private org.telegram.ui.ayu.AyuMediaSaveController ayuMediaSaveController;
+    private Runnable ayuPendingMediaSave;
+
+    private void ayuResumeMediaSaveAfterPermission(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode != BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE || ayuPendingMediaSave == null) return;
+        Runnable resume = ayuPendingMediaSave;
+        ayuPendingMediaSave = null;
+        if (permissions == null || grantResults == null) return;
+        for (int i = 0; i < Math.min(permissions.length, grantResults.length); i++) {
+            if (Manifest.permission.WRITE_EXTERNAL_STORAGE.equals(permissions[i]) && grantResults[i] == PackageManager.PERMISSION_GRANTED) {
+                resume.run();
+                return;
+            }
+        }
+    }
+
+    private void ayuSaveDocument(MessageObject source) {
+        if (getParentActivity() == null || chatMode == MODE_SCHEDULED || currentAccount != source.currentAccount
+                || UserConfig.selectedAccount != currentAccount
+                || !org.telegram.ui.ayu.AyuMediaSaveController.canSave(source)) return;
+        if (Build.VERSION.SDK_INT >= 23 && (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE)
+                && getParentActivity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            final int account = currentAccount;
+            final long owner = getUserConfig().getClientUserId();
+            final long displayDialog = dialog_id;
+            final TLRPC.Document document = source.getDocument();
+            ayuPendingMediaSave = () -> {
+                if (!isFinished && currentAccount == account && UserConfig.selectedAccount == account && dialog_id == displayDialog
+                        && getUserConfig().getClientUserId() == owner && source.getDocument() == document) ayuSaveDocument(source);
+            };
+            getParentActivity().requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE);
+            return;
+        }
+        final int sourceAccount = source.currentAccount;
+        final long sourceDialog = dialog_id;
+        final boolean music = source.isMusic();
+        if (ayuMediaSaveController == null) ayuMediaSaveController = new org.telegram.ui.ayu.AyuMediaSaveController(this);
+        ayuMediaSaveController.save(source, () -> currentAccount == sourceAccount && dialog_id == sourceDialog
+                        && chatMode != MODE_SCHEDULED,
+                () -> {
+                    if (getParentActivity() != null && fragmentView != null && !isFinished) {
+                        BulletinFactory.of(this).createDownloadBulletin(music ? BulletinFactory.FileType.AUDIOS : BulletinFactory.FileType.UNKNOWNS, 1, themeDelegate).show();
+                    }
+                });
+    }
 
     /** ox: pending "special forward" flags, consumed by {@link #didSelectDialogs} */
     private boolean ayuSpecialForwardPending;
@@ -46937,8 +47309,12 @@ public class ChatActivity extends BaseFragment implements
         }
         final MessageObject forwardMessage = message;
         final MessageObject.GroupedMessages forwardGroup = group;
+        final ArrayList<MessageObject> editMessages = new ArrayList<>();
+        if (forwardGroup != null) editMessages.addAll(forwardGroup.messages);
+        else editMessages.add(forwardMessage);
         final boolean canHideCaption = !TextUtils.isEmpty(message.caption) || message.getDocument() != null || message.isPhoto();
-        org.telegram.ui.ayu.menu.AyuSpecialForwardSheet.show(this, canHideCaption, (hideSenderName, hideCaption, withoutSound) -> {
+        org.telegram.ui.ayu.menu.AyuSpecialForwardSheet.show(this, canHideCaption, editMessages, (hideSenderName, hideCaption, withoutSound, edits) -> {
+            if (isFinished || currentAccount != forwardMessage.currentAccount) return;
             if (getMessagesController().isFrozen()) {
                 AccountFrozenAlert.show(currentAccount);
                 return;
@@ -46957,7 +47333,7 @@ public class ChatActivity extends BaseFragment implements
             args.putBoolean("hasInvoice", forwardMessage.isInvoice());
             args.putBoolean("canSelectTopics", true);
             DialogsActivity fragment = new DialogsActivity(args);
-            fragment.setDelegate(ChatActivity.this);
+            setForwardSelectionDelegate(fragment, edits);
             presentFragment(fragment);
         });
     }
@@ -47088,6 +47464,12 @@ public class ChatActivity extends BaseFragment implements
         final boolean noforwards = getMessagesController().isChatNoForwards(currentChat)
                 || message.messageOwner.noforwards;
 
+        if (!options.contains(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC)
+                && org.telegram.ui.ayu.AyuMediaSaveController.canSave(message)) {
+            ayuInsertMenuItem(icons, items, options, OPTION_REPLY, OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC,
+                    getString(message.isMusic() ? R.string.SaveToMusic : R.string.SaveToDownloads), R.drawable.msg_download);
+        }
+
         // Copy -> Copy piece of text
         if (!TextUtils.isEmpty(menuText) && !noforwards) {
             ayuInsertMenuItem(icons, items, options, OPTION_COPY, OPTION_AYU_COPY_PIECE,
@@ -47104,6 +47486,15 @@ public class ChatActivity extends BaseFragment implements
                 ayuInsertMenuItem(icons, items, options, anchor, OPTION_AYU_SHOW_MESSAGES,
                         LocaleController.getString(R.string.AyuShowMessages), R.drawable.msg_search);
             }
+        }
+        // Manual translation is available for readable content regardless of detected/UI language.
+        if (!options.contains(OPTION_TRANSLATE) && message.contentType == 0 && !message.isRestrictedMessage
+                && !message.isSecretMedia() && !message.isEphemeral() && !message.isAnimatedEmoji() && !message.isDice()
+                && (!TextUtils.isEmpty(message.getMessageTextToTranslate(selectedObjectGroup, null))
+                    || message.type == MessageObject.TYPE_ARTICLE && message.messageOwner.rich_message != null && !message.translated)) {
+            final int anchor = options.contains(OPTION_AYU_COPY_PIECE) ? OPTION_AYU_COPY_PIECE : OPTION_COPY;
+            ayuInsertMenuItem(icons, items, options, anchor, OPTION_TRANSLATE,
+                    LocaleController.getString(R.string.TranslateMessage), R.drawable.msg_translate);
         }
         // Translate -> AI Tools
         if (!TextUtils.isEmpty(menuText) && AyuConfig.aiToolsEnabled) {
@@ -47158,7 +47549,7 @@ public class ChatActivity extends BaseFragment implements
             options.add(OPTION_AYU_LONG_SCREENSHOT);
             icons.add(R.drawable.msg_photos);
         }
-        if (!AyuConfig.sendReadPackets && !ayuDeletedMessage && message.getId() > 0 && !message.isOutOwner()
+        if (!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets && !ayuDeletedMessage && message.getId() > 0 && !message.isOutOwner()
                 && currentEncryptedChat == null && chatMode == 0) {
             items.add(LocaleController.getString(R.string.AyuReadMessage));
             options.add(OPTION_AYU_READ_MESSAGE);
@@ -47342,7 +47733,11 @@ public class ChatActivity extends BaseFragment implements
     private void checkUi_topPanelLayoutVisibility() {
         final float factor = 1f - animatorHideTopPanelByEmojiKeyboardExpanded.getFloatValue();
         topPanelLayout.setAlpha(factor);
-        topPanelLayout.setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
+        final int visibility = factor > 0 ? View.VISIBLE : View.GONE;
+        if (topPanelLayout.getVisibility() != visibility) {
+            topPanelLayout.setVisibility(visibility);
+            org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
+        }
     }
 
     private void checkUi_topPanelLayoutWidth() {

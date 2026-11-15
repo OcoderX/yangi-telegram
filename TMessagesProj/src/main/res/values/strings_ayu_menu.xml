@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Ox-gram: message context menu -->
+    <!-- OcoderX-gram: message context menu -->
 
     <!-- Copy piece of text -->
     <string name="AyuCopyPiece">Copy piece of text</string>
@@ -58,4 +58,7 @@
     <string name="AyuContextMenuOnTap">Menu on single tap</string>
     <string name="AyuContextMenuOnTapInfo">A single tap on a message bubble opens the context menu.</string>
     <string name="AyuMarkedMessagesEnable">Marking messages</string>
+
+    <string name="AyuSendSeparately">Send separately</string>
+    <string name="AyuSendGrouped">Send as an album</string>
 </resources>

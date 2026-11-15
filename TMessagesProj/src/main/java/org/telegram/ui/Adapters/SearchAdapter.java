@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Adapters;
 
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.removeSpans;
 
@@ -52,6 +54,7 @@ import java.util.TimerTask;
 
 public class SearchAdapter extends RecyclerListView.SelectionAdapter {
 
+    private final int currentAccount = UserConfig.selectedAccount;
     private Context mContext;
     private LongSparseArray<TLRPC.User> ignoreUsers;
     private ArrayList<Object> searchResult = new ArrayList<>();
@@ -250,6 +253,20 @@ public class SearchAdapter extends RecyclerListView.SelectionAdapter {
                 onSearchProgressChanged();
             }
         });
+    }
+
+    @Override
+    public void notifyDataSetChanged() {
+        for (int i = searchResult.size() - 1; i >= 0; i--) {
+            Object object = searchResult.get(i);
+            if (object instanceof TLRPC.User && HiddenChatsController.getInstance(currentAccount).isHidden(((TLRPC.User) object).id)) {
+                searchResult.remove(i);
+                if (i < searchResultNames.size()) searchResultNames.remove(i);
+            }
+        }
+        unregistredContacts.removeIf(contact -> contact.user != null && HiddenChatsController.getInstance(currentAccount).isHidden(contact.user.id));
+        if (searchAdapterHelper != null) searchAdapterHelper.removeHiddenResults();
+        super.notifyDataSetChanged();
     }
 
     protected void onSearchProgressChanged() {

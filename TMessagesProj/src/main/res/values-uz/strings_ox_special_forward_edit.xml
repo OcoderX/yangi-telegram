@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxSpecialForwardApply">Qo‘llash</string>
+    <string name="OxSpecialForwardEdit">Yuborishdan oldin tahrirlash</string>
+    <string name="OxSpecialForwardEditApplied">Tahrir qo‘llandi · ko‘rish</string>
+    <string name="OxSpecialForwardCopyInfo">O‘zgarishlar tanlangan yuboruvchi nomidan yangi nusxa sifatida, asl yuboruvchi sarlavhasisiz yuboriladi. Tahrirni qo‘llash izohlarni ko‘rsatadi; «Izohni yashirish» ularni yana yashirishi mumkin. Format matn bilan birga o‘zgaradi.</string>
+    <string name="OxSpecialForwardUnsupported">Tanlovda xavfsiz tahrirlab bo‘lmaydigan kontent (masalan, so‘rovnoma, tugmalar, murakkab post yoki vaqtinchalik media) bor yoki xabarlar soni 100 tadan ortiq. Ularni o‘zgartirmasdan yuborish mumkin.</string>
+    <string name="OxSpecialForwardPrevious">Oldingi</string>
+    <string name="OxSpecialForwardNext">Keyingi</string>
+    <string name="OxSpecialForwardItem">%2$d ta xabardan %1$d-xabar</string>
+    <string name="OxSpecialForwardCaption">Izoh</string>
+    <string name="OxSpecialForwardText">Matn</string>
+    <string name="OxSpecialForwardLength">Matn %1$d ta belgidan oshmasin. Matnli xabar bo‘sh bo‘lishi mumkin emas.</string>
+</resources>

@@ -198,9 +198,24 @@ public class BotAccountHelper {
         return object != null && KNOWN_BLOCKED.contains(methodKey(object));
     }
 
+    /** Update synchronization remains available to bot accounts and must never be learned as blocked. */
+    public static boolean isEssentialSyncRequest(TLObject object) {
+        if (object == null) {
+            return false;
+        }
+        switch (methodKey(object)) {
+            case "TL_updates_getState":
+            case "TL_updates_getDifference":
+            case "TL_updates_getChannelDifference":
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /** True when this request must not leave the device for this account. */
     public static boolean shouldBlock(int account, TLObject object) {
-        if (object == null || !isBotAccount(account)) {
+        if (object == null || isEssentialSyncRequest(object) || !isBotAccount(account)) {
             return false;
         }
         final String key = methodKey(object);
@@ -225,7 +240,7 @@ public class BotAccountHelper {
 
     /** Remembers a method the server just refused, so it is never sent again for this account. */
     public static void onRequestError(int account, TLObject object, TLRPC.TL_error error) {
-        if (object == null || !isBotMethodInvalid(error)) {
+        if (object == null || isEssentialSyncRequest(object) || !isBotMethodInvalid(error)) {
             return;
         }
         if (!isBotAccount(account)) {

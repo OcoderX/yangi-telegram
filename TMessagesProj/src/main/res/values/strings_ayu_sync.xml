@@ -29,7 +29,7 @@
 
     <!-- AyuGram: keep-alive service -->
     <string name="AyuKeepAliveNotification">OcoderX-gram keep-alive</string>
-    <!-- Ox-gram: OcoderX-sync service screen -->
+    <!-- OcoderX-gram: OcoderX-sync service screen -->
     <string name="OxSyncHeroTitle">What is OcoderX-sync?</string>
     <string name="OxSyncHeroText">It is a paid service on the OcoderX server. It works for you 24 hours a day and keeps a copy of the things Telegram usually takes away, so nothing gets lost.</string>
     <string name="OxSyncWhatHeader">What it saves for you</string>

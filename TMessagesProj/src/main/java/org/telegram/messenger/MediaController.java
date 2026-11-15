@@ -979,12 +979,14 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
         public MessageObject messageObject;
         public VideoEditedInfo videoEditedInfo;
         public int currentAccount;
+        public final long accountOwnerId;
         public boolean foreground;
         public boolean foregroundConversion;
 
         public VideoConvertMessage(MessageObject object, VideoEditedInfo info, boolean foreground, boolean conversion) {
             messageObject = object;
             currentAccount = messageObject.currentAccount;
+            accountOwnerId = UserConfig.getInstance(currentAccount).getClientUserId();
             videoEditedInfo = info;
             this.foreground = foreground;
             this.foregroundConversion = conversion;
@@ -5048,11 +5050,12 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
         private ArrayList<MessageObject> messageObjects;
         private HashMap<String, MessageObject> loadingMessageObjects = new HashMap<>();
         private float finishedProgress;
-        private boolean cancelled;
+        private volatile boolean cancelled;
         private boolean finished;
         private int copiedFiles;
-        private CountDownLatch waitingForFile;
+        private volatile CountDownLatch waitingForFile;
         private MessagesStorage.IntCallback onFinishRunnable;
+        private SaveFilesResultCallback onSaveResult;
         private boolean isMusic;
 
         public MediaLoader(Context context, AccountInstance accountInstance, ArrayList<MessageObject> messages, MessagesStorage.IntCallback onFinish) {
@@ -5070,12 +5073,18 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             progressDialog.setCancelDialog(true);
             progressDialog.setOnCancelListener(d -> {
                 cancelled = true;
+                releaseDownloadWait();
             });
+        }
+
+        private void releaseDownloadWait() {
+            CountDownLatch waiting = waitingForFile;
+            if (waiting != null) while (waiting.getCount() > 0) waiting.countDown();
         }
 
         public void start() {
             AndroidUtilities.runOnUIThread(() -> {
-                if (!finished) {
+                if (!finished && !cancelled) {
                     progressDialog.show();
                 }
             }, 250);
@@ -5084,6 +5093,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                 try {
                     if (Build.VERSION.SDK_INT >= 29) {
                         for (int b = 0, N = messageObjects.size(); b < N; b++) {
+                            if (cancelled) break;
                             MessageObject message = messageObjects.get(b);
                             if (processLivePhotoMessage(message)) {
                                 continue;
@@ -5132,8 +5142,11 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                                 FileLog.d("saving file: correcting path from " + path + " to " + (sourceFile == null ? null : sourceFile.getAbsolutePath()));
                             }
                             if (sourceFile != null && sourceFile.exists()) {
-                                saveFileInternal(isMusic ? 3 : 2, sourceFile, name);
-                                copiedFiles++;
+                                Uri saved = saveFileInternal(isMusic ? 3 : 2, sourceFile, name);
+                                if (saved != null) {
+                                    if (cancelled) ApplicationLoader.applicationContext.getContentResolver().delete(saved, null, null);
+                                    else copiedFiles++;
+                                }
                             }
                         }
                     } else {
@@ -5145,6 +5158,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                         }
                         dir.mkdir();
                         for (int b = 0, N = messageObjects.size(); b < N; b++) {
+                            if (cancelled) break;
                             MessageObject message = messageObjects.get(b);
                             if (processLivePhotoMessage(message)) {
                                 continue;
@@ -5197,34 +5211,38 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                                 addMessageToLoad(message);
                                 waitingForFile.await();
                             }
-                            if (sourceFile.exists()) {
-                                copyFile(sourceFile, destFile, message.getMimeType());
+                            if (sourceFile.exists() && copyFile(sourceFile, destFile, message.getMimeType())) {
                                 copiedFiles++;
                             }
                         }
                     }
-                    checkIfFinished();
                 } catch (Exception e) {
                     FileLog.e(e);
+                } finally {
+                    AndroidUtilities.runOnUIThread(() -> {
+                        loadingMessageObjects.clear();
+                        checkIfFinished();
+                    });
                 }
 
             }).start();
         }
 
         private void checkIfFinished() {
-            if (!loadingMessageObjects.isEmpty()) {
+            if (!loadingMessageObjects.isEmpty() && !cancelled) {
                 return;
             }
             AndroidUtilities.runOnUIThread(() -> {
+                if (finished) return;
+                finished = true;
                 try {
                     if (progressDialog.isShowing()) {
                         progressDialog.dismiss();
-                    } else {
-                        finished = true;
                     }
                     if (onFinishRunnable != null) {
                         AndroidUtilities.runOnUIThread(() -> onFinishRunnable.run(copiedFiles));
                     }
+                    if (onSaveResult != null) onSaveResult.onFinished(copiedFiles, cancelled);
                 } catch (Exception e) {
                     FileLog.e(e);
                 }
@@ -5258,6 +5276,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                 final TLRPC.Photo finalPhoto = media.photo;
                 final TLRPC.Document finalDoc = media.document;
                 AndroidUtilities.runOnUIThread(() -> {
+                    if (cancelled) { releaseDownloadWait(); return; }
                     if (needPhoto) {
                         String fileName = FileLoader.getAttachFileName(photoSize);
                         loadingMessageObjects.put(fileName, messageObject);
@@ -5350,6 +5369,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
 
         private void addMessageToLoad(MessageObject messageObject) {
             AndroidUtilities.runOnUIThread(() -> {
+                if (cancelled) { releaseDownloadWait(); return; }
                 TLRPC.Document document = messageObject.getDocument();
                 if (messageObject.qualityToSave != null) {
                     document = messageObject.qualityToSave;
@@ -5476,6 +5496,20 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             return;
         }
         new MediaLoader(context, accountInstance, messageObjects, onSaved).start();
+    }
+
+    public interface SaveFilesResultCallback {
+        void onFinished(int savedCount, boolean cancelled);
+    }
+
+    public static void saveFilesFromMessagesWithResult(Context context, AccountInstance accountInstance, ArrayList<MessageObject> messages, SaveFilesResultCallback onSaved) {
+        if (messages == null || messages.isEmpty()) {
+            if (onSaved != null) onSaved.onFinished(0, false);
+            return;
+        }
+        MediaLoader loader = new MediaLoader(context, accountInstance, messages, null);
+        loader.onSaveResult = onSaved;
+        loader.start();
     }
 
     public static void saveFile(String fullPath, Context context, final int type, final String name, final String mime) {
@@ -5829,7 +5863,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
     }
 
     private static Uri saveFileInternal(int type, File sourceFile, String filename) {
+        Uri dstUri = null;
         try {
+            if (sourceFile == null || AndroidUtilities.isInternalUri(Uri.fromFile(sourceFile))) return null;
             int selectedType = type;
             ContentValues contentValues = new ContentValues();
             String extension = FileLoader.getFileExtension(sourceFile);
@@ -5883,16 +5919,21 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
 
             contentValues.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
 
-            Uri dstUri = ApplicationLoader.applicationContext.getContentResolver().insert(uriToInsert, contentValues);
+            dstUri = ApplicationLoader.applicationContext.getContentResolver().insert(uriToInsert, contentValues);
             if (dstUri != null) {
-                FileInputStream fileInputStream = new FileInputStream(sourceFile);
-                OutputStream outputStream = ApplicationLoader.applicationContext.getContentResolver().openOutputStream(dstUri);
-                AndroidUtilities.copyFile(fileInputStream, outputStream);
-                fileInputStream.close();
+                try (FileInputStream fileInputStream = new FileInputStream(sourceFile);
+                     OutputStream outputStream = ApplicationLoader.applicationContext.getContentResolver().openOutputStream(dstUri)) {
+                    if (outputStream == null) throw new IOException("No media output stream");
+                    AndroidUtilities.copyFile(fileInputStream, outputStream);
+                }
             }
             return dstUri;
         } catch (Exception e) {
             FileLog.e(e);
+            if (dstUri != null) {
+                try { ApplicationLoader.applicationContext.getContentResolver().delete(dstUri, null, null); }
+                catch (Exception cleanupError) { FileLog.e(cleanupError); }
+            }
             return null;
         }
     }

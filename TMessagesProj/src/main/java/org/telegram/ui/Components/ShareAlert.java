@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Components;
 
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.animation.Animator;
@@ -1846,9 +1848,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
         updateSelectedCount(0);
 
         DialogsActivity.loadDialogs(AccountInstance.getInstance(currentAccount));
-        if (listAdapter.dialogs.isEmpty()) {
-            NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
-        }
+        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
 
         DialogsSearchAdapter.loadRecentSearch(currentAccount, 0, new DialogsSearchAdapter.OnRecentSearchLoaded() {
             @Override
@@ -1856,7 +1856,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                 if (arrayList != null) {
                     for (int i = 0; i < arrayList.size(); ++i) {
                         DialogsSearchAdapter.RecentSearchObject recentSearchObject = arrayList.get(i);
-                        if (recentSearchObject.object instanceof TLRPC.Chat && !ChatObject.canWriteToChat((TLRPC.Chat) recentSearchObject.object)) {
+                        if (HiddenChatsController.getInstance(currentAccount).isHidden(recentSearchObject.did) || recentSearchObject.object instanceof TLRPC.Chat && !ChatObject.canWriteToChat((TLRPC.Chat) recentSearchObject.object)) {
                             arrayList.remove(i);
                             i--;
                         }
@@ -1940,6 +1940,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
 
     private int shiftDp = 4;
     private void selectDialog(View cell, TLRPC.Dialog dialog) {
+        if (dialog == null || HiddenChatsController.getInstance(currentAccount).isHidden(dialog.id)) return;
         if (dialog instanceof ShareDialogsAdapter.MyStoryDialog) {
             onShareStory(cell);
             return;
@@ -2398,7 +2399,21 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
         return true;
     }
 
+    private void removeHiddenSelections() {
+        boolean changed = false;
+        for (int i = selectedDialogs.size() - 1; i >= 0; i--) {
+            if (HiddenChatsController.getInstance(currentAccount).isHidden(selectedDialogs.keyAt(i))) {
+                selectedDialogTopics.remove(selectedDialogs.valueAt(i));
+                selectedDialogs.removeAt(i);
+                changed = true;
+            }
+        }
+        if (changed) updateSelectedCount(0);
+    }
+
     protected void sendInternal(boolean withSound) {
+        removeHiddenSelections();
+        if (selectedDialogs.size() == 0) return;
         for (int a = 0; a < selectedDialogs.size(); a++) {
             long key = selectedDialogs.keyAt(a);
             if (AlertsCreator.checkSlowMode(getContext(), currentAccount, key, frameLayout2.getTag() != null && commentTextView.length() > 0)) {
@@ -2649,10 +2664,10 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
         if (id == NotificationCenter.dialogsNeedReload) {
-            if (listAdapter != null) {
-                listAdapter.fetchDialogs();
-            }
-            NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.dialogsNeedReload);
+            if (listAdapter != null) listAdapter.fetchDialogs();
+            removeHiddenSelections();
+            if (searchAdapter != null) searchAdapter.notifyDataSetChanged();
+            if (selectedTopicDialog != null && HiddenChatsController.getInstance(currentAccount).isHidden(selectedTopicDialog.id)) dismiss();
         }
     }
 
@@ -2913,6 +2928,15 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             fetchDialogs();
         }
 
+        @Override
+        public void notifyDataSetChanged() {
+            dialogs.removeIf(dialog -> HiddenChatsController.getInstance(currentAccount).isHidden(dialog.id));
+            for (int i = dialogsMap.size() - 1; i >= 0; i--) {
+                if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogsMap.keyAt(i))) dialogsMap.removeAt(i);
+            }
+            super.notifyDataSetChanged();
+        }
+
         public void fetchDialogs() {
             dialogs.clear();
             dialogsMap.clear();
@@ -2931,6 +2955,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             ArrayList<TLRPC.Dialog> allDialogs = MessagesController.getInstance(currentAccount).getAllDialogs();
             for (int a = 0; a < allDialogs.size(); a++) {
                 TLRPC.Dialog dialog = allDialogs.get(a);
+                if (HiddenChatsController.getInstance(currentAccount).isHidden(dialog.id)) continue;
                 if (!(dialog instanceof TLRPC.TL_dialog)) {
                     continue;
                 }
@@ -3379,11 +3404,20 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             });
         }
 
+        @Override
+        public void notifyDataSetChanged() {
+            searchResult.removeIf(result -> result instanceof DialogSearchResult && HiddenChatsController.getInstance(currentAccount).isHidden(((DialogSearchResult) result).dialog.id));
+            recentSearchObjects.removeIf(recent -> HiddenChatsController.getInstance(currentAccount).isHidden(recent.did));
+            if (searchAdapterHelper != null) searchAdapterHelper.removeHiddenResults();
+            super.notifyDataSetChanged();
+        }
+
         private void updateSearchResults(final ArrayList<Object> result, final int searchId) {
             AndroidUtilities.runOnUIThread(() -> {
                 if (searchId != lastSearchId) {
                     return;
                 }
+                result.removeIf(item -> item instanceof DialogSearchResult && HiddenChatsController.getInstance(currentAccount).isHidden(((DialogSearchResult) item).dialog.id));
                 int oldItemCount = getItemCount();
                 internalDialogsIsSearching = false;
                 lastLocalSearchId = searchId;

@@ -14,8 +14,8 @@ import java.util.Arrays;
 import java.util.Map;
 
 /**
- * Revision counts loaded once per dialog on the history queue. Cell binds only look up primitive
- * keys in memory. Building a large dialog snapshot never holds the lock used by those lookups.
+ * Revision counts loaded on the history queue and retained for recently read dialogs. Cell binds
+ * only look up primitive keys in memory. Building a large snapshot never holds the lookup lock.
  */
 public class AyuEditHistoryCache {
 
@@ -24,6 +24,9 @@ public class AyuEditHistoryCache {
 
     private static final int LOADED = 1;
     private static final int LOADING = 2;
+    private static final int MAX_DIALOGS = 128;
+    // Soft limit: a single requested dialog and in-flight updates must remain complete.
+    private static final int MAX_ENTRIES = 32768;
     private static final Object lock = new Object();
 
     private static class DialogCounts {
@@ -32,10 +35,19 @@ public class AyuEditHistoryCache {
         SparseIntArray snapshot;
         final SparseIntArray updates = new SparseIntArray();
         int state;
+        long dialogId;
+        int entries;
+        DialogCounts older, newer;
+        boolean linked;
     }
 
-    @SuppressWarnings("unchecked")
-    private static final LongSparseArray<DialogCounts>[] counts = new LongSparseArray[UserConfig.MAX_ACCOUNT_COUNT];
+    private static class AccountCounts {
+        final LongSparseArray<DialogCounts> dialogs = new LongSparseArray<>();
+        DialogCounts oldest, newest;
+        int entries;
+    }
+
+    private static final AccountCounts[] counts = new AccountCounts[UserConfig.MAX_ACCOUNT_COUNT];
     private static final long[] accountOwners = new long[UserConfig.MAX_ACCOUNT_COUNT];
 
     private static boolean validAccount(int currentAccount) {
@@ -52,20 +64,76 @@ public class AyuEditHistoryCache {
         if (selfId == 0) {
             return null;
         }
-        LongSparseArray<DialogCounts> dialogs = counts[currentAccount];
-        if (dialogs == null) {
+        AccountCounts account = counts[currentAccount];
+        if (account == null) {
             if (!create) {
                 return null;
             }
-            dialogs = new LongSparseArray<>();
-            counts[currentAccount] = dialogs;
+            account = new AccountCounts();
+            counts[currentAccount] = account;
         }
-        DialogCounts result = dialogs.get(dialogId);
+        DialogCounts result = account.dialogs.get(dialogId);
         if (result == null && create) {
+            if (account.dialogs.size() >= MAX_DIALOGS) {
+                // Loading dialogs are not in the eviction list. If all slots are busy, the
+                // next access can retry after one completes without flooding the history queue.
+                if (account.oldest == null) {
+                    return null;
+                }
+                evict(account, account.oldest);
+            }
             result = new DialogCounts();
-            dialogs.put(dialogId, result);
+            result.dialogId = dialogId;
+            account.dialogs.put(dialogId, result);
+            touch(account, result);
         }
         return result;
+    }
+
+    // Intrusive recency list: no boxing, allocation or dialog scans on cell lookups. Only
+    // non-loading dialogs participate, so eviction never discards updates awaiting a snapshot.
+    private static void unlink(AccountCounts account, DialogCounts dialog) {
+        if (!dialog.linked) {
+            return;
+        }
+        if (dialog.older == null) account.oldest = dialog.newer;
+        else dialog.older.newer = dialog.newer;
+        if (dialog.newer == null) account.newest = dialog.older;
+        else dialog.newer.older = dialog.older;
+        dialog.older = dialog.newer = null;
+        dialog.linked = false;
+    }
+
+    private static void touch(AccountCounts account, DialogCounts dialog) {
+        if (dialog.state == LOADING || account.newest == dialog) {
+            return;
+        }
+        unlink(account, dialog);
+        dialog.older = account.newest;
+        if (account.newest == null) account.oldest = dialog;
+        else account.newest.newer = dialog;
+        account.newest = dialog;
+        dialog.linked = true;
+    }
+
+    private static void evict(AccountCounts account, DialogCounts dialog) {
+        unlink(account, dialog);
+        account.dialogs.remove(dialog.dialogId);
+        account.entries -= dialog.entries;
+    }
+
+    /** Called only on mutation/publication, never while reading a cached message count. */
+    private static void trimEntries(AccountCounts account, DialogCounts protectedDialog) {
+        final int entries = protectedDialog.updates.size()
+                + (protectedDialog.snapshot == null ? 0 : protectedDialog.snapshot.size());
+        account.entries += entries - protectedDialog.entries;
+        protectedDialog.entries = entries;
+        while (account.entries > MAX_ENTRIES) {
+            DialogCounts oldest = account.oldest;
+            if (oldest == protectedDialog) oldest = oldest.newer;
+            if (oldest == null) break;
+            evict(account, oldest);
+        }
     }
 
     /** Returns immediately; a missing dialog is loaded in the background. */
@@ -78,6 +146,7 @@ public class AyuEditHistoryCache {
         synchronized (lock) {
             final DialogCounts dialog = dialogCounts(currentAccount, dialogId, false);
             if (dialog != null) {
+                touch(counts[currentAccount], dialog);
                 final int updateIndex = dialog.updates.indexOfKey(messageId);
                 if (updateIndex >= 0) {
                     value = dialog.updates.valueAt(updateIndex);
@@ -103,9 +172,11 @@ public class AyuEditHistoryCache {
             return;
         }
         synchronized (lock) {
-            final DialogCounts dialog = dialogCounts(currentAccount, dialogId, true);
+            // Unseen dialogs need no live cache entry: the next load reads the stored revision.
+            final DialogCounts dialog = dialogCounts(currentAccount, dialogId, false);
             if (dialog != null) {
                 dialog.updates.put(messageId, count);
+                trimEntries(counts[currentAccount], dialog);
             }
         }
     }
@@ -118,6 +189,7 @@ public class AyuEditHistoryCache {
             final DialogCounts dialog = dialogCounts(currentAccount, dialogId, false);
             if (dialog != null) {
                 dialog.updates.put(messageId, 0);
+                trimEntries(counts[currentAccount], dialog);
             }
         }
     }
@@ -136,9 +208,10 @@ public class AyuEditHistoryCache {
             return;
         }
         synchronized (lock) {
-            final LongSparseArray<DialogCounts> dialogs = counts[currentAccount];
-            if (dialogs != null) {
-                dialogs.remove(dialogId);
+            final AccountCounts account = counts[currentAccount];
+            if (account != null) {
+                final DialogCounts dialog = account.dialogs.get(dialogId);
+                if (dialog != null) evict(account, dialog);
             }
         }
     }
@@ -155,10 +228,16 @@ public class AyuEditHistoryCache {
                 return;
             }
             selfId = accountOwners[currentAccount];
+            unlink(counts[currentAccount], loadingDialog);
             loadingDialog.state = LOADING;
         }
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             try {
+                synchronized (lock) {
+                    if (dialogCounts(currentAccount, dialogId, false) != loadingDialog) {
+                        return;
+                    }
+                }
                 final Map<Integer, Integer> result = AyuHistoryStorage.getInstance().getRevisionCounts(selfId, dialogId);
                 final int[] messageIds = new int[result.size()];
                 int size = 0;
@@ -179,6 +258,8 @@ public class AyuEditHistoryCache {
                     }
                     loadingDialog.snapshot = snapshot;
                     loadingDialog.state = LOADED;
+                    touch(counts[currentAccount], loadingDialog);
+                    trimEntries(counts[currentAccount], loadingDialog);
                 }
                 AndroidUtilities.runOnUIThread(() -> {
                     synchronized (lock) {
@@ -196,6 +277,8 @@ public class AyuEditHistoryCache {
                 synchronized (lock) {
                     if (dialogCounts(currentAccount, dialogId, false) == loadingDialog) {
                         loadingDialog.state = 0;
+                        touch(counts[currentAccount], loadingDialog);
+                        trimEntries(counts[currentAccount], loadingDialog);
                     }
                 }
             }

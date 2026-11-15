@@ -26,12 +26,12 @@ public class DoubleLinearChartData extends ChartData {
 
         for (int i = 0; i < n; i++) {
             final long m = lines.get(i).maxValue;
-            if (max == m) {
+            if (max == m || m == 0) {
                 linesK[i] = 1;
                 continue;
             }
 
-            linesK[i] = max / m;
+            linesK[i] = max / (float) m;
         }
     }
 }

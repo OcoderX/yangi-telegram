@@ -56,6 +56,9 @@ import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.DialogObject;
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.SharedConfig;
@@ -93,6 +96,10 @@ import java.util.Locale;
 import java.util.StringTokenizer;
 
 public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLayout {
+
+    private final NotificationCenter.NotificationCenterDelegate hiddenChatsObserver = (id, account, args) -> {
+        if (this.searchAdapter != null) this.searchAdapter.pruneHiddenResults();
+    };
 
     public interface DocumentSelectActivityDelegate {
         void didSelectFiles(ArrayList<String> files, String caption, ArrayList<TLRPC.MessageEntity> captionEntities, ArrayList<MessageObject> fmessages, boolean notify, int scheduleDate, int scheduleRepeatPeriod, long effectId, boolean invertMedia, long payStars);
@@ -199,6 +206,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
 
     public ChatAttachAlertDocumentLayout(ChatAttachAlert alert, Context context, int type, Theme.ResourcesProvider resourcesProvider) {
         super(alert, context, resourcesProvider);
+        NotificationCenter.getGlobalInstance().addObserver(hiddenChatsObserver, NotificationCenter.ayuConfigChanged);
         listAdapter = new ListAdapter(context);
         allowMusic = type == TYPE_MUSIC;
         isSoundPicker = type == TYPE_RINGTONE;
@@ -645,6 +653,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
 
     @Override
     public void onDestroy() {
+        NotificationCenter.getGlobalInstance().removeObserver(hiddenChatsObserver, NotificationCenter.ayuConfigChanged);
         try {
             if (receiverRegistered) {
                 ApplicationLoader.applicationContext.unregisterReceiver(receiver);
@@ -1057,7 +1066,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
             listAdapter.notifyDataSetChanged();
         }
         if (searchAdapter != null) {
-            searchAdapter.notifyDataSetChanged();
+            searchAdapter.pruneHiddenResults();
         }
     }
 
@@ -1537,6 +1546,8 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
 
         private int searchIndex;
         private int nextSearchRate;
+        private TLRPC.Message rawLastMessage;
+        private int rawMessagesLoaded;
 
         private final FilteredSearchView.MessageHashId messageHashIdTmp = new FilteredSearchView.MessageHashId(0, 0);
 
@@ -1574,6 +1585,44 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
 
         public SearchAdapter(Context context) {
             mContext = context;
+        }
+
+        private boolean isHiddenSearchDialog(long dialogId) {
+            HiddenChatsController hidden = HiddenChatsController.getInstance(parentAlert.currentAccount);
+            if (!hidden.isHidden(dialogId)) return false;
+            return !(currentSearchDialogId == dialogId && hidden.isUnlocked()
+                    && parentAlert.baseFragment instanceof ChatActivity
+                    && ((ChatActivity) parentAlert.baseFragment).getDialogId() == dialogId);
+        }
+
+        private boolean isHiddenTip(Object object) {
+            long dialogId = object instanceof TLRPC.User ? ((TLRPC.User) object).id
+                    : object instanceof TLRPC.Chat ? -((TLRPC.Chat) object).id
+                    : object instanceof TLRPC.EncryptedChat ? DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) object).id) : 0;
+            return HiddenChatsController.getInstance(parentAlert.currentAccount).isHidden(dialogId);
+        }
+
+        private void pruneHiddenResults() {
+            boolean changed = messages.removeIf(message -> isHiddenSearchDialog(message.getDialogId()));
+            selectedMessages.values().removeIf(message -> isHiddenSearchDialog(message.getDialogId()));
+            localTipChats.removeIf(this::isHiddenTip);
+            if (changed) {
+                sections.clear();
+                sectionArrays.clear();
+                messagesById.clear();
+                for (MessageObject message : messages) {
+                    ArrayList<MessageObject> group = sectionArrays.get(message.monthKey);
+                    if (group == null) {
+                        group = new ArrayList<>();
+                        sectionArrays.put(message.monthKey, group);
+                        sections.add(message.monthKey);
+                    }
+                    group.add(message);
+                    messagesById.put(message.getId(), message);
+                }
+            }
+            updateFiltersView(TextUtils.isEmpty(currentDataQuery), localTipChats, localTipDates, false);
+            notifyDataSetChanged();
         }
 
         public void search(final String query, boolean reset) {
@@ -1764,6 +1813,11 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
             String currentSearchFilterQueryString = String.format(Locale.ENGLISH, "%d%d%d%d%s", dialogId, minDate, maxDate, searchFilter.filterType, query);
             boolean filterAndQueryIsSame = lastSearchFilterQueryString != null && lastSearchFilterQueryString.equals(currentSearchFilterQueryString);
             boolean forceClear = !filterAndQueryIsSame && clearOldResults;
+            if (!filterAndQueryIsSame) {
+                rawLastMessage = null;
+                rawMessagesLoaded = 0;
+                nextSearchRate = 0;
+            }
             boolean filterIsSame = dialogId == currentSearchDialogId && currentSearchMinDate == minDate && currentSearchMaxDate == maxDate;
             currentSearchFilter = searchFilter;
             this.currentSearchDialogId = dialogId;
@@ -1808,7 +1862,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
             requestIndex++;
             final int requestId = requestIndex;
 
-            AccountInstance accountInstance = AccountInstance.getInstance(UserConfig.selectedAccount);
+            AccountInstance accountInstance = AccountInstance.getInstance(parentAlert.currentAccount);
 
             AndroidUtilities.runOnUIThread(searchRunnable = () -> {
                 TLObject request;
@@ -1826,9 +1880,8 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
                     if (maxDate > 0) {
                         req.max_date = (int) (maxDate / 1000);
                     }
-                    if (filterAndQueryIsSame && query.equals(lastMessagesSearchString) && !messages.isEmpty()) {
-                        MessageObject lastMessage = messages.get(messages.size() - 1);
-                        req.offset_id = lastMessage.getId();
+                    if (filterAndQueryIsSame && query.equals(lastMessagesSearchString) && rawLastMessage != null) {
+                        req.offset_id = rawLastMessage.id;
                     } else {
                         req.offset_id = 0;
                     }
@@ -1851,17 +1904,17 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
                     if (maxDate > 0) {
                         req.max_date = (int) (maxDate / 1000);
                     }
-                    if (filterAndQueryIsSame && query.equals(lastMessagesSearchString) && !messages.isEmpty()) {
-                        MessageObject lastMessage = messages.get(messages.size() - 1);
-                        req.offset_id = lastMessage.getId();
+                    if (filterAndQueryIsSame && query.equals(lastMessagesSearchString) && rawLastMessage != null) {
+                        TLRPC.Message lastMessage = rawLastMessage;
+                        req.offset_id = lastMessage.id;
                         req.offset_rate = nextSearchRate;
                         long id;
-                        if (lastMessage.messageOwner.peer_id.channel_id != 0) {
-                            id = -lastMessage.messageOwner.peer_id.channel_id;
-                        } else if (lastMessage.messageOwner.peer_id.chat_id != 0) {
-                            id = -lastMessage.messageOwner.peer_id.chat_id;
+                        if (lastMessage.peer_id.channel_id != 0) {
+                            id = -lastMessage.peer_id.channel_id;
+                        } else if (lastMessage.peer_id.chat_id != 0) {
+                            id = -lastMessage.peer_id.chat_id;
                         } else {
-                            id = lastMessage.messageOwner.peer_id.user_id;
+                            id = lastMessage.peer_id.user_id;
                         }
                         req.offset_peer = accountInstance.getMessagesController().getInputPeer(id);
                     } else {
@@ -1907,6 +1960,8 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
 
                         TLRPC.messages_Messages res = (TLRPC.messages_Messages) response;
                         nextSearchRate = res.next_rate;
+                        rawMessagesLoaded += res.messages.size();
+                        if (!res.messages.isEmpty()) rawLastMessage = res.messages.get(res.messages.size() - 1);
                         accountInstance.getMessagesStorage().putUsersAndChats(res.users, res.chats, true, true);
                         accountInstance.getMessagesController().putUsers(res.users, false);
                         accountInstance.getMessagesController().putChats(res.chats, false);
@@ -1921,6 +1976,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
                         int n = messageObjects.size();
                         for (int i = 0; i < n; i++) {
                             MessageObject messageObject = messageObjects.get(i);
+                            if (isHiddenSearchDialog(messageObject.getDialogId())) continue;
                             ArrayList<MessageObject> messageObjectsByDate = sectionArrays.get(messageObject.monthKey);
                             if (messageObjectsByDate == null) {
                                 messageObjectsByDate = new ArrayList<>();
@@ -1934,7 +1990,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
                         if (messages.size() > totalCount) {
                             totalCount = messages.size();
                         }
-                        endReached = messages.size() >= totalCount;
+                        endReached = res.messages.isEmpty() || rawMessagesLoaded >= totalCount;
 
                         if (messages.isEmpty()) {
                             if (TextUtils.isEmpty(currentDataQuery) && dialogId == 0 && minDate == 0) {
@@ -1968,6 +2024,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
                             }
                             localTipDates.clear();
                             localTipDates.addAll(dateData);
+                            localTipChats.removeIf(this::isHiddenTip);
                             updateFiltersView(TextUtils.isEmpty(currentDataQuery), localTipChats, localTipDates, true);
                         }
                         firstLoading = false;
@@ -2038,6 +2095,7 @@ public class ChatAttachAlertDocumentLayout extends ChatAttachAlert.AttachAlertLa
                             });
                         }
                         notifyDataSetChanged();
+                        if (messages.isEmpty() && !endReached) loadMore();
                     });
                 });
             }, (filterAndQueryIsSame && !messages.isEmpty()) ? 0 : 350);

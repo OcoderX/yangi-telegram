@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxTranslationAutoDetect">Определить автоматически</string>
+    <string name="OxTranslationBotUnsupported">Перевод Telegram недоступен для аккаунтов ботов. В настройках можно выбрать альтернативный способ перевода.</string>
+</resources>

@@ -56,23 +56,20 @@ public class AyuGhostHelper {
      * implicitly, so an explicit offline packet is sent to compensate.
      */
     public static void onNetworkResumed(int account) {
-        if (!AyuConfig.sendOnlinePackets || AyuConfig.sendOfflinePacketAfterOnline) {
+        if (!org.telegram.messenger.ayu.AyuGhostConfig.get(account).sendOnlinePackets || org.telegram.messenger.ayu.AyuGhostConfig.get(account).sendOfflinePacketAfterOnline) {
             sendOfflinePacket(account);
         }
     }
 
     /**
      * Called whenever one of the online-related ghost options changes. Immediately pushes the new status to the
-     * server for every logged-in account instead of waiting for the next app pause / resume.
+     * server for the changed account instead of waiting for the next app pause / resume.
      */
-    public static void onOnlineSettingsChanged() {
-        // the status fields of MessagesController are owned by the stage queue (see updateTimerProc)
+    public static void onOnlineSettingsChanged(int account) {
+        final long ownerId = AyuGhostConfig.get(account).ownerId;
         Utilities.stageQueue.postRunnable(() -> {
-            for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                if (!isActivated(a)) {
-                    continue;
-                }
-                MessagesController.getInstance(a).ayuOnOnlineSettingsChanged();
+            if (ownerId != 0 && AyuGhostConfig.get(account).ownerId == ownerId && isActivated(account)) {
+                MessagesController.getInstance(account).ayuOnOnlineSettingsChanged();
             }
         });
     }
@@ -87,7 +84,7 @@ public class AyuGhostHelper {
 
     /** "Mark read after sending a message" */
     public static void onMessageSent(int account, long dialogId, boolean scheduled) {
-        if (scheduled || AyuConfig.sendReadPackets || !AyuConfig.markReadAfterSend) {
+        if (scheduled || org.telegram.messenger.ayu.AyuGhostConfig.get(account).sendReadPackets || !org.telegram.messenger.ayu.AyuGhostConfig.get(account).markReadAfterSend) {
             return;
         }
         allowReadAndFlush(account, dialogId);
@@ -95,7 +92,7 @@ public class AyuGhostHelper {
 
     /** "Read on interact" (reactions, votes, etc.) */
     public static void onUserInteraction(int account, long dialogId) {
-        if (AyuConfig.sendReadPackets || !AyuConfig.markReadAfterAction) {
+        if (org.telegram.messenger.ayu.AyuGhostConfig.get(account).sendReadPackets || !org.telegram.messenger.ayu.AyuGhostConfig.get(account).markReadAfterAction) {
             return;
         }
         allowReadAndFlush(account, dialogId);
@@ -103,7 +100,7 @@ public class AyuGhostHelper {
 
     /** explicit "mark as read" chosen by the user from a menu: always goes through, even in ghost mode */
     public static void onManualMarkAsRead(int account, long dialogId) {
-        if (AyuConfig.sendReadPackets) {
+        if (org.telegram.messenger.ayu.AyuGhostConfig.get(account).sendReadPackets) {
             return;
         }
         allowReadAndFlush(account, dialogId);

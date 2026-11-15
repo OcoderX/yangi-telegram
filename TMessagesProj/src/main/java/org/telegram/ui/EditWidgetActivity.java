@@ -738,6 +738,10 @@ public class EditWidgetActivity extends BaseFragment {
         ArrayList<TLRPC.User> users = new ArrayList<>();
         ArrayList<TLRPC.Chat> chats = new ArrayList<>();
         getMessagesStorage().getWidgetDialogIds(currentWidgetId, widgetType, selectedDialogs, users, chats, true);
+        org.telegram.messenger.ayu.hidden.HiddenChatsController hidden = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount);
+        for (int i = selectedDialogs.size() - 1; i >= 0; i--) {
+            if (hidden.isHidden(selectedDialogs.get(i))) selectedDialogs.remove(i);
+        }
         getMessagesController().putUsers(users, true);
         getMessagesController().putChats(chats, true);
         updateRows();
@@ -850,6 +854,10 @@ public class EditWidgetActivity extends BaseFragment {
                 bottomSheet.setDelegate(dids -> {
                     selectedDialogs.clear();
                     selectedDialogs.addAll(dids);
+                    org.telegram.messenger.ayu.hidden.HiddenChatsController hidden = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount);
+                    for (int i = selectedDialogs.size() - 1; i >= 0; i--) {
+                        if (hidden.isHidden(selectedDialogs.get(i))) selectedDialogs.remove(i);
+                    }
                     updateRows();
                     if (widgetPreviewCell != null) {
                         widgetPreviewCell.updateDialogs();

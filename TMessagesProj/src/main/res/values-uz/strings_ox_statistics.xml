@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxStatsRetry">Qayta urinish</string>
+    <string name="OxStatsGraphLoading">Grafik yuklanmoqda…</string>
+    <string name="OxStatsGraphLimited">Bu grafikni ko‘rsatish uchun Telegramga ko‘proq faollik ma’lumotlari kerak.</string>
+    <string name="OxStatsGraphRetry">Grafik yuklanmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.</string>
+    <string name="OxStatsGraphInvalid">Bu grafikni ko‘rsatib bo‘lmadi. Uni qayta yuklab ko‘ring.</string>
+    <string name="OxStatsUnavailable">Telegram bu post uchun grafik bermadi.</string>
+    <string name="OxStatsUnsupported">Telegram bu akkauntga ushbu statistikani taqdim etmaydi.</string>
+    <string name="OxStatsForwardsRetry">Ochiq ulashishlar to‘liq yuklanmadi.</string>
+    <string name="OxStatsForwardsLoading">Ochiq ulashishlar yuklanmoqda…</string>
+    <string name="OxStatsForwardsEmpty">Telegram ochiq ulashishlar haqida ma’lumot bermadi. Shaxsiy qabul qiluvchilar ko‘rsatilmaydi.</string>
+    <string name="OxStatsForwardsHint">Telegram ko‘rsatgan ochiq manzillar. Ulashilgan postni ochish uchun bosing.</string>
+    <string name="OxStatsRatesHint">Har 100 ko‘rishga to‘g‘ri keladigan harakatlar. Bular alohida odamlar soni emas.</string>
+    <string name="OxStatsHowCalculated">Hisoblash tartibi</string>
+    <string name="OxStatsStorySource">Hikoyaning mavjud oxirgi ma’lumotlaridagi hisoblagichlar.</string>
+    <string name="OxStatsUnknown">Hozircha ma’lum emas</string>
+    <string name="OxStatsForwardsUnavailable">Ochiq ulashishlar tafsiloti mavjud emas.</string>
+    <string name="OxStatsPostTitle">Post statistikasi</string>
+    <string name="OxStatsStoryTitle">Hikoya statistikasi</string>
+    <string name="OxStatsViewsTitle">Ko‘rishlar va ulashishlar dinamikasi</string>
+    <string name="OxStatsReactionsTitle">Reaksiyalar dinamikasi</string>
+    <string name="OxStatsViews">Ko‘rishlar</string>
+    <string name="OxStatsReactions">Reaksiyalar</string>
+    <string name="OxStatsPublicShares">Ochiq ulashishlar</string>
+    <string name="OxStatsOverview">Umumiy ko‘rsatkichlar</string>
+</resources>

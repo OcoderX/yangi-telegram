@@ -45,6 +45,10 @@
     <string name="AyuDetailsFileId">ID файла</string>
     <string name="AyuDetailsTtl">TTL</string>
     <string name="AyuDetailsDeleted">Удалено</string>
+    <string name="AyuDetailsDeletedDate">Дата удаления</string>
+    <string name="AyuDetailsReadDate">Дата прочтения</string>
+    <string name="AyuDetailsUnread">Не прочитано</string>
+    <string name="AyuDetailsRead">Прочитано</string>
     <string name="AyuDetailsEntities">Сущности</string>
     <string name="AyuDetailsRevisions">Сохранённые версии</string>
     <string name="AyuDetailsSectionGeneral">Основное</string>
@@ -342,7 +346,7 @@
     <string name="AyuBotFatherHint">Имя, username, описание и фото бота меняются в @BotFather, а не здесь.</string>
     <string name="AyuBotFatherOpen">Открыть @BotFather</string>
 
-    <!-- Ox-gram: контекстное меню сообщения -->
+    <!-- OcoderX-gram: контекстное меню сообщения -->
     <string name="AyuCopyPiece">Копировать часть текста</string>
     <string name="AyuCopyPieceHint">Выделите нужный фрагмент и нажмите «Копировать».</string>
 
@@ -393,4 +397,7 @@
     <string name="AyuContextMenuOnTap">Меню по одиночному нажатию</string>
     <string name="AyuContextMenuOnTapInfo">Одиночное нажатие на сообщение открывает контекстное меню.</string>
     <string name="AyuMarkedMessagesEnable">Отметки сообщений</string>
+
+    <string name="AyuSendSeparately">Отправить отдельно</string>
+    <string name="AyuSendGrouped">Сгруппировать</string>
 </resources>

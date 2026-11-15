@@ -23,9 +23,9 @@ import java.util.Arrays;
 
 public class UserConfig extends BaseController {
 
-    public static int selectedAccount;
-    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 3;
-    public final static int MAX_ACCOUNT_COUNT = 4;
+    public static volatile int selectedAccount;
+    public final static int MAX_ACCOUNT_COUNT = 25;
+    public final static int MAX_ACCOUNT_DEFAULT_COUNT = MAX_ACCOUNT_COUNT;
 
     private final Object sync = new Object();
     private volatile boolean configLoaded;
@@ -86,6 +86,9 @@ public class UserConfig extends BaseController {
 
     private static volatile UserConfig[] Instance = new UserConfig[UserConfig.MAX_ACCOUNT_COUNT];
     public static UserConfig getInstance(int num) {
+        if (!isValidAccountIndex(num)) {
+            throw new IllegalArgumentException("Invalid account slot: " + num);
+        }
         UserConfig localInstance = Instance[num];
         if (localInstance == null) {
             synchronized (UserConfig.class) {
@@ -122,7 +125,21 @@ public class UserConfig extends BaseController {
     }
 
     public static int getMaxAccountCount() {
-        return hasPremiumOnAccounts() ? 5 : 3;
+        return MAX_ACCOUNT_COUNT;
+    }
+
+    public static boolean isValidAccountIndex(int account) {
+        return account >= 0 && account < MAX_ACCOUNT_COUNT;
+    }
+
+    /** Local slots are shared by user and bot accounts, independently of Premium. */
+    public static int findFreeAccount() {
+        for (int account = 0; account < MAX_ACCOUNT_COUNT; account++) {
+            if (!getInstance(account).isClientActivated()) {
+                return account;
+            }
+        }
+        return -1;
     }
 
     public int getNewMessageId() {
@@ -273,11 +290,17 @@ public class UserConfig extends BaseController {
     }
 
     public void setCurrentUser(TLRPC.User user) {
+        boolean ownerChanged;
         synchronized (sync) {
             TLRPC.User oldUser = currentUser;
+            ownerChanged = oldUser == null || oldUser.id != user.id;
             currentUser = user;
             clientUserId = user.id;
+            org.telegram.messenger.ayu.AyuGhostConfig.bind(currentAccount, clientUserId);
             checkPremiumSelf(oldUser, user);
+        }
+        if (ownerChanged) {
+            org.telegram.messenger.ayu.AyuKeepAliveService.onAccountChanged();
         }
     }
 
@@ -310,6 +333,9 @@ public class UserConfig extends BaseController {
             SharedPreferences preferences = getPreferences();
             if (currentAccount == 0) {
                 selectedAccount = preferences.getInt("selectedAccount", 0);
+                if (!isValidAccountIndex(selectedAccount)) {
+                    selectedAccount = 0;
+                }
             }
             registeredForPush = preferences.getBoolean("registeredForPush", false);
             lastSendMessageId = preferences.getInt("lastSendMessageId", -210000);
@@ -386,8 +412,11 @@ public class UserConfig extends BaseController {
                 }
             }
             if (currentUser != null) {
-                checkPremiumSelf(null, currentUser);
                 clientUserId = currentUser.id;
+            }
+            org.telegram.messenger.ayu.AyuGhostConfig.bind(currentAccount, clientUserId);
+            if (currentUser != null) {
+                checkPremiumSelf(null, currentUser);
             }
             configLoaded = true;
         }
@@ -473,12 +502,15 @@ public class UserConfig extends BaseController {
     }
 
     public void clearConfig() {
+        org.telegram.messenger.ayu.hidden.HiddenChatsController.clearAccount(currentAccount);
         getPreferences().edit().clear().apply();
 
         sharingMyLocationUntil = 0;
         lastMyLocationShareTime = 0;
         currentUser = null;
         clientUserId = 0;
+        org.telegram.messenger.ayu.AyuGhostConfig.bind(currentAccount, 0);
+        org.telegram.messenger.ayu.AyuKeepAliveService.onAccountChanged();
         registeredForPush = false;
         contactsSavedCount = 0;
         lastSendMessageId = -210000;

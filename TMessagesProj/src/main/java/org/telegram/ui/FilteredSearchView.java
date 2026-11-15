@@ -1,5 +1,8 @@
 package org.telegram.ui;
 
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
+import org.telegram.messenger.DialogObject;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.LocaleController.getString;
@@ -115,6 +118,10 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
 
     private int columnsCount = 3;
     private int nextSearchRate;
+    private final int privacyAccount = UserConfig.selectedAccount;
+    private TLRPC.Message lastRawSearchMessage;
+    private int rawSearchCount;
+    private int hiddenEmptyPages;
     String lastMessagesSearchString;
     String lastSearchFilterQueryString;
 
@@ -450,6 +457,13 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
         sharedVoiceAdapter = new SharedDocumentsAdapter(getContext(), 2);
 
         emptyView = new StickerEmptyView(context, loadingView, StickerEmptyView.STICKER_TYPE_SEARCH);
+        emptyView.setOnClickListener(view -> {
+            if (!isLoading && !endReached && lastRawSearchMessage != null) {
+                hiddenEmptyPages = 0;
+                search(currentSearchDialogId, currentSearchCommunityId, currentSearchMinDate, currentSearchMaxDate,
+                        currentSearchFilter, currentIncludeFolder, lastMessagesSearchString, false);
+            }
+        });
         addView(emptyView);
         recyclerListView.setEmptyView(emptyView);
         emptyView.setVisibility(View.GONE);
@@ -574,6 +588,11 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
         String currentSearchFilterQueryString = String.format(Locale.ENGLISH, "%d%d%d%d%d%s%s", dialogId, communityId, minDate, maxDate, currentSearchFilter == null ? -1 : currentSearchFilter.filterType, query, includeFolder);
         boolean filterAndQueryIsSame = lastSearchFilterQueryString != null && lastSearchFilterQueryString.equals(currentSearchFilterQueryString);
         boolean forceClear = !filterAndQueryIsSame && clearOldResults;
+        if (!filterAndQueryIsSame) {
+            lastRawSearchMessage = null;
+            rawSearchCount = 0;
+            hiddenEmptyPages = 0;
+        }
         this.currentSearchFilter = currentSearchFilter;
         this.currentSearchDialogId = dialogId;
         this.currentSearchCommunityId = communityId;
@@ -607,7 +626,7 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
             if (!forceClear) {
                 return;
             }
-        } else if (clearOldResults && !messages.isEmpty()) {
+        } else if (clearOldResults && lastRawSearchMessage != null) {
             return;
         }
         isLoading = true;
@@ -629,7 +648,7 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
         }
         requestIndex++;
         final int requestId = requestIndex;
-        int currentAccount = UserConfig.selectedAccount;
+        int currentAccount = privacyAccount;
 
         AndroidUtilities.runOnUIThread(searchRunnable = () -> {
             TLMethod<TLRPC.messages_Messages> request;
@@ -647,9 +666,9 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                 if (maxDate > 0) {
                     req.max_date = (int) (maxDate / 1000);
                 }
-                if (filterAndQueryIsSame && finalQuery.equals(lastMessagesSearchString) && !messages.isEmpty()) {
-                    MessageObject lastMessage = messages.get(messages.size() - 1);
-                    req.offset_id = lastMessage.getId();
+                if (filterAndQueryIsSame && finalQuery.equals(lastMessagesSearchString) && lastRawSearchMessage != null) {
+                    TLRPC.Message lastMessage = lastRawSearchMessage;
+                    req.offset_id = lastMessage.id;
                 } else {
                     req.offset_id = 0;
                 }
@@ -673,11 +692,11 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                 if (maxDate > 0) {
                     req.max_date = (int) (maxDate / 1000);
                 }
-                if (filterAndQueryIsSame && finalQuery.equals(lastMessagesSearchString) && !messages.isEmpty()) {
-                    MessageObject lastMessage = messages.get(messages.size() - 1);
-                    req.offset_id = lastMessage.getId();
+                if (filterAndQueryIsSame && finalQuery.equals(lastMessagesSearchString) && lastRawSearchMessage != null) {
+                    TLRPC.Message lastMessage = lastRawSearchMessage;
+                    req.offset_id = lastMessage.id;
                     req.offset_rate = nextSearchRate;
-                    long id = MessageObject.getPeerId(lastMessage.messageOwner.peer_id);
+                    long id = MessageObject.getPeerId(lastMessage.peer_id);
                     req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(id);
                 } else {
                     req.offset_rate = 0;
@@ -738,6 +757,7 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                     int n = messageObjects.size();
                     for (int i = 0; i < n; i++) {
                         MessageObject messageObject = messageObjects.get(i);
+                        if (isHiddenSearchMessage(messageObject)) continue;
                         ArrayList<MessageObject> messageObjectsByDate = sectionArrays.get(messageObject.monthKey);
                         if (messageObjectsByDate == null) {
                             messageObjectsByDate = new ArrayList<>();
@@ -752,10 +772,8 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                             PhotoViewer.getInstance().addPhoto(messageObject, photoViewerClassGuid);
                         }
                     }
-                    if (messages.size() > totalCount) {
-                        totalCount = messages.size();
-                    }
-                    endReached = messages.size() >= totalCount;
+                    final boolean continueHiddenPage = updateSearchPagination(res.messages, res.count);
+                    totalCount = HiddenChatsController.getInstance(privacyAccount).hasHiddenChats() ? messages.size() : Math.max(res.count, messages.size());
 
                     if (messages.isEmpty()) {
                         if (currentSearchFilter != null) {
@@ -841,9 +859,14 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                                 "archive".startsWith(finalQuery))) {
                             localTipArchive = true;
                         }
+                        localTipChats.removeIf(this::isHiddenSearchPeer);
                         if (delegate != null) {
                             delegate.updateFiltersView(TextUtils.isEmpty(currentDataQuery), localTipChats, localTipDates, localTipArchive);
                         }
+                    }
+                    if (!continueHiddenPage && messages.isEmpty() && !endReached) {
+                        emptyView.subtitle.setText(LocaleController.getString(R.string.Retry));
+                        emptyView.subtitle.setVisibility(View.VISIBLE);
                     }
                     firstLoading = false;
                     View progressView = null;
@@ -913,9 +936,14 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                         });
                     }
                     adapter.notifyDataSetChanged();
+                    if (continueHiddenPage) {
+                        AndroidUtilities.runOnUIThread(() -> {
+                            if (requestId == requestIndex && !isLoading) search(dialogId, communityId, minDate, maxDate, currentSearchFilter, includeFolder, finalQuery, false);
+                        });
+                    }
                 });
             });
-        }, (filterAndQueryIsSame && !messages.isEmpty()) ? 0 : 350);
+        }, (filterAndQueryIsSame && lastRawSearchMessage != null) ? 0 : 350);
 
         if (currentSearchFilter == null) {
             loadingView.setViewType(FlickerLoadingView.DIALOG_TYPE);
@@ -932,6 +960,49 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
         } else if (currentSearchFilter.filterType == FiltersView.FILTER_TYPE_LINKS) {
             loadingView.setViewType(FlickerLoadingView.LINKS_TYPE);
         }
+    }
+
+    private boolean updateSearchPagination(ArrayList<TLRPC.Message> page, int serverTotal) {
+        lastRawSearchMessage = page.isEmpty() ? null : page.get(page.size() - 1);
+        rawSearchCount += page.size();
+        endReached = page.isEmpty() || rawSearchCount >= serverTotal;
+        return !endReached && messages.isEmpty() && hiddenEmptyPages++ < 4;
+    }
+
+    private boolean isHiddenSearchPeer(Object object) {
+        long did = object instanceof TLRPC.User ? ((TLRPC.User) object).id : object instanceof TLRPC.Chat ? -((TLRPC.Chat) object).id : object instanceof TLRPC.EncryptedChat ? DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) object).id) : 0;
+        return HiddenChatsController.getInstance(privacyAccount).isHidden(did);
+    }
+
+    private boolean isHiddenSearchMessage(MessageObject message) {
+        return message == null || HiddenChatsController.getInstance(privacyAccount).isHidden(message.getDialogId());
+    }
+
+    public void removeHiddenSearchResults() {
+        boolean changed = messages.removeIf(this::isHiddenSearchMessage);
+        localTipChats.removeIf(this::isHiddenSearchPeer);
+        if (changed) {
+            messagesById.clear();
+            sections.clear();
+            sectionArrays.clear();
+            for (MessageObject message : messages) {
+                ArrayList<MessageObject> section = sectionArrays.get(message.monthKey);
+                if (section == null) {
+                    section = new ArrayList<>();
+                    sectionArrays.put(message.monthKey, section);
+                    sections.add(message.monthKey);
+                }
+                section.add(message);
+                messagesById.put(message.getId(), message);
+            }
+            totalCount = messages.size();
+            if (adapter != null) adapter.notifyDataSetChanged();
+            if (PhotoViewer.hasInstance() && PhotoViewer.getInstance().isVisible()
+                    && isHiddenSearchMessage(PhotoViewer.getInstance().getCurrentMessageObject())) {
+                PhotoViewer.getInstance().closePhoto(false, false);
+            }
+        }
+        if (delegate != null) delegate.updateFiltersView(TextUtils.isEmpty(currentDataQuery), localTipChats, localTipDates, localTipArchive);
     }
 
     public void setPagesPaddings(int top, int bottom) {
@@ -1117,6 +1188,7 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
     }
 
     private void onItemClick(int index, View view, MessageObject message, int a) {
+        if (isHiddenSearchMessage(message)) return;
         if (message == null) {
             return;
         }
@@ -1588,17 +1660,21 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        NotificationCenter.getInstance(lastAccount = UserConfig.selectedAccount).addObserver(this, NotificationCenter.emojiLoaded);
+        NotificationCenter.getInstance(lastAccount = privacyAccount).addObserver(this, NotificationCenter.emojiLoaded);
+        NotificationCenter.getInstance(lastAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
+        removeHiddenSearchResults();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         NotificationCenter.getInstance(lastAccount).removeObserver(this, NotificationCenter.emojiLoaded);
+        NotificationCenter.getInstance(lastAccount).removeObserver(this, NotificationCenter.dialogsNeedReload);
     }
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
+        if (id == NotificationCenter.dialogsNeedReload) removeHiddenSearchResults();
         if (id == NotificationCenter.emojiLoaded) {
             int n = recyclerListView.getChildCount();
             for (int i = 0; i < n; i++) {
@@ -1611,6 +1687,7 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
     }
 
     private boolean onItemLongClick(MessageObject item, View view, int a) {
+        if (isHiddenSearchMessage(item)) return false;
         if (!uiCallback.actionModeShowing()) {
             uiCallback.showActionMode();
         }

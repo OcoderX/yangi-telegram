@@ -26,6 +26,7 @@ import android.text.TextUtils;
 import android.util.SparseArray;
 import android.view.DisplayCutout;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -41,7 +42,6 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.FileLoader;
-import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LocaleController;
@@ -57,7 +57,6 @@ import org.telegram.messenger.ayu.AyuConfig;
 import org.telegram.messenger.ayu.netdiag.NetDiagConfig;
 import org.telegram.messenger.ayu.netdiag.NetworkDiagnostics;
 import org.telegram.messenger.support.LongSparseIntArray;
-import org.telegram.messenger.support.LongSparseLongArray;
 import org.telegram.messenger.ayu.upload.AyuUploadManager;
 import org.telegram.messenger.ayu.upload.UploadQueueItem;
 import org.telegram.messenger.voip.VoIPService;
@@ -84,7 +83,7 @@ import java.util.List;
 /**
  * AyuGram: iPhone-style "Dynamic Island" drawn on top of the whole app window.
  * <p>
- * A black pill sits in the status-bar area (around the camera cut-out) and shows the
+ * A black pill sits below the status bar and camera cut-out and shows the
  * current live activity: an ongoing call, a voice recording, the audio player,
  * active downloads / uploads or the ghost-mode indicator. Tapping (or pulling down)
  * the pill springs it open into a card with quick actions; tapping outside, swiping
@@ -145,6 +144,150 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private static final int TRANSFER_POOL_MAX = 8;
 
     private static DynamicIslandView instance;
+    private boolean musicPlayerOwned;
+    private boolean attachedForMusicOwnership;
+    private int musicPlayerAccount = -1;
+    private long musicPlayerDialog;
+    private int musicPlayerId;
+    private boolean musicOwnershipUpdateScheduled;
+    private boolean musicOwnershipNotificationScheduled;
+    private final Runnable musicOwnershipUpdate = () -> {
+        musicOwnershipUpdateScheduled = false;
+        updateMusicPlayerOwnership();
+    };
+    private final Runnable musicOwnershipNotification = () -> {
+        musicOwnershipNotificationScheduled = false;
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.dynamicIslandPlayerChanged);
+    };
+
+    /** The native strip asks only at player/lifecycle events, never while drawing or binding. */
+    public static boolean shouldReplaceMusicPlayer(MessageObject message, View nativePlayer) {
+        DynamicIslandView island = instance;
+        return island != null && island.musicPlayerOwned && message != null && message.isMusic()
+            && message.currentAccount == island.musicPlayerAccount
+            && message.getDialogId() == island.musicPlayerDialog && message.getId() == island.musicPlayerId
+            && nativePlayer != null && nativePlayer.getWindowToken() != null
+            && nativePlayer.getWindowToken() == island.getWindowToken();
+    }
+
+    private void updateMusicPlayerOwnership() {
+        MessageObject playing = MediaController.getInstance().getPlayingMessageObject();
+        boolean owns = attachedForMusicOwnership && isIslandActive() && isShown() && getAlpha() > 0 && getWidth() > 0
+            && AyuConfig.islandMusic && AyuConfig.islandReplacePlayer
+            && !SharedConfig.appLocked && !SharedConfig.isWaitingForPasscodeEnter
+            && effectiveTargetMode() == MODE_PLAYER && mode == MODE_PLAYER && !chatPlacementBlocked()
+            && (chatHost == null || chatHost.canHostDynamicIsland())
+            && playing != null && playing.isMusic() && playing.getId() != 0 && playingMessage != null
+            && playing.currentAccount == playingMessage.currentAccount
+            && playing.getDialogId() == playingMessage.getDialogId() && playing.getId() == playingMessage.getId();
+        int account = owns ? playing.currentAccount : -1;
+        long dialog = owns ? playing.getDialogId() : 0;
+        int id = owns ? playing.getId() : 0;
+        if (musicPlayerOwned == owns && musicPlayerAccount == account && musicPlayerDialog == dialog && musicPlayerId == id) return;
+        musicPlayerOwned = owns;
+        musicPlayerAccount = account;
+        musicPlayerDialog = dialog;
+        musicPlayerId = id;
+        // Defer native layout changes until this source/layout callback has returned.
+        if (!musicOwnershipNotificationScheduled) {
+            musicOwnershipNotificationScheduled = true;
+            AndroidUtilities.runOnUIThread(musicOwnershipNotification, 0);
+        }
+    }
+
+    private void scheduleMusicOwnershipUpdate() {
+        if (!musicOwnershipUpdateScheduled) {
+            musicOwnershipUpdateScheduled = true;
+            AndroidUtilities.runOnUIThread(musicOwnershipUpdate, 0);
+        }
+    }
+
+    private ChatActivity chatHost;
+    private View chatLane;
+    private boolean chatPlacementReady;
+    private boolean chatLaneVisible;
+    private float chatLeft, chatRight, chatTop;
+    private final int[] chatLocation = new int[2];
+    private final int[] islandLocation = new int[2];
+
+    /** Layout callbacks cache window coordinates; drawing and touch dispatch only read them. */
+    public static void onChatLayoutChanged(ChatActivity chat) {
+        if (instance != null && instance.chatHost == chat) instance.refreshChatGeometry();
+    }
+
+    public static void offsetChatPlacement(ChatActivity chat, float delta) {
+        if (instance != null && instance.chatHost == chat && instance.chatPlacementReady && delta != 0) {
+            instance.chatTop += delta;
+            if (instance.claimedGesture) instance.cancelPressAction();
+            instance.invalidate();
+        }
+    }
+
+    private void updateChatPlacement(boolean visible) {
+        BaseFragment fragment = LaunchActivity.getDynamicIslandFragment();
+        ChatActivity next = fragment instanceof ChatActivity ? (ChatActivity) fragment : null;
+        View nextLane = next != null ? next.getDynamicIslandLane() : null;
+        if (chatHost != next || chatLane != nextLane) {
+            if (chatHost != null) chatHost.setDynamicIslandLaneVisible(false);
+            if (claimedGesture) cancelPressAction();
+            chatHost = next;
+            chatLane = nextLane;
+            chatLaneVisible = false;
+            chatPlacementReady = false;
+            buttonCount = 0;
+            compactPlayRect.setEmpty();
+            seekRect.setEmpty();
+            requestLayout();
+        }
+        boolean reserve = visible && chatHost != null && chatHost.canHostDynamicIsland();
+        if (reserve != chatLaneVisible) {
+            chatLaneVisible = reserve;
+            chatPlacementReady = false;
+            chatHost.setDynamicIslandLaneVisible(reserve);
+            if (!reserve) {
+                showT.set(0f, true);
+                if (claimedGesture) cancelPressAction();
+            }
+        }
+    }
+
+    private void refreshChatGeometry() {
+        if (chatHost == null || !chatLaneVisible) return;
+        View lane = chatHost.getDynamicIslandLane();
+        if (lane == null || !lane.isAttachedToWindow() || lane.getWidth() <= 0
+            || lane.getHeight() <= 0 || lane.getWindowToken() != getWindowToken()) {
+            chatPlacementReady = false;
+            if (claimedGesture) cancelPressAction();
+            updateMusicPlayerOwnership();
+            invalidate();
+            return;
+        }
+        lane.getLocationInWindow(chatLocation);
+        getLocationInWindow(islandLocation);
+        float left = Math.max(0, chatLocation[0] - islandLocation[0]);
+        float right = Math.min(getMeasuredWidth(), chatLocation[0] - islandLocation[0] + lane.getWidth());
+        float top = chatLocation[1] - islandLocation[1] + dp(8);
+        boolean changed = !chatPlacementReady || chatLeft != left || chatRight != right || chatTop != top;
+        chatLeft = left;
+        chatRight = right;
+        chatTop = top;
+        chatPlacementReady = right > left;
+        if (changed) {
+            if (claimedGesture) cancelPressAction();
+            final boolean accessible = chatPlacementReady && effectiveTargetMode() != MODE_NONE;
+            setImportantForAccessibility(accessible ? IMPORTANT_FOR_ACCESSIBILITY_YES : IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setClickable(accessible);
+            setFocusable(accessible);
+            setContentDescription(accessible ? title : null);
+            requestLayout();
+            invalidate();
+        }
+        updateMusicPlayerOwnership();
+    }
+
+    private boolean chatPlacementBlocked() {
+        return chatHost != null && !chatPlacementReady;
+    }
 
     private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -215,6 +358,21 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     /** event time of the ACTION_DOWN that started {@link #pressed}; guards the tap window */
     private long pressTime;
     private int pressedButton;
+    private boolean claimedGesture;
+    private int activePointerId = -1;
+    private int pressMode;
+    private boolean pressWasExpanded;
+    private int pressPlayerId;
+    private long pressPlayerDialog;
+    private int pressPlayerAccount;
+    private VoIPService pressCallService;
+    private int pressRecordingAccount;
+    private long pressRecordingStart;
+    private long pressTransferSignature;
+    private long pressTransferKey;
+    private int pressTransferAccount;
+    private boolean pressHasTransfer;
+    private final RectF pressedBounds = new RectF();
     private final int touchSlop;
     /** a finger that lifts inside this window and inside the slop is a tap, never a gesture */
     private static final long TAP_WINDOW_MS = ViewConfiguration.getTapTimeout() * 2L;
@@ -237,15 +395,14 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     private MessageObject playingMessage;
     private boolean playerPaused;
-    /** set while the compact music title scrolls; the pill then invalidates a bit faster */
-    private boolean marqueeActive;
-
     /** one active download or upload as shown on the transfer card */
     private static final class TransferRow {
         MessageObject download;
         UploadQueueItem upload;
         int account;
-        /** document id for downloads, path hash for uploads - used to carry speed state across rebuilds */
+        long ownerId;
+        FileLoader.DownloadProgress downloadState;
+        /** Runtime transfer identity, never shared between retries or account owners. */
         long key;
         String name = "";
         /** {@link FileLoader#getAttachFileName} of the download, cached because it allocates */
@@ -259,6 +416,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         void reset() {
             download = null;
             upload = null;
+            downloadState = null;
+            ownerId = 0;
             attachName = null;
             name = "";
             progress = 0f;
@@ -269,22 +428,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     private final ArrayList<TransferRow> transfers = new ArrayList<>();
+    /** Only managers with a registered listener; unused account slots stay uninitialized. */
+    private final AyuUploadManager[] uploadListenerManagers = new AyuUploadManager[UserConfig.MAX_ACCOUNT_COUNT];
     //perf: rows are recycled between rebuilds, so a steady transfer costs no allocations
     private final ArrayList<TransferRow> transferPool = new ArrayList<>();
-    /**
-     * When a transfer last really moved (loading, or more bytes than the previous sample),
-     * keyed like {@link TransferRow#key}. A key that is missing here was never alive in this
-     * process, so it is a leftover of {@code DownloadController}'s database and not shown.
-     */
-    private final LongSparseLongArray transferActivity = new LongSparseLongArray();
     /** transfers the user paused from the island itself: they stay until resumed or cancelled */
     private final LongSparseIntArray transferUserPaused = new LongSparseIntArray();
-    /** a transfer that stopped moving and is not loading leaves the island after this */
-    private static final long TRANSFER_IDLE_MS = 60_000L;
-    /** a transfer that claims to be loading but never moves a byte leaves the island after this */
-    private static final long TRANSFER_STALL_MS = 180_000L;
-    /** above this many remembered keys the activity map is pruned of ancient entries */
-    private static final int TRANSFER_ACTIVITY_MAX = 32;
     private int transferDownloads, transferUploads;
     /** aggregate progress of every transfer, 0..1 */
     private float downloadProgress;
@@ -298,6 +447,17 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private long dismissedTransferSignature;
     private VoIPService dismissedCall;
     private boolean dismissedGhost;
+    private static final long GHOST_INDICATOR_MS = 4500;
+    private static final long GHOST_INTERACTION_GRACE_MS = 1200;
+    private boolean ghostStateKnown;
+    private int ghostAccount = -1;
+    private int pressGhostAccount = -1;
+    private long ghostOwnerId;
+    private long pressGhostOwnerId;
+    private boolean ghostWasActive;
+    /** Monotonic deadline for the indicator only; the privacy settings are never changed here. */
+    private long ghostHideAt;
+    private final Runnable ghostDismissRunnable = this::onGhostDismiss;
     private boolean dismissedNetwork;
     private int dismissedNetworkState = Integer.MIN_VALUE;
 
@@ -320,14 +480,28 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private float measuredCompactWidth;
     private String measuredRightText;
     private float measuredRightWidth;
+    private String compactDisplaySource;
+    private float compactDisplayLimit = -1f;
+    private CharSequence compactDisplayText = "";
+    private float compactBaselineOffset;
+    private float rightBaselineOffset;
+    private String compactTransferText = "";
+    private int compactTransferDownloads = -1, compactTransferUploads = -1;
+    private LocaleController.LocaleInfo compactTransferLocale;
+    private int transferPercent = -1;
+    private String transferPercentText = "";
 
     private float micAmplitude;
     private float speakerAmplitude;
     private NotchInfoUtils.NotchInfo notchInfo;
     private boolean notchChecked;
+    private int topSystemInset = -1;
+    private int topCutoutInset;
 
     private final Runnable tickRunnable = this::onTick;
-    private final Runnable collapseRunnable = () -> setExpanded(false);
+    private final Runnable collapseRunnable = () -> {
+        if (!claimedGesture && !seeking && !pressed) setExpanded(false);
+    };
 
     //perf: file notifications fire for every thumbnail, sticker and avatar while scrolling;
     //      they are all folded into one delayed update instead of one update each
@@ -351,6 +525,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         super(context);
         instance = this;
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        setFocusable(false);
+        setClickable(false);
 
         bgPaint.setColor(COLOR_BG);
         strokePaint.setColor(COLOR_STROKE);
@@ -369,11 +545,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         subPaint.setTextSize(dp(13));
         subPaint.setColor(COLOR_SUBTEXT);
         compactPaint.setTypeface(AndroidUtilities.bold());
-        compactPaint.setTextSize(dp(11.5f));
+        compactPaint.setTextSize(dp(12.5f));
         compactPaint.setColor(COLOR_TEXT);
+        compactBaselineOffset = -(compactPaint.ascent() + compactPaint.descent()) / 2f;
         rightPaint.setTypeface(AndroidUtilities.bold());
-        rightPaint.setTextSize(dp(11.5f));
+        rightPaint.setTextSize(dp(12));
         rightPaint.setColor(COLOR_TEXT);
+        rightBaselineOffset = -(rightPaint.ascent() + rightPaint.descent()) / 2f;
         buttonTextPaint.setTypeface(AndroidUtilities.bold());
         buttonTextPaint.setTextSize(dp(14));
         buttonTextPaint.setColor(COLOR_TEXT);
@@ -457,6 +635,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        instance = this;
+        attachedForMusicOwnership = true;
         imageReceiver.onAttachedToWindow();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             NotificationCenter nc = NotificationCenter.getInstance(a);
@@ -482,12 +662,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         global.addObserver(this, NotificationCenter.webRtcMicAmplitudeEvent);
         global.addObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
         global.addObserver(this, NotificationCenter.ayuGhostModeChanged);
+        global.addObserver(this, NotificationCenter.activeAccountChanged);
         global.addObserver(this, NotificationCenter.ayuConfigChanged);
+        global.addObserver(this, NotificationCenter.passcodeDismissed);
         NetDiagConfig.load();
         NetworkDiagnostics.getInstance().addListener(this);
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            AyuUploadManager.getInstance(a).addListener(this);
-        }
+        syncUploadListeners();
         ensureOnTop();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
             requestApplyInsets();
@@ -497,7 +677,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     @Override
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        final int oldSystemInset = topSystemInset;
+        final int oldCutoutInset = topCutoutInset;
         updateCutoutFromInsets(insets);
+        if (oldSystemInset != topSystemInset || oldCutoutInset != topCutoutInset) {
+            if (claimedGesture) cancelPressAction();
+            requestLayout();
+        }
         invalidate();
         return super.onApplyWindowInsets(insets);
     }
@@ -505,7 +691,19 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     @Override
     protected void onConfigurationChanged(android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        if (claimedGesture) cancelPressAction();
+        claimedGesture = false;
+        activePointerId = -1;
+        pressCallService = null;
         notchChecked = false;
+        notchInfo = null;
+        topSystemInset = -1;
+        topCutoutInset = 0;
+        requestLayout();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            requestApplyInsets();
+        }
+        bumpAutoCollapse();
         postInvalidate();
     }
 
@@ -528,6 +726,14 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        attachedForMusicOwnership = false;
+        AndroidUtilities.cancelRunOnUIThread(musicOwnershipUpdate);
+        musicOwnershipUpdateScheduled = false;
+        updateMusicPlayerOwnership();
+        if (chatHost != null) chatHost.setDynamicIslandLaneVisible(false);
+        chatHost = null;
+        chatLane = null;
+        chatLaneVisible = chatPlacementReady = false;
         imageReceiver.onDetachedFromWindow();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             NotificationCenter nc = NotificationCenter.getInstance(a);
@@ -553,11 +759,11 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         global.removeObserver(this, NotificationCenter.webRtcMicAmplitudeEvent);
         global.removeObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
         global.removeObserver(this, NotificationCenter.ayuGhostModeChanged);
+        global.removeObserver(this, NotificationCenter.activeAccountChanged);
         global.removeObserver(this, NotificationCenter.ayuConfigChanged);
+        global.removeObserver(this, NotificationCenter.passcodeDismissed);
         NetworkDiagnostics.getInstance().removeListener(this);
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            AyuUploadManager.getInstance(a).removeListener(this);
-        }
+        clearUploadListeners();
         setNetSampling(false);
         unregisterCallListener();
         //perf: drop the coalesced file update so a detached island stops doing work
@@ -566,6 +772,11 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         removeCallbacks(tickRunnable);
         removeCallbacks(collapseRunnable);
         removeCallbacks(netQuietRunnable);
+        removeCallbacks(ghostDismissRunnable);
+        cancelPressAction();
+        claimedGesture = false;
+        activePointerId = -1;
+        pressCallService = null;
         if (instance == this) {
             instance = null;
         }
@@ -578,8 +789,41 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         update();
     }
 
+    @Override
+    protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (imageReceiver != null) updateMusicPlayerOwnership();
+    }
+
     private boolean isIslandActive() {
         return AyuConfig.dynamicIsland && isAttachedToWindow() && getWindowVisibility() == VISIBLE;
+    }
+
+    private void syncUploadListeners() {
+        if (!isAttachedToWindow()) return;
+        for (int a = 0; a < uploadListenerManagers.length; a++) {
+            final AyuUploadManager manager = uploadListenerManagers[a];
+            if (UserConfig.getInstance(a).isClientActivated()) {
+                if (manager == null) {
+                    final AyuUploadManager activeManager = AyuUploadManager.getInstance(a);
+                    uploadListenerManagers[a] = activeManager;
+                    activeManager.addListener(this);
+                }
+            } else if (manager != null) {
+                manager.removeListener(this);
+                uploadListenerManagers[a] = null;
+            }
+        }
+    }
+
+    private void clearUploadListeners() {
+        for (int a = 0; a < uploadListenerManagers.length; a++) {
+            final AyuUploadManager manager = uploadListenerManagers[a];
+            if (manager != null) {
+                manager.removeListener(this);
+                uploadListenerManagers[a] = null;
+            }
+        }
     }
 
     @Override
@@ -632,8 +876,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 invalidate();
             }
         } else if (id == NotificationCenter.ayuGhostModeChanged) {
-            // toggling ghost mode is "a change": a hidden ghost card may show again
-            dismissedGhost = false;
+            // This notification also covers menu settings; only an actual state edge re-arms it.
             update();
         } else {
             update();
@@ -684,7 +927,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             if (AyuConfig.islandDownloads && !DownloadController.getInstance(a).downloadingFiles.isEmpty()) {
                 return true;
             }
-            if (AyuConfig.islandUploads && !AyuUploadManager.getInstance(a).isEmpty()) {
+            if (AyuConfig.islandUploads && AyuUploadManager.getInstance(a).hasLiveUploads()) {
                 return true;
             }
         }
@@ -860,6 +1103,61 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         }
     }
 
+    private void updateGhostIndicatorState() {
+        final int account = UserConfig.selectedAccount;
+        final long ownerId = org.telegram.messenger.ayu.AyuGhostConfig.get(account).ownerId;
+        final boolean active = AyuConfig.isGhostModeActive(account);
+        if (!ghostStateKnown || ghostAccount != account || ghostOwnerId != ownerId || ghostWasActive != active) {
+            ghostAccount = account;
+            ghostOwnerId = ownerId;
+            if (claimedGesture && pressMode == MODE_GHOST) cancelPressAction();
+            ghostStateKnown = true;
+            ghostWasActive = active;
+            dismissedGhost = false;
+            ghostHideAt = 0;
+            removeCallbacks(ghostDismissRunnable);
+        }
+    }
+
+    private boolean ghostInteractionActive() {
+        return targetMode == MODE_GHOST && (expanded || claimedGesture || pressed || seeking);
+    }
+
+    private boolean ghostIndicatorAvailable() {
+        if (dismissedGhost) return false;
+        if (ghostHideAt > 0 && SystemClock.elapsedRealtime() >= ghostHideAt && !ghostInteractionActive()) {
+            dismissedGhost = true;
+            return false;
+        }
+        return true;
+    }
+
+    private void deferGhostDismissAfterInteraction() {
+        if (targetMode == MODE_GHOST && mode == MODE_GHOST && ghostHideAt > 0 && !dismissedGhost) {
+            ghostHideAt = Math.max(ghostHideAt, SystemClock.elapsedRealtime() + GHOST_INTERACTION_GRACE_MS);
+        }
+    }
+
+    private void scheduleGhostDismiss() {
+        removeCallbacks(ghostDismissRunnable);
+        if (!isIslandActive() || targetMode != MODE_GHOST || !AyuConfig.islandGhost
+                || !ghostWasActive || dismissedGhost || ghostInteractionActive()) return;
+        final long now = SystemClock.elapsedRealtime();
+        if (ghostHideAt == 0) ghostHideAt = now + GHOST_INDICATOR_MS;
+        postDelayed(ghostDismissRunnable, Math.max(0, ghostHideAt - now));
+    }
+
+    private void onGhostDismiss() {
+        if (!isIslandActive() || targetMode != MODE_GHOST || !AyuConfig.islandGhost
+                || !ghostWasActive || !AyuConfig.isGhostModeActive(UserConfig.selectedAccount) || dismissedGhost || ghostInteractionActive()) return;
+        if (SystemClock.elapsedRealtime() < ghostHideAt) {
+            scheduleGhostDismiss();
+            return;
+        }
+        dismissedGhost = true;
+        update();
+    }
+
     private int computeMode() {
         if (!AyuConfig.dynamicIsland) {
             return MODE_NONE;
@@ -901,8 +1199,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         } else {
             playerDismissed = false;
         }
-        //perf: collectTransfers() touches ImageLoader for every job, so the cheap
-        //      "is anything transferring" check runs first
+        //perf: avoid rebuilding transfer rows when no native work or paused downloads remain.
         if (hasActiveTransfers()) {
             if (collectTransfers() > 0) {
                 if (dismissedTransferSignature != 0 && dismissedTransferSignature != transferSignature) {
@@ -924,17 +1221,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 return MODE_NETWORK;
             }
         }
-        if (AyuConfig.islandGhost && AyuConfig.isGhostModeActive() && !dismissedGhost) {
+        if (AyuConfig.islandGhost && ghostWasActive && ghostIndicatorAvailable()) {
             return MODE_GHOST;
         }
         return MODE_NONE;
     }
 
     private void clearTransfers() {
-        // nothing is transferring any more, so no remembered activity can still be relevant
-        if (transferActivity.size() > 0) {
-            transferActivity.clear();
-        }
         if (transferUserPaused.size() > 0) {
             transferUserPaused.clear();
         }
@@ -992,47 +1285,51 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         row.lastBytes = row.loaded;
     }
 
-    /**
-     * Decides whether a transfer may occupy the island.
-     * <p>
-     * {@code DownloadController.downloadingFiles} is a persisted list: it also holds entries that
-     * were cancelled, failed, or restored from the database at startup and never resumed. Those
-     * sit at 0 % forever and used to keep the pill on screen for hours. The island therefore only
-     * shows a transfer that is really moving, that the user paused from the island itself, or that
-     * moved recently - anything else is dropped from the island (it stays in the Downloads screen).
-     */
-    private boolean keepTransfer(long key, boolean loading, boolean moved, boolean userPaused, long now) {
-        long last = transferActivity.get(key, 0L);
-        if (moved || userPaused || (last == 0L && loading)) {
-            // moving, held by the user, or seen loading for the first time in this process
-            transferActivity.put(key, now);
-            return true;
+    /** Cache filenames by account owner/document while native operation ids can change on retry. */
+    private TransferRow obtainDownloadRow(int account, long ownerId, long documentId) {
+        for (int i = 0; i < transferPool.size(); i++) {
+            final TransferRow row = transferPool.get(i);
+            if (row.account == account && row.ownerId == ownerId && row.download != null
+                    && row.download.getDocument() != null && row.download.getDocument().id == documentId) {
+                return transferPool.remove(i);
+            }
         }
-        if (last == 0L) {
-            // never alive here: a leftover of the download database
-            return false;
+        final TransferRow row;
+        if (transferPool.isEmpty()) {
+            row = new TransferRow();
+        } else {
+            row = transferPool.remove(transferPool.size() - 1);
+            row.reset();
         }
-        // a job that claims to be loading gets a longer rope than a plainly stopped one
-        return now - last <= (loading ? TRANSFER_STALL_MS : TRANSFER_IDLE_MS);
+        row.key = 0;
+        return row;
     }
 
-    /** gives a rejected row back to the pool so the next rebuild can reuse it */
     private void discardRow(TransferRow row) {
         if (transferPool.size() < TRANSFER_POOL_MAX) {
             transferPool.add(row);
         }
     }
 
-    /** keeps {@link #transferActivity} from growing with keys nobody will ask about again */
-    private void pruneTransferActivity(long now) {
-        if (transferActivity.size() <= TRANSFER_ACTIVITY_MAX) {
-            return;
-        }
-        for (int i = transferActivity.size() - 1; i >= 0; i--) {
-            if (now - transferActivity.valueAt(i) > TRANSFER_STALL_MS * 2) {
-                transferActivity.removeAt(i);
+    private void prunePausedTransfers() {
+        for (int i = transferUserPaused.size() - 1; i >= 0; i--) {
+            final long key = transferUserPaused.keyAt(i);
+            boolean retained = false;
+            for (int j = 0; j < transfers.size(); j++) {
+                if (transfers.get(j).key == key && transfers.get(j).paused) {
+                    retained = true;
+                    break;
+                }
+            }
+            if (!retained) {
+                transferUserPaused.removeAt(i);
             }
         }
+    }
+
+    /** A live transfer can have every byte buffered and still be awaiting native completion. */
+    private static float pendingProgress(long loaded, long total) {
+        return total <= 0 ? 0f : Math.max(0f, Math.min(0.999f, loaded / (float) total));
     }
 
     /** Rebuilds {@link #transfers} from every account's download list and upload queue. */
@@ -1040,7 +1337,6 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         recycleTransfers();
         transferDownloads = transferUploads = 0;
         long signature = 0;
-        long sumLoaded = 0, sumTotal = 0;
         float sumProgress = 0;
         final long now = SystemClock.elapsedRealtime();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -1048,6 +1344,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 continue;
             }
             if (AyuConfig.islandDownloads) {
+                final long ownerId = UserConfig.getInstance(a).getClientUserId();
+                final FileLoader loader = FileLoader.getInstance(a);
                 ArrayList<MessageObject> list = DownloadController.getInstance(a).downloadingFiles;
                 for (int i = 0; i < list.size(); i++) {
                     MessageObject mo = list.get(i);
@@ -1055,32 +1353,33 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                     if (document == null) {
                         continue;
                     }
-                    TransferRow row = obtainRow(document.id);
+                    final TransferRow row = obtainDownloadRow(a, ownerId, document.id);
                     row.account = a;
+                    row.ownerId = ownerId;
                     row.upload = null;
                     if (row.download != mo || row.attachName == null) {
                         row.download = mo;
                         row.attachName = FileLoader.getAttachFileName(document);
                         row.name = safe(FileLoader.getDocumentFileName(document));
                     }
-                    final long prevLoaded = row.loaded;
-                    final boolean known = transferActivity.indexOfKey(document.id) >= 0;
-                    long[] sizes = ImageLoader.getInstance().getFileProgressSizes(row.attachName);
-                    if (sizes != null && sizes[1] > 0) {
-                        row.loaded = sizes[0];
-                        row.total = sizes[1];
-                        row.progress = Math.max(0f, Math.min(1f, sizes[0] / (float) sizes[1]));
-                    } else if (sizes == null) {
-                        row.total = document.size;
-                        row.progress = Math.max(row.progress, 0f);
-                    }
-                    boolean loading = FileLoader.getInstance(a).isLoadingFile(row.attachName);
-                    row.paused = !loading;
-                    if (!keepTransfer(document.id, loading, known && row.loaded > prevLoaded,
-                            transferUserPaused.get(document.id, 0) != 0, now)) {
+                    final FileLoader.DownloadProgress state = loader.getDownloadProgress(row.attachName);
+                    if (state != null && state.ownerId != ownerId
+                            || state == null && transferUserPaused.get(row.key, 0) == 0) {
+                        // A persisted Downloads entry is not proof of an active native operation.
                         discardRow(row);
                         continue;
                     }
+                    if (state != null) {
+                        if (row.downloadState != state) {
+                            row.speed = row.lastBytes = row.lastTime = 0;
+                        }
+                        row.key = state.transferId;
+                        row.downloadState = state;
+                        row.total = Math.max(document.size, state.total);
+                        row.loaded = Math.max(0L, row.total > 0 ? Math.min(state.loaded, row.total) : state.loaded);
+                    }
+                    row.progress = pendingProgress(row.loaded, row.total);
+                    row.paused = state == null || transferUserPaused.get(row.key, 0) != 0;
                     if (row.paused) {
                         row.speed = 0;
                         row.lastTime = 0;
@@ -1089,41 +1388,35 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                     }
                     transfers.add(row);
                     transferDownloads++;
-                    signature = signature * 31 + document.id;
+                    signature = signature * 31 + row.key;
                     sumProgress += row.progress;
                 }
             }
             if (AyuConfig.islandUploads) {
-                ArrayList<UploadQueueItem> items = AyuUploadManager.getInstance(a).getItems();
+                final AyuUploadManager manager = AyuUploadManager.getInstance(a);
+                ArrayList<UploadQueueItem> items = manager.getItems();
                 for (int i = 0; i < items.size(); i++) {
                     UploadQueueItem item = items.get(i);
-                    if (item == null || item.state == UploadQueueItem.STATE_DONE || item.state == UploadQueueItem.STATE_ERROR) {
+                    if (!manager.isLiveUpload(item)) {
                         continue;
                     }
-                    long key = item.path == null ? i : item.path.hashCode();
+                    long key = item.transferId;
                     TransferRow row = obtainRow(key);
                     row.account = a;
+                    row.ownerId = item.ownerId;
                     row.download = null;
                     row.attachName = null;
                     if (row.upload != item) {
                         row.upload = item;
                         row.name = safe(item.name);
                     }
-                    final long prevLoaded = row.loaded;
-                    final boolean known = transferActivity.indexOfKey(key) >= 0;
                     row.loaded = item.uploadedBytes;
                     row.total = Math.max(item.totalBytes, item.uploadedBytes);
-                    row.progress = row.total > 0 ? Math.max(0f, Math.min(1f, row.loaded / (float) row.total)) : 0f;
+                    row.progress = pendingProgress(row.loaded, row.total);
                     row.paused = item.state == UploadQueueItem.STATE_PAUSED;
-                    // "live" means the item is really enqueued in this process' FileLoader;
-                    // an item restored from the queue file that never started is not.
-                    boolean uploading = item.state == UploadQueueItem.STATE_ACTIVE || item.live;
-                    if (!keepTransfer(key, uploading, known && row.loaded > prevLoaded,
-                            transferUserPaused.get(key, 0) != 0, now)) {
-                        discardRow(row);
-                        continue;
-                    }
-                    row.speed = row.paused ? 0 : item.speed;
+                    // Native operation membership ends on completion, failure or cancellation.
+                    // Waiting for a slot, conversion, network or ACK must not expire a real upload.
+                    row.speed = row.paused || now - item.lastProgressTime > 5_000L ? 0 : item.speed;
                     transfers.add(row);
                     transferUploads++;
                     signature = signature * 31 + key;
@@ -1135,7 +1428,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         while (transferPool.size() > TRANSFER_POOL_MAX) {
             transferPool.remove(transferPool.size() - 1);
         }
-        pruneTransferActivity(now);
+        prunePausedTransfers();
         int count = transfers.size();
         downloadProgress = count == 0 ? 0f : sumProgress / count;
         transferSignature = signature * 31 + count;
@@ -1143,6 +1436,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     public void update() {
+        // Account/fragment changes also arrive here, including login without reattaching the view.
+        syncUploadListeners();
+        updateGhostIndicatorState();
         // Hidden windows must not poll transfers or rebuild strings for content they cannot draw.
         if (!isIslandActive()) {
             setNetSampling(false);
@@ -1152,9 +1448,17 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             removeCallbacks(tickRunnable);
             removeCallbacks(collapseRunnable);
             removeCallbacks(netQuietRunnable);
+            removeCallbacks(ghostDismissRunnable);
             pressed = false;
             pressedButton = 0;
             seeking = false;
+            claimedGesture = false;
+            activePointerId = -1;
+            pressCallService = null;
+            setContentDescription(null);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setClickable(false);
+            setFocusable(false);
             buttonCount = 0;
             compactPlayRect.setEmpty();
             seekRect.setEmpty();
@@ -1170,6 +1474,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 }
                 invalidate();
             }
+            updateChatPlacement(false);
+            updateMusicPlayerOwnership();
             return;
         }
         int newMode = computeMode();
@@ -1231,7 +1537,18 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (!isExpandable(newMode) && expanded) {
             setExpanded(false);
         }
+        if (claimedGesture && (pressed || seeking) && !pressSourceCurrent()) cancelPressAction();
+        updateChatPlacement(effectiveTargetMode() != MODE_NONE || idle);
+        updateMusicPlayerOwnership();
+        final boolean accessible = effectiveTargetMode() != MODE_NONE && !chatPlacementBlocked();
+        setImportantForAccessibility(accessible ? IMPORTANT_FOR_ACCESSIBILITY_YES : IMPORTANT_FOR_ACCESSIBILITY_NO);
+        setClickable(accessible);
+        setFocusable(accessible);
+        if (!TextUtils.equals(getContentDescription(), accessible ? title : null)) {
+            setContentDescription(accessible ? title : null);
+        }
         scheduleTick();
+        scheduleGhostDismiss();
         invalidate();
     }
 
@@ -1326,14 +1643,22 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         } else {
             title = LocaleController.formatPluralString("Files", count);
         }
-        if (transferDownloads > 0 && transferUploads > 0) {
-            subtitle = LocaleController.formatPluralString("AyuIslandDownloadingFiles", transferDownloads)
-                    + " · " + LocaleController.formatPluralString("AyuIslandUploadingFiles", transferUploads);
-        } else if (transferUploads > 0) {
-            subtitle = LocaleController.formatPluralString("AyuIslandUploadingFiles", transferUploads);
-        } else {
-            subtitle = LocaleController.formatPluralString("AyuIslandDownloadingFiles", transferDownloads);
+        final LocaleController.LocaleInfo locale = LocaleController.getInstance().getCurrentLocaleInfo();
+        if (compactTransferDownloads != transferDownloads || compactTransferUploads != transferUploads
+                || compactTransferLocale != locale) {
+            compactTransferDownloads = transferDownloads;
+            compactTransferUploads = transferUploads;
+            compactTransferLocale = locale;
+            if (transferDownloads > 0 && transferUploads > 0) {
+                compactTransferText = LocaleController.formatPluralString("AyuIslandDownloadingFiles", transferDownloads)
+                        + " · " + LocaleController.formatPluralString("AyuIslandUploadingFiles", transferUploads);
+            } else if (transferUploads > 0) {
+                compactTransferText = LocaleController.formatPluralString("AyuIslandUploadingFiles", transferUploads);
+            } else {
+                compactTransferText = LocaleController.formatPluralString("AyuIslandDownloadingFiles", transferDownloads);
+            }
         }
+        subtitle = compactTransferText;
         if (transferDownloads > 0 && SharedConfig.turboDownloadEnabled) {
             subtitle = subtitle + " · " + getString(R.string.AyuTurboIslandBadge);
         }
@@ -1344,7 +1669,12 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 subtitle = subtitle + " · ▲ " + NetworkDiagnostics.formatSpeed(netSample.upSpeed);
             }
         }
-        rightText = (int) (downloadProgress * 100) + "%";
+        final int percent = Math.max(0, Math.min(100, (int) (downloadProgress * 100)));
+        if (transferPercent != percent) {
+            transferPercent = percent;
+            transferPercentText = percent + "%";
+        }
+        rightText = transferPercentText;
         rightTextColor = transferDownloads > 0 ? COLOR_BLUE : COLOR_GREEN;
         hasImage = false;
     }
@@ -1434,6 +1764,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     private void setExpanded(boolean value) {
         removeCallbacks(collapseRunnable);
         if (expanded == value) {
+            bumpAutoCollapse();
             return;
         }
         expanded = value;
@@ -1441,10 +1772,9 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         expandT.setDuration(value ? EXPAND_MS : COLLAPSE_MS);
         if (!expanded) {
             seeking = false;
+            deferGhostDismissAfterInteraction();
         }
-        if (expanded) {
-            postDelayed(collapseRunnable, AUTO_COLLAPSE_MS);
-        }
+        bumpAutoCollapse();
         invalidate();
     }
 
@@ -1482,9 +1812,10 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     private void bumpAutoCollapse() {
         removeCallbacks(collapseRunnable);
-        if (expanded) {
+        if (expanded && !claimedGesture && !seeking && !pressed && isIslandActive()) {
             postDelayed(collapseRunnable, AUTO_COLLAPSE_MS);
         }
+        scheduleGhostDismiss();
     }
 
     // ------------------------------------------------------------------ geometry
@@ -1496,28 +1827,20 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     private float compactHeight() {
-        final int sbH = statusBarHeight();
-        if (sbH > 0 && sbH < dp(28)) {
-            return Math.max(dp(20), sbH - dp(4));
+        return dp(32);
+    }
+
+    private float safeContentTop() {
+        checkNotch();
+        float top = Math.max(topSystemInset >= 0 ? topSystemInset : statusBarHeight(), topCutoutInset);
+        if (topSystemInset < 0 && notchInfo != null && notchInfo.bounds != null) {
+            top = Math.max(top, notchInfo.bounds.bottom);
         }
-        return dp(24);
+        return top;
     }
 
     private float islandTop() {
-        final int sbH = statusBarHeight();
-        if (sbH <= 0) {
-            return dp(4);
-        }
-        checkNotch();
-        if (notchInfo != null && notchInfo.bounds != null && notchInfo.bounds.height() > 0) {
-            float notchTop = notchInfo.bounds.top;
-            float notchH = notchInfo.bounds.height();
-            float ch = compactHeight();
-            return Math.max(dp(2), notchTop + (notchH - ch) / 2f);
-        }
-        float ch = compactHeight();
-        float top = (sbH - ch) / 2f;
-        return Math.max(dp(2), top);
+        return chatPlacementReady ? Math.max(safeContentTop() + dp(8), chatTop) : safeContentTop() + dp(8);
     }
 
     private float compactTop() {
@@ -1543,9 +1866,11 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             case MODE_CALL:
                 return dp(22) + rightTextWidth();
             case MODE_RECORDING:
-            case MODE_DOWNLOAD:
             case MODE_NETWORK:
                 return rightTextWidth();
+            case MODE_DOWNLOAD:
+                // Keep a stable badge width as progress advances from one to three digits.
+                return Math.max(dp(32), rightTextWidth()) + dp(12);
             case MODE_PLAYER:
                 return dp(18);
             default:
@@ -1558,11 +1883,16 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (m == MODE_NONE) {
             return idleRectWidth();
         }
-        int screen = getMeasuredWidth() > 0 ? getMeasuredWidth() : AndroidUtilities.displaySize.x;
+        int screen = chatPlacementReady ? (int) (chatRight - chatLeft)
+            : getMeasuredWidth() > 0 ? getMeasuredWidth() : AndroidUtilities.displaySize.x;
         float rightW = measureRightWidth(m);
         float iconW = hasLeftIcon(m) ? leftIconSize() + dp(8) : 0;
-        float chromeW = dp(24) + iconW + (rightW > 0 ? dp(8) : 0) + rightW;
-        float maxAvailableText = Math.max(dp(60), (screen - dp(40)) - chromeW);
+        float chromeW = dp(24) + iconW + (rightW > 0 ? dp(m == MODE_PLAYER ? 18 : 8) : 0) + rightW;
+        float maxWidth = screen - dp(40);
+        if (m == MODE_DOWNLOAD) {
+            maxWidth = Math.min(maxWidth, dp(244));
+        }
+        float maxAvailableText = Math.max(0, maxWidth - chromeW);
         if (m == MODE_NETWORK) {
             maxAvailableText = Math.min(maxAvailableText, dp(260));
         } else {
@@ -1575,13 +1905,27 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             measuredCompactWidth = compactPaint.measureText(text);
         }
         float textW = Math.min(maxAvailableText, measuredCompactWidth);
+        // Cache against the resting width, so the width animation only clips cached text.
+        if (!TextUtils.equals(compactDisplaySource, text) || compactDisplayLimit != maxAvailableText) {
+            compactDisplaySource = text;
+            compactDisplayLimit = maxAvailableText;
+            compactDisplayText = measuredCompactWidth <= maxAvailableText ? text
+                    : TextUtils.ellipsize(text, compactPaint, maxAvailableText, TextUtils.TruncateAt.END);
+        }
         float w = chromeW + textW;
-        return Math.min(w, screen - dp(40));
+        return Math.min(w, maxWidth);
     }
 
     private String compactText(int m) {
+        // Playback stays out of the toolbar title's way; metadata lives on the open card.
+        if (m == MODE_PLAYER) {
+            return "";
+        }
         if (m == MODE_GHOST) {
             return getString(R.string.AyuGhostMode);
+        }
+        if (m == MODE_DOWNLOAD) {
+            return compactTransferText;
         }
         return title;
     }
@@ -1606,12 +1950,21 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     }
 
     private void updateCutoutFromInsets(WindowInsets insets) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || insets == null) {
+        if (insets == null) {
             return;
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            topSystemInset = insets.getInsets(WindowInsets.Type.statusBars()).top;
+        } else {
+            topSystemInset = insets.getSystemWindowInsetTop();
+        }
+        topCutoutInset = 0;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return;
         try {
             DisplayCutout cutout = insets.getDisplayCutout();
+            notchInfo = null;
             if (cutout != null) {
+                topCutoutInset = cutout.getSafeInsetTop();
                 List<Rect> rects = cutout.getBoundingRects();
                 if (rects != null && !rects.isEmpty()) {
                     int w = getWidth() > 0 ? getWidth() : AndroidUtilities.displaySize.x;
@@ -1678,10 +2031,14 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         // same top as every other state: below the status bar, never over the system icons
         final float top = islandTop();
         float w, h, cx;
-        if (notchInfo != null && notchInfo.bounds != null) {
+        if (chatPlacementReady) {
+            w = Math.min(dp(84), chatRight - chatLeft);
+            h = compactHeight();
+            cx = (chatLeft + chatRight) / 2f;
+        } else if (notchInfo != null && notchInfo.bounds != null) {
             // keep the cut-out's width / centre so the idle blob still reads as "the island"
             w = notchInfo.bounds.width() + dp(20);
-            h = Math.max(compactHeight(), notchInfo.bounds.height() + dp(8));
+            h = compactHeight();
             cx = notchInfo.bounds.centerX();
         } else {
             w = dp(84);
@@ -1698,12 +2055,19 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         setMeasuredDimension(width, (int) islandTop() + dp(320));
     }
 
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        refreshChatGeometry();
+        updateMusicPlayerOwnership();
+    }
+
     // ------------------------------------------------------------------ drawing
 
     @Override
     protected void onDraw(Canvas canvas) {
         final int width = getWidth();
-        if (width <= 0) {
+        if (width <= 0 || chatPlacementBlocked()) {
             return;
         }
 
@@ -1714,6 +2078,8 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             if (c <= 0.02f || mode == MODE_NONE) {
                 mode = target;
                 contentT.set(1f, mode == MODE_NONE);
+                // This is a mode-transition edge, not a per-frame ownership check.
+                scheduleMusicOwnershipUpdate();
             }
         } else {
             contentT.set(1f);
@@ -1741,17 +2107,24 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         if (target == MODE_NONE && idle) {
             computeIdleRect(compactRect, width);
         } else {
-            float cx = (notchInfo != null && notchInfo.bounds != null) ? notchInfo.bounds.centerX() : width / 2f;
+            float left = chatPlacementReady ? chatLeft : 0;
+            float right = chatPlacementReady ? chatRight : width;
+            cw = Math.min(cw, Math.max(0, right - left - dp(40)));
+            float cx = chatPlacementReady ? (left + right) / 2f
+                : (notchInfo != null && notchInfo.bounds != null) ? notchInfo.bounds.centerX() : width / 2f;
+            cx = Math.max(left + dp(20) + cw / 2f, Math.min(right - dp(20) - cw / 2f, cx));
             compactRect.set(cx - cw / 2f, ctop, cx + cw / 2f, ctop + ch);
         }
         // Expanded rect.
         float eh = heightT.set(measureExpandedHeight());
-        float expTop = Math.max(dp(4), ctop);
-        expandedRect.set(dp(12), expTop, width - dp(12), expTop + eh);
+        float expTop = ctop;
+        final float paneLeft = chatPlacementReady ? chatLeft : 0;
+        final float paneRight = chatPlacementReady ? chatRight : width;
+        expandedRect.set(paneLeft + dp(12), expTop, paneRight - dp(12), expTop + eh);
 
-        rect.left = Math.max(dp(4), AndroidUtilities.lerp(compactRect.left, expandedRect.left, expand));
+        rect.left = Math.max(paneLeft + dp(4), AndroidUtilities.lerp(compactRect.left, expandedRect.left, expand));
         rect.top = compactRect.top;
-        rect.right = Math.min(width - dp(4), AndroidUtilities.lerp(compactRect.right, expandedRect.right, expand));
+        rect.right = Math.min(paneRight - dp(4), AndroidUtilities.lerp(compactRect.right, expandedRect.right, expand));
         rect.bottom = AndroidUtilities.lerp(compactRect.bottom, expandedRect.bottom, expand);
         float radius = AndroidUtilities.lerp(compactRect.height() / 2f, dp(30), expandC);
 
@@ -1773,7 +2146,6 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             buttonCount = 0;
             compactPlayRect.setEmpty();
             seekRect.setEmpty();
-            marqueeActive = false;
             // Cross-fade: the pill's content is gone by 45 % of the morph, the card's content
             // fades in over the last 65 % while sliding down into place.
             float compactA = 1f - Math.min(1f, expandC / 0.45f);
@@ -1792,7 +2164,7 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         canvas.restore();
 
         if (mode == MODE_PLAYER && !playerPaused && show > 0f) {
-            postInvalidateDelayed(marqueeActive ? 33 : 60);
+            postInvalidateDelayed(60);
         } else if (mode == MODE_RECORDING && show > 0f) {
             postInvalidateDelayed(40);
         }
@@ -1862,19 +2234,29 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 drawBars(canvas, rightX, cy, amp, callEstablished, COLOR_GREEN, a);
                 rightPaint.setColor(rightTextColor);
                 rightPaint.setAlpha(a);
-                canvas.drawText(rightText, rightX + dp(22), cy + rightPaint.getTextSize() * 0.35f, rightPaint);
+                canvas.drawText(rightText, rightX + dp(22), cy + rightBaselineOffset, rightPaint);
                 break;
             }
             case MODE_RECORDING:
-            case MODE_DOWNLOAD:
             case MODE_NETWORK:
                 rightPaint.setColor(rightTextColor);
                 rightPaint.setAlpha(a);
-                canvas.drawText(rightText, rightX, cy + rightPaint.getTextSize() * 0.35f, rightPaint);
+                canvas.drawText(rightText, rightX, cy + rightBaselineOffset, rightPaint);
+                break;
+            case MODE_DOWNLOAD:
+                fillPaint.setColor(rightTextColor);
+                fillPaint.setAlpha((int) (a * 0.18f));
+                tmpRect.set(rightX, cy - dp(11), rightX + rightW, cy + dp(11));
+                canvas.drawRoundRect(tmpRect, dp(11), dp(11), fillPaint);
+                rightPaint.setColor(rightTextColor);
+                rightPaint.setAlpha(a);
+                canvas.drawText(rightText, rightX + (rightW - rightTextWidth()) / 2f,
+                        cy + rightBaselineOffset, rightPaint);
                 break;
             case MODE_PLAYER: {
                 // Tapping this glyph toggles playback instead of expanding the pill.
-                compactPlayRect.set(rightX - dp(8), compactRect.top, compactRect.right, compactRect.bottom);
+                float hitTop = Math.max(safeContentTop(), cy - dp(24));
+                compactPlayRect.set(rightX - dp(10), hitTop, compactRect.right, hitTop + dp(48));
                 int glyphAlpha = pressed && pressedButton == BTN_PLAY ? (int) (a * 0.5f) : a;
                 if (playerPaused) {
                     drawDrawable(canvas, playDrawable, rightX + dp(8), cy, dp(16), glyphAlpha, COLOR_TEXT);
@@ -1889,29 +2271,13 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         float textMax = rightX - (rightW > 0 ? dp(8) : 0) - x;
         if (textMax > dp(10)) {
             String full = compactText(mode);
-            float baseline = cy + compactPaint.getTextSize() * 0.35f;
+            float baseline = cy + compactBaselineOffset;
             compactPaint.setAlpha(a);
-            //perf: measureCompactWidth() already measured this exact string this frame
-            float fullW = TextUtils.equals(measuredCompactText, full) ? measuredCompactWidth : compactPaint.measureText(full);
-            if (mode == MODE_PLAYER && !playerPaused && fullW > textMax + dp(2)) {
-                // Long track title: scroll it like a marquee, with a short hold at the start of each pass.
-                float gap = dp(28);
-                float cycle = fullW + gap;
-                float pxPerMs = dp(26) / 1000f;
-                long holdMs = 1400;
-                long cycleMs = (long) (cycle / pxPerMs) + holdMs;
-                long phase = SystemClock.uptimeMillis() % cycleMs;
-                float offset = phase < holdMs ? 0f : (phase - holdMs) * pxPerMs;
-                canvas.save();
-                canvas.clipRect(x, compactRect.top, x + textMax, compactRect.bottom);
-                canvas.drawText(full, x - offset, baseline, compactPaint);
-                canvas.drawText(full, x - offset + cycle, baseline, compactPaint);
-                canvas.restore();
-                marqueeActive = true;
-            } else {
-                CharSequence text = fullW <= textMax + dp(2) ? full : TextUtils.ellipsize(full, compactPaint, textMax, TextUtils.TruncateAt.END);
-                canvas.drawText(text, 0, text.length(), x, baseline, compactPaint);
-            }
+            CharSequence text = TextUtils.equals(compactDisplaySource, full) ? compactDisplayText : full;
+            canvas.save();
+            canvas.clipRect(x, compactRect.top, x + textMax, compactRect.bottom);
+            canvas.drawText(text, 0, text.length(), x, baseline, compactPaint);
+            canvas.restore();
         }
 
         // Music: a hairline track along the bottom edge shows how far the song got.
@@ -2427,19 +2793,20 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
     // ------------------------------------------------------------------ touch
 
     private boolean insideIsland(float x, float y) {
-        if (showT.get() <= 0f || effectiveTargetMode() == MODE_NONE) {
+        if (chatPlacementBlocked() || showT.get() <= 0f || effectiveTargetMode() == MODE_NONE || y < safeContentTop()) {
             return false;
         }
         if (rect.contains(x, y)) {
             return true;
         }
-        // The collapsed pill is only 26 dp tall: accept a finger that lands slightly beside it,
-        // otherwise a perfectly reasonable tap reads as "nothing happened".
+        // A compact pill keeps a 48 dp touch target entirely inside the app content.
         if (expanded) {
             return false;
         }
+        final float hitHeight = Math.max(dp(48), rect.height());
+        final float hitTop = Math.max(safeContentTop(), rect.centerY() - hitHeight / 2f);
         return x >= rect.left - dp(8) && x <= rect.right + dp(8)
-                && y >= rect.top - dp(4) && y <= rect.bottom + dp(3);
+                && y >= hitTop && y <= hitTop + hitHeight;
     }
 
     private IslandButton findButton(float x, float y) {
@@ -2452,19 +2819,127 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
         return null;
     }
 
+    private boolean controlsReady() {
+        return !chatPlacementBlocked() && !expandT.isInProgress() && !showT.isInProgress() && !contentT.isInProgress()
+            && Math.abs(expandT.get() - (expanded ? 1f : 0f)) < .01f;
+    }
+
+    private void capturePressSource() {
+        pressMode = mode;
+        pressGhostAccount = ghostAccount;
+        pressGhostOwnerId = ghostOwnerId;
+        pressWasExpanded = expanded;
+        final MessageObject player = MediaController.getInstance().getPlayingMessageObject();
+        pressPlayerId = player == null ? 0 : player.getId();
+        pressPlayerDialog = player == null ? 0 : player.getDialogId();
+        pressPlayerAccount = player == null ? -1 : player.currentAccount;
+        pressCallService = VoIPService.getSharedInstance();
+        pressRecordingAccount = recordingAccount;
+        pressRecordingStart = recordingStart;
+        pressTransferSignature = gestureTransferSignature();
+        pressHasTransfer = false;
+        final int rowIndex = pressedButton >= BTN_ROW_CANCEL_BASE ? pressedButton - BTN_ROW_CANCEL_BASE
+            : pressedButton >= BTN_ROW_TOGGLE_BASE ? pressedButton - BTN_ROW_TOGGLE_BASE : -1;
+        if (rowIndex >= 0 && rowIndex < transfers.size()) {
+            final TransferRow row = transfers.get(rowIndex);
+            pressTransferKey = row.key;
+            pressTransferAccount = row.account;
+            pressHasTransfer = true;
+        }
+    }
+
+    private boolean pressSourceCurrent() {
+        if (mode != pressMode || effectiveTargetMode() != pressMode || expanded != pressWasExpanded
+            || showT.get() <= 0f) return false;
+        switch (pressMode) {
+            case MODE_GHOST:
+                return UserConfig.selectedAccount == pressGhostAccount
+                    && org.telegram.messenger.ayu.AyuGhostConfig.get(pressGhostAccount).ownerId == pressGhostOwnerId;
+            case MODE_PLAYER: {
+                final MessageObject player = MediaController.getInstance().getPlayingMessageObject();
+                return player != null && player.currentAccount == pressPlayerAccount
+                    && player.getId() == pressPlayerId && player.getDialogId() == pressPlayerDialog;
+            }
+            case MODE_CALL:
+                return pressCallService != null && VoIPService.getSharedInstance() == pressCallService;
+            case MODE_RECORDING:
+                return recordingAccount == pressRecordingAccount && recordingStart == pressRecordingStart;
+            case MODE_DOWNLOAD:
+                if (pressedButton >= BTN_ROW_TOGGLE_BASE) {
+                    final int rowIndex = pressedButton >= BTN_ROW_CANCEL_BASE ? pressedButton - BTN_ROW_CANCEL_BASE
+                        : pressedButton - BTN_ROW_TOGGLE_BASE;
+                    return pressHasTransfer && rowIndex < transfers.size()
+                        && transfers.get(rowIndex).key == pressTransferKey
+                        && transfers.get(rowIndex).account == pressTransferAccount;
+                }
+                return gestureTransferSignature() == pressTransferSignature;
+            default:
+                return true;
+        }
+    }
+
+    private void cancelPressAction() {
+        pressed = false;
+        seeking = false;
+        pressedButton = 0;
+        invalidate();
+    }
+
+    private long gestureTransferSignature() {
+        long signature = transfers.size();
+        for (int i = 0; i < transfers.size(); i++) {
+            final TransferRow row = transfers.get(i);
+            signature = (signature * 31 + row.key) * 31 + row.account;
+        }
+        return signature;
+    }
+
+    private void finishGesture() {
+        cancelPressAction();
+        claimedGesture = false;
+        activePointerId = -1;
+        pressCallService = null;
+        deferGhostDismissAfterInteraction();
+        bumpAutoCollapse();
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         float x = event.getX();
         float y = event.getY();
+        if (event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN
+            || event.getActionMasked() == MotionEvent.ACTION_POINTER_UP) {
+            if (claimedGesture) cancelPressAction();
+            return claimedGesture;
+        }
+        if (event.getActionMasked() != MotionEvent.ACTION_DOWN && claimedGesture
+            && (event.getPointerCount() != 1 || event.getPointerId(0) != activePointerId)) {
+            cancelPressAction();
+        }
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
+                if (claimedGesture) finishGesture();
+                if (chatPlacementBlocked() || y < safeContentTop()) return false;
+                if (!insideIsland(x, y)) {
+                    if (expanded) {
+                        claimedGesture = true;
+                        activePointerId = event.getPointerId(0);
+                        setExpanded(false);
+                        return true;
+                    }
+                    return false;
+                }
+                claimedGesture = true;
+                activePointerId = event.getPointerId(0);
+                removeCallbacks(collapseRunnable);
+                if (!controlsReady()) return true;
                 if (expanded && mode == MODE_PLAYER && !seekRect.isEmpty() && seekRect.contains(x, y)) {
                     // grab the seek bar: the finger now owns the progress until it lifts
                     seeking = true;
                     seekProgress = seekProgressAt(x);
                     pressed = false;
                     pressedButton = 0;
-                    bumpAutoCollapse();
+                    capturePressSource();
                     invalidate();
                     return true;
                 }
@@ -2476,23 +2951,24 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                     if (expanded) {
                         IslandButton b = findButton(x, y);
                         pressedButton = b != null ? b.id : 0;
+                        pressedBounds.set(b != null ? b.bounds : rect);
                     } else if (mode == MODE_PLAYER && !compactPlayRect.isEmpty() && compactPlayRect.contains(x, y)) {
                         // collapsed music pill: the glyph on the right is the play/pause button
                         pressedButton = BTN_PLAY;
+                        pressedBounds.set(compactPlayRect);
                     } else {
                         pressedButton = 0;
+                        pressedBounds.set(rect);
                     }
-                    bumpAutoCollapse();
+                    capturePressSource();
                     invalidate();
                     return true;
                 }
-                if (expanded) {
-                    setExpanded(false);
-                    return true;
-                }
-                return false;
+                return claimedGesture;
             }
             case MotionEvent.ACTION_MOVE: {
+                if (!claimedGesture) return false;
+                if ((pressed || seeking) && !pressSourceCurrent()) cancelPressAction();
                 if (seeking) {
                     seekProgress = seekProgressAt(x);
                     bumpAutoCollapse();
@@ -2527,22 +3003,43 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                         invalidate();
                     }
                 }
-                return pressed;
+                return claimedGesture;
             }
             case MotionEvent.ACTION_UP: {
+                final boolean wasClaimed = claimedGesture;
+                final boolean validSource = (pressed || seeking) && pressSourceCurrent() && controlsReady();
                 if (seeking) {
-                    seeking = false;
-                    applySeek(seekProgressAt(x));
-                    performClick();
-                    return true;
+                    final float progress = seekProgressAt(x);
+                    finishGesture();
+                    if (validSource) {
+                        applySeek(progress);
+                        super.performClick();
+                        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                    }
+                    return wasClaimed;
                 }
                 if (pressed) {
-                    pressed = false;
                     int btn = pressedButton;
-                    pressedButton = 0;
-                    invalidate();
-                    performClick();
-                    if (expanded) {
+                    boolean validRelease = validSource && y >= safeContentTop()
+                        && Math.abs(x - pressX) <= touchSlop * 2
+                        && Math.abs(y - pressY) <= touchSlop * 2;
+                    if (btn != 0) {
+                        validRelease &= pressedBounds.contains(x, y);
+                        if (pressWasExpanded) {
+                            final IslandButton button = findButton(x, y);
+                            validRelease &= button != null && button.id == btn;
+                        } else {
+                            validRelease &= compactPlayRect.contains(x, y);
+                        }
+                    } else {
+                        validRelease &= insideIsland(x, y);
+                    }
+                    final boolean wasExpanded = pressWasExpanded;
+                    finishGesture();
+                    if (!validRelease) return wasClaimed;
+                    super.performClick();
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                    if (wasExpanded) {
                         if (btn != 0) {
                             onButtonClick(btn);
                         } else if (rect.contains(x, y)) {
@@ -2555,29 +3052,28 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                     } else {
                         openSource();
                     }
-                    return true;
+                    return wasClaimed;
                 }
-                return false;
+                finishGesture();
+                return wasClaimed;
             }
             case MotionEvent.ACTION_CANCEL: {
-                if (seeking) {
-                    seeking = false;
-                    invalidate();
-                    return true;
-                }
-                boolean was = pressed;
-                pressed = false;
-                pressedButton = 0;
-                invalidate();
+                boolean was = claimedGesture;
+                finishGesture();
                 return was;
             }
         }
-        return false;
+        return claimedGesture;
     }
 
     @Override
     public boolean performClick() {
-        return super.performClick();
+        final boolean handled = super.performClick();
+        if (chatPlacementBlocked() || claimedGesture || seeking || effectiveTargetMode() == MODE_NONE || mode != effectiveTargetMode()
+            || showT.get() <= 0f || !controlsReady()) return handled;
+        if (!expanded && isExpandable(mode)) setExpanded(true);
+        else openSource();
+        return true;
     }
 
     /** progress (0..1) that the seek bar shows for a finger at view x */
@@ -2669,7 +3165,10 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
                 break;
             }
             case BTN_GHOST_OFF:
-                AyuConfig.setGhostMode(false);
+                if (ghostAccount == UserConfig.selectedAccount
+                        && org.telegram.messenger.ayu.AyuGhostConfig.get(ghostAccount).ownerId == ghostOwnerId) {
+                    AyuConfig.setGhostMode(ghostAccount, false);
+                }
                 setExpanded(false);
                 update();
                 break;
@@ -2690,11 +3189,17 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
             return;
         }
         TransferRow row = transfers.get(index);
+        if (!isCurrentTransfer(row)) {
+            update();
+            return;
+        }
         // a hold placed here is the user's, so the row stays on the card until it is resumed
-        if (row.paused) {
-            transferUserPaused.delete(row.key);
-        } else {
-            transferUserPaused.put(row.key, 1);
+        if (row.upload == null) {
+            if (row.paused) {
+                transferUserPaused.delete(row.key);
+            } else {
+                transferUserPaused.put(row.key, 1);
+            }
         }
         try {
             if (row.upload != null) {
@@ -2726,9 +3231,22 @@ public class DynamicIslandView extends View implements NotificationCenter.Notifi
 
     private final ArrayList<MessageObject> cancelTmp = new ArrayList<>(1);
 
+    private boolean isCurrentTransfer(TransferRow row) {
+        if (row.ownerId == 0 || row.ownerId != UserConfig.getInstance(row.account).getClientUserId()) {
+            return false;
+        }
+        if (row.upload != null) {
+            return AyuUploadManager.getInstance(row.account).isLiveUpload(row.upload);
+        }
+        final FileLoader.DownloadProgress state = FileLoader.getInstance(row.account).getDownloadProgress(row.attachName);
+        return row.paused ? state == null && transferUserPaused.get(row.key, 0) != 0 : state == row.downloadState;
+    }
+
     private void cancelTransferRow(TransferRow row) {
+        if (!isCurrentTransfer(row)) {
+            return;
+        }
         transferUserPaused.delete(row.key);
-        transferActivity.delete(row.key);
         try {
             if (row.upload != null) {
                 AyuUploadManager.getInstance(row.account).cancel(row.upload);

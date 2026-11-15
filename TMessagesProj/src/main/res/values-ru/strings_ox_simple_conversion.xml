@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxSimpleConversionTitle">Преобразованное сообщение</string>
+    <string name="OxSimpleConversionDescription">Проверьте обычное сообщение от своего имени. Преобразованный текст попадёт в черновик; отправку вы подтверждаете сами.</string>
+    <string name="OxSimpleConversionPreviewLabel">Предпросмотр сообщения</string>
+    <string name="OxSimpleConversionChanges">Что изменится</string>
+    <string name="OxSimpleConversionStyle">Заголовки станут жирным текстом. Цвета и специальное оформление будут удалены.</string>
+    <string name="OxSimpleConversionTable">Таблицы станут текстом с разделёнными строками и столбцами.</string>
+    <string name="OxSimpleConversionButtons">Кнопки со ссылками станут ссылками в тексте.</string>
+    <string name="OxSimpleConversionInteractive">Интерактивные действия будут удалены и больше не выполнятся.</string>
+    <string name="OxSimpleConversionMedia">Фото, видео, аудио и файлы не будут прикреплены к этому тексту.</string>
+    <string name="OxSimpleConversionUnknown">Некоторые неподдерживаемые части не удалось преобразовать. Проверьте предпросмотр.</string>
+    <string name="OxSimpleConversionLimit">Сообщение слишком длинное или сложное. Сократите его и попробуйте ещё раз.</string>
+    <string name="OxSimpleConversionBlocked">Преобразование не завершено. Продолжите редактировать исходное сообщение.</string>
+    <string name="OxSimpleConversionEmpty">Нет текста для преобразования.</string>
+    <string name="OxSimpleConversionApply">Преобразовать в текст</string>
+    <string name="OxSimpleConversionCancel">Отмена</string>
+    <string name="OxRichConversionEditUnavailableTitle">Редактирование сложного сообщения</string>
+    <string name="OxRichConversionEditUnavailable">Это сложное сообщение нельзя редактировать как обычный текст с текущего аккаунта. Скопируйте текст в новый черновик или отмените действие; исходное сообщение останется без изменений.</string>
+    <string name="OxSimpleLabelUnknown">[Неподдерживаемое содержимое]</string>
+    <string name="OxSimpleLabelMediaNotAttached">Не прикреплено: %1$s</string>
+    <string name="OxSimpleLabelFile">Файл</string>
+    <string name="OxSimpleLabelAudio">Аудио</string>
+    <string name="OxSimpleLabelVideo">Видео</string>
+    <string name="OxSimpleLabelPhoto">Фото</string>
+    <string name="OxSimpleLabelWeb">Веб-страница</string>
+    <string name="OxSimpleLabelAnimation">Анимация</string>
+    <string name="OxSimpleLabelMap">Карта</string>
+    <string name="OxSimpleLabelEmoji">[Эмодзи]</string>
+    <string name="OxSimpleLabelRemovedAction">[Интерактивное действие удалено]</string>
+    <string name="OxSimpleLabelChannel">Канал</string>
+    <string name="OxRichConversionPendingUploads">Перед преобразованием дождитесь завершения загрузки вложений.</string>
+</resources>

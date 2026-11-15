@@ -119,12 +119,13 @@ public class ConnectionsManager extends BaseController {
 
     public final static int DEFAULT_DATACENTER_ID = Integer.MAX_VALUE;
 
-    private long lastPauseTime = System.currentTimeMillis();
+    private volatile long lastPauseTime = System.currentTimeMillis();
     private boolean appPaused = true;
     private boolean isUpdating;
     private int connectionState;
     private AtomicInteger lastRequestToken = new AtomicInteger(1);
     private int appResumeCount;
+    private long backgroundNetworkOwner;
 
     private static AsyncTask currentTask;
 
@@ -191,7 +192,14 @@ public class ConnectionsManager extends BaseController {
     private static int lastClassGuid = 1;
     
     private static final ConnectionsManager[] Instance = new ConnectionsManager[UserConfig.MAX_ACCOUNT_COUNT];
+    public static synchronized boolean isInstanceCreated(int num) {
+        return UserConfig.isValidAccountIndex(num) && Instance[num] != null;
+    }
+
     public static ConnectionsManager getInstance(int num) {
+        if (!UserConfig.isValidAccountIndex(num)) {
+            throw new IllegalArgumentException("Invalid account slot: " + num);
+        }
         ConnectionsManager localInstance = Instance[num];
         if (localInstance == null) {
             synchronized (ConnectionsManager.class) {
@@ -430,15 +438,26 @@ public class ConnectionsManager extends BaseController {
                         buff.setDataSourceType(TLDataSourceType.NETWORK);
                         buff.reused = true;
                         responseSize = buff.limit();
-                        int magic = buff.readInt32(true);
                         try {
+                            int magic = buff.readInt32(true);
                             resp = object.deserializeResponse(buff, magic, true);
                         } catch (Exception e2) {
-                            if (BuildVars.DEBUG_PRIVATE_VERSION) {
-                                throw e2;
+                            if (!BotAccountHelper.isEssentialSyncRequest(object)) {
+                                if (BuildVars.DEBUG_PRIVATE_VERSION) {
+                                    throw e2;
+                                }
+                                FileLog.fatal(e2);
+                                return;
                             }
                             FileLog.fatal(e2);
-                            return;
+                            error = new TLRPC.TL_error();
+                            error.code = -1001;
+                            error.text = "UPDATE_SYNC_RESPONSE_DESERIALIZATION_FAILED";
+                        }
+                        if (resp == null && error == null && BotAccountHelper.isEssentialSyncRequest(object)) {
+                            error = new TLRPC.TL_error();
+                            error.code = -1001;
+                            error.text = "UPDATE_SYNC_RESPONSE_DESERIALIZATION_FAILED";
                         }
                     } else if (errorText != null) {
                         error = new TLRPC.TL_error();
@@ -694,7 +713,9 @@ public class ConnectionsManager extends BaseController {
     public static void setLangCode(String langCode) {
         langCode = langCode.replace('_', '-').toLowerCase();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            native_setLangCode(a, langCode);
+            if (isInstanceCreated(a)) {
+                native_setLangCode(a, langCode);
+            }
         }
     }
 
@@ -708,17 +729,21 @@ public class ConnectionsManager extends BaseController {
         }
         if (TextUtils.isEmpty(pushString)) {
             String tag = type == PushListenerController.PUSH_TYPE_FIREBASE ? "FIREBASE" : "HUAWEI";
-            pushString = SharedConfig.pushStringStatus = "__" + tag + "_GENERATING_SINCE_" + getInstance(0).getCurrentTime() + "__";
+            pushString = SharedConfig.pushStringStatus = "__" + tag + "_GENERATING_SINCE_" + getInstance(UserConfig.selectedAccount).getCurrentTime() + "__";
         }
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            native_setRegId(a, pushString);
+            if (isInstanceCreated(a)) {
+                native_setRegId(a, pushString);
+            }
         }
     }
 
     public static void setSystemLangCode(String langCode) {
         langCode = langCode.replace('_', '-').toLowerCase();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            native_setSystemLangCode(a, langCode);
+            if (isInstanceCreated(a)) {
+                native_setSystemLangCode(a, langCode);
+            }
         }
     }
 
@@ -767,7 +792,23 @@ public class ConnectionsManager extends BaseController {
         return native_checkProxy(currentAccount, address, port, username, password, secret, requestTimeDelegate);
     }
 
-    public void setAppPaused(final boolean value, final boolean byScreenState) {
+    /** Keeps transport awake without changing UI pause time or announcing an account online. */
+    public synchronized void setBackgroundNetworkEnabled(long ownerId, boolean enabled) {
+        if (enabled) {
+            if (ownerId == 0 || getUserConfig().getClientUserId() != ownerId || backgroundNetworkOwner == ownerId) {
+                return;
+            }
+            backgroundNetworkOwner = ownerId;
+            native_resumeNetwork(currentAccount, false);
+        } else if (ownerId != 0 && backgroundNetworkOwner == ownerId) {
+            backgroundNetworkOwner = 0;
+            if (appResumeCount == 0) {
+                native_pauseNetwork(currentAccount);
+            }
+        }
+    }
+
+    public synchronized void setAppPaused(final boolean value, final boolean byScreenState) {
         if (!byScreenState) {
             appPaused = value;
             if (BuildVars.LOGS_ENABLED) {
@@ -789,7 +830,10 @@ public class ConnectionsManager extends BaseController {
             if (lastPauseTime == 0) {
                 lastPauseTime = System.currentTimeMillis();
             }
-            native_pauseNetwork(currentAccount);
+            if (backgroundNetworkOwner == 0 || backgroundNetworkOwner != getUserConfig().getClientUserId()) {
+                backgroundNetworkOwner = 0;
+                native_pauseNetwork(currentAccount);
+            }
         } else {
             if (appPaused) {
                 return;
@@ -984,6 +1028,9 @@ public class ConnectionsManager extends BaseController {
         }
 
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (!isInstanceCreated(a)) {
+                continue;
+            }
             if (enabled && !TextUtils.isEmpty(address)) {
                 native_setProxySettings(a, address, port, username, password, secret);
             } else {

@@ -1472,7 +1472,7 @@ public class DownloadController extends BaseController implements NotificationCe
         if (parentDocument == null) {
             return;
         }
-        AndroidUtilities.runOnUIThread(() -> {
+        Runnable r = () -> {
             if (parentDocument == null) {
                 return;
             }
@@ -1526,7 +1526,12 @@ public class DownloadController extends BaseController implements NotificationCe
                 });
             }
             getNotificationCenter().postNotificationName(NotificationCenter.onDownloadingFilesChanged);
-        });
+        };
+        if (ApplicationLoader.applicationHandler != null && Thread.currentThread() == ApplicationLoader.applicationHandler.getLooper().getThread()) {
+            r.run();
+        } else {
+            AndroidUtilities.runOnUIThread(r);
+        }
     }
 
     public void onDownloadComplete(MessageObject parentObject) {
@@ -1804,6 +1809,19 @@ public class DownloadController extends BaseController implements NotificationCe
     public boolean isDownloading(int messageId) {
         for (int i = 0; i < downloadingFiles.size(); i++) {
             if (downloadingFiles.get(i).messageOwner.id == messageId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isDownloading(TLRPC.Document document) {
+        if (document == null) {
+            return false;
+        }
+        for (int i = 0; i < downloadingFiles.size(); i++) {
+            MessageObject messageObject = downloadingFiles.get(i);
+            if (messageObject != null && messageObject.getDocument() != null && messageObject.getDocument().id == document.id) {
                 return true;
             }
         }

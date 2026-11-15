@@ -44,6 +44,7 @@ import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
@@ -117,6 +118,7 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
         NotificationCenter.getInstance(parentAlert.currentAccount).addObserver(this, NotificationCenter.messagePlayingDidStart);
         NotificationCenter.getInstance(parentAlert.currentAccount).addObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
         NotificationCenter.getInstance(parentAlert.currentAccount).addObserver(this, NotificationCenter.musicListLoaded);
+        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.ayuConfigChanged);
         loadAudio();
 
         fadeView = new ChatAttachAlert.SearchFadeView(context, Theme.key_windowBackgroundWhite, resourcesProvider);
@@ -131,12 +133,30 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
                 final boolean wasEmpty = TextUtils.isEmpty(query);
                 query = s.toString().trim();
 
+                if (!TextUtils.equals(lastSearchChatsQuery, query)) {
+                    searchChatsGeneration++;
+                    if (searchChatsRequestId >= 0) {
+                        ConnectionsManager.getInstance(parentAlert.currentAccount).cancelRequest(searchChatsRequestId, true);
+                        searchChatsRequestId = -1;
+                    }
+                    foundInChats.clear();
+                    searchChatsLastMessage = null;
+                    searchChatsLoadedCount = 0;
+                    searchChatsLoaded = false;
+                    searchChatsNextRate = 0;
+                    searchChatsHasMore = false;
+                    loadingSearchChats = false;
+                }
+
                 AndroidUtilities.cancelRunOnUIThread(searchChatsRunnable);
                 if (!TextUtils.isEmpty(query)) {
                     loadingSearchChats = query != null && query.length() >= 0;
                     if (!TextUtils.equals(lastSearchChatsQuery, query)) {
                         foundInChats.clear();
                         searchChatsNextRate = 0;
+                        searchChatsLastMessage = null;
+                        searchChatsLoadedCount = 0;
+                        searchChatsLoaded = false;
                         searchChatsHasMore = false;
                     }
                     AndroidUtilities.runOnUIThread(searchChatsRunnable, 1500);
@@ -282,6 +302,7 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
     private int LOAD_MORE_SEARCH_PROFILE = 3;
 
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        pruneHiddenChatAudio();
         items.add(UItem.asSpace(-100, dp(1)));
         int firstIndex = items.size();
         if (TextUtils.isEmpty(query)) {
@@ -328,7 +349,7 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
                 adapter.whiteSectionEnd();
             }
 
-            if (foundInChats != null && (!foundInChats.isEmpty() || searchChatsRequestId >= 0 || loadingSearchChats)) {
+            if (foundInChats != null && (!foundInChats.isEmpty() || searchChatsRequestId >= 0 || loadingSearchChats || searchChatsHasMore)) {
                 if (items.size() > firstIndex) {
                     items.add(UItem.asShadow(-98, null));
                 }
@@ -391,7 +412,7 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
             }
             adapter.whiteSectionEnd();
 
-            if (foundInChats != null && (!foundInChats.isEmpty() || searchChatsRequestId >= 0 || loadingSearchChats)) {
+            if (foundInChats != null && (!foundInChats.isEmpty() || searchChatsRequestId >= 0 || loadingSearchChats || searchChatsHasMore)) {
                 if (items.size() > firstIndex) {
                     items.add(UItem.asShadow(-98, null));
                 }
@@ -455,6 +476,20 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
     private void updateWithSavingScroll() {
         AndroidUtilities.cancelRunOnUIThread(updateWithSavingScrollRunnable);
         AndroidUtilities.runOnUIThread(updateWithSavingScrollRunnable);
+    }
+
+    private void pruneHiddenChatAudio() {
+        HiddenChatsController hidden = HiddenChatsController.getInstance(parentAlert.currentAccount);
+        for (int i = foundInChats.size() - 1; i >= 0; i--) {
+            MediaController.AudioEntry entry = foundInChats.get(i);
+            if (!hidden.isHidden(entry.messageObject.getDialogId())) continue;
+            foundInChats.remove(i);
+            selectedAudios.remove(entry);
+            if (playingAudio == entry.messageObject && MediaController.getInstance().isPlayingMessage(playingAudio)) {
+                MediaController.getInstance().cleanupPlayer(true, true);
+                playingAudio = null;
+            }
+        }
     }
 
     private final Runnable updateWithSavingScrollRunnable = () -> {
@@ -543,6 +578,7 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
         NotificationCenter.getInstance(parentAlert.currentAccount).removeObserver(this, NotificationCenter.messagePlayingDidStart);
         NotificationCenter.getInstance(parentAlert.currentAccount).removeObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
         NotificationCenter.getInstance(parentAlert.currentAccount).removeObserver(this, NotificationCenter.musicListLoaded);
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.ayuConfigChanged);
     }
 
     @Override
@@ -645,6 +681,11 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
+        if (id == NotificationCenter.ayuConfigChanged) {
+            pruneHiddenChatAudio();
+            if (listView != null) updateWithSavingScroll();
+            return;
+        }
         if (id == NotificationCenter.messagePlayingDidReset || id == NotificationCenter.messagePlayingDidStart || id == NotificationCenter.messagePlayingPlayStateChanged) {
             if (id == NotificationCenter.messagePlayingDidReset || id == NotificationCenter.messagePlayingPlayStateChanged) {
                 int count = listView.getChildCount();
@@ -815,6 +856,10 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
     private boolean loadingSearchChats;
     private final Runnable searchChatsRunnable = this::searchChats;
     private int searchChatsNextRate;
+    private TLRPC.Message searchChatsLastMessage;
+    private int searchChatsLoadedCount;
+    private boolean searchChatsLoaded;
+    private int searchChatsGeneration;
     private boolean searchChatsHasMore;
     private void searchChats() {
         AndroidUtilities.cancelRunOnUIThread(searchChatsRunnable);
@@ -829,9 +874,12 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
         if (!TextUtils.equals(lastSearchChatsQuery, query)) {
             foundInChats.clear();
             searchChatsNextRate = 0;
+            searchChatsLastMessage = null;
+            searchChatsLoadedCount = 0;
+            searchChatsLoaded = false;
             searchChatsHasMore = false;
         }
-        if (!foundInChats.isEmpty() && !searchChatsHasMore) {
+        if (searchChatsLoaded && !searchChatsHasMore) {
             if (loadingSearchChats) {
                 loadingSearchChats = false;
                 updateWithSavingScroll();
@@ -852,26 +900,33 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
         req.filter = new TLRPC.TL_inputMessagesFilterMusic();
         lastSearchChatsQuery = query;
         req.q = query == null ? "" : query;
-        req.limit = foundInChats.isEmpty() ? 3 : 15;
-        if (foundInChats.size() > 0) {
-            final MessageObject lastMessage = foundInChats.get(foundInChats.size() - 1).messageObject;
-            req.offset_id = lastMessage.getId();
+        req.limit = searchChatsLastMessage == null ? 3 : 15;
+        if (searchChatsLastMessage != null) {
+            final TLRPC.Message lastMessage = searchChatsLastMessage;
+            req.offset_id = lastMessage.id;
             req.offset_rate = searchChatsNextRate;
-            req.offset_peer = messagesController.getInputPeer(MessageObject.getPeerId(lastMessage.messageOwner.peer_id));
+            req.offset_peer = messagesController.getInputPeer(MessageObject.getPeerId(lastMessage.peer_id));
         } else {
             req.offset_rate = 0;
             req.offset_id = 0;
             req.offset_peer = new TLRPC.TL_inputPeerEmpty();
         }
 
+        final int generation = ++searchChatsGeneration;
         searchChatsRequestId = connectionsManager.sendRequestTyped(req, AndroidUtilities::runOnUIThread, (res, err) -> {
+            if (generation != searchChatsGeneration || !TextUtils.equals(req.q, query == null ? "" : query)) return;
             searchChatsRequestId = -1;
             loadingSearchChats = false;
             if (res != null) {
                 messagesController.putUsers(res.users, false);
                 messagesController.putChats(res.chats, false);
 
+                searchChatsLoaded = true;
+                searchChatsLoadedCount += res.messages.size();
+                if (!res.messages.isEmpty()) searchChatsLastMessage = res.messages.get(res.messages.size() - 1);
+
                 for (TLRPC.Message message : res.messages) {
+                    if (HiddenChatsController.getInstance(account).isHidden(MessageObject.getDialogId(message))) continue;
                     final MediaController.AudioEntry audioEntry = new MediaController.AudioEntry();
                     audioEntry.messageObject = new MessageObject(account, message, false, true);
 
@@ -895,7 +950,7 @@ public class ChatAttachAlertAudioLayout extends ChatAttachAlert.AttachAlertLayou
                 }
 
                 searchChatsNextRate = res.next_rate;
-                searchChatsHasMore = res.next_rate != 0 || (res.count > 0 && foundInChats.size() < res.count);
+                searchChatsHasMore = !res.messages.isEmpty() && (res.next_rate != 0 || (res.count > 0 && searchChatsLoadedCount < res.count));
 
                 updateWithSavingScroll();
             }

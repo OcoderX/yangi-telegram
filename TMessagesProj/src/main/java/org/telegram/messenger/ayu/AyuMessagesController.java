@@ -87,6 +87,7 @@ public class AyuMessagesController {
         org.telegram.messenger.Utilities.globalQueue.postRunnable(() -> {
             try {
                 AyuAntiDeleteConfig.load();
+                AyuChatCapturePolicy.load();
                 org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.load();
                 // read by the upload manager constructor (initAll) and by FileLoader statics
                 org.telegram.messenger.ayu.upload.AyuUploadConfig.ensureLoaded();
@@ -130,9 +131,16 @@ public class AyuMessagesController {
         if (AyuState.consumeSkipNextSave()) {
             return;
         }
+        AyuChatCapturePolicy.load();
+        if (!AyuChatCapturePolicy.isEnabled(currentAccount, did)) {
+            return;
+        }
+        final long owner = UserConfig.getInstance(currentAccount).getClientUserId();
         final ArrayList<Integer> ids = new ArrayList<>(messageIds);
         MessagesStorage storage = MessagesStorage.getInstance(currentAccount);
         storage.getStorageQueue().postRunnable(() -> {
+            if (owner != UserConfig.getInstance(currentAccount).getClientUserId()
+                    || !AyuChatCapturePolicy.isEnabled(currentAccount, did)) return;
             ArrayList<TLRPC.Message> messages = loadMessagesFromStorage(currentAccount, did, ids);
             if (!messages.isEmpty()) {
                 saveDeletedInternal(currentAccount, messages, preserveMediaNow(currentAccount, messages));
@@ -148,7 +156,16 @@ public class AyuMessagesController {
         if (AyuState.consumeSkipNextSave()) {
             return;
         }
-        final ArrayList<TLRPC.Message> copy = new ArrayList<>(oldMessages);
+        AyuChatCapturePolicy.load();
+        ArrayList<TLRPC.Message> copy = null;
+        for (int i = 0; i < oldMessages.size(); i++) {
+            TLRPC.Message message = oldMessages.get(i);
+            if (shouldSaveDeleted(currentAccount, message)) {
+                if (copy == null) copy = new ArrayList<>();
+                copy.add(message);
+            }
+        }
+        if (copy == null) return;
         // anti-delete: the caller (MessagesStorage) hands the very same files to
         // FileLoader.deleteFiles() a few statements after this method returns, so the copies have to
         // be taken *now*, on the calling thread - an asynchronous copy loses that race.
@@ -190,10 +207,10 @@ public class AyuMessagesController {
     }
 
     private void saveDeletedInternal(int currentAccount, ArrayList<TLRPC.Message> oldMessages, HashMap<Integer, String[]> preserved) {
+        final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             try {
-                final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-                if (selfId == 0) {
+                if (selfId == 0 || selfId != UserConfig.getInstance(currentAccount).getClientUserId()) {
                     return;
                 }
                 ArrayList<DeletedMessage> rows = new ArrayList<>();
@@ -227,7 +244,8 @@ public class AyuMessagesController {
                 // late media (needs downloading) - now that the rows exist we know their fakeId
                 for (int a = 0; a < rows.size(); a++) {
                     DeletedMessage row = rows.get(a);
-                    if (TextUtils.isEmpty(row.mediaPath) && row.documentType != AyuConstants.DOCUMENT_TYPE_NONE) {
+                    if (isMediaSaveAllowed(currentAccount, row.dialogId)
+                            && TextUtils.isEmpty(row.mediaPath) && row.documentType != AyuConstants.DOCUMENT_TYPE_NONE) {
                         DeletedMessage stored = AyuHistoryStorage.getInstance().getDeletedMessage(row.userId, row.dialogId, row.messageId);
                         if (stored != null) {
                             scheduleDownloadIfPossible(currentAccount, oldMessages, stored);
@@ -259,17 +277,20 @@ public class AyuMessagesController {
         if (!org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.isCaptureEnabled() || oldMessage == null || newMessage == null) {
             return;
         }
-        if (!shouldSave(currentAccount, oldMessage)) {
+        AyuChatCapturePolicy.load();
+        if (!shouldSave(currentAccount, oldMessage) || !AyuChatCapturePolicy.isRetainableMessage(newMessage)) {
             return;
         }
         if (!hasMeaningfulChange(oldMessage, newMessage)) {
             return;
         }
         final long dialogId = newMessage.dialog_id != 0 ? newMessage.dialog_id : MessageObject.getDialogId(newMessage);
+        final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
         AyuHistoryStorage.getQueue().postRunnable(() -> {
             try {
-                final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-                if (selfId == 0) {
+                if (selfId == 0 || selfId != UserConfig.getInstance(currentAccount).getClientUserId()
+                        || !org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig.isCaptureEnabled()
+                        || !shouldSave(currentAccount, oldMessage)) {
                     return;
                 }
                 EditedMessage row = new EditedMessage();
@@ -309,12 +330,16 @@ public class AyuMessagesController {
             return;
         }
         final long dialogId = newMessage.dialog_id != 0 ? newMessage.dialog_id : MessageObject.getDialogId(newMessage);
-        if (dialogId == 0 || DialogObject.isEncryptedDialog(dialogId)) {
+        AyuChatCapturePolicy.load();
+        if (!shouldSave(currentAccount, newMessage)) {
             return;
         }
+        final long owner = UserConfig.getInstance(currentAccount).getClientUserId();
         final int messageId = newMessage.id;
         MessagesStorage storage = MessagesStorage.getInstance(currentAccount);
         storage.getStorageQueue().postRunnable(() -> {
+            if (owner != UserConfig.getInstance(currentAccount).getClientUserId()
+                    || !shouldSave(currentAccount, newMessage)) return;
             ArrayList<Integer> ids = new ArrayList<>();
             ids.add(messageId);
             ArrayList<TLRPC.Message> old = loadMessagesFromStorage(currentAccount, dialogId, ids);
@@ -341,87 +366,79 @@ public class AyuMessagesController {
      *                          deleted right after that call returns.
      */
     public void onSelfDestructMediaOpened(int currentAccount, TLRPC.Message message, boolean copySynchronously) {
-        if (!AyuConfig.saveSelfDestructingMedia || message == null) {
-            return;
-        }
-        final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-        if (selfId == 0) {
-            return;
-        }
-        final long dialogId = message.dialog_id != 0 ? message.dialog_id : MessageObject.getDialogId(message);
-        if (dialogId == 0) {
-            return;
-        }
-        if (copySynchronously) {
-            // called from the storage queue right before the physical file is wiped
-            if (AyuHistoryStorage.getInstance().getTTLMedia(selfId, dialogId, message.id) != null) {
-                return;
-            }
-            final DeletedMessage row = new DeletedMessage();
-            fillRow(currentAccount, row, message, selfId);
-            if (row.dialogId == 0) {
-                row.dialogId = dialogId;
-            }
-            saveMediaFor(currentAccount, message, row);
-            AyuHistoryStorage.getQueue().postRunnable(() -> {
-                AyuHistoryStorage.getInstance().insertTTLMedia(row);
-                postHistoryUpdated(currentAccount, row.dialogId, row.messageId, 2);
-            });
-        } else {
-            AyuHistoryStorage.getQueue().postRunnable(() -> {
-                if (AyuHistoryStorage.getInstance().getTTLMedia(selfId, dialogId, message.id) != null) {
-                    return;
+        AyuTTLMediaCapture.capture(currentAccount, message, copySynchronously);
+    }
+
+    /** Newest first, keyset pagination. A null result reports a database error. */
+    public void getSavedTTLMediaAsync(int account, long beforeId, int limit,
+                                     org.telegram.messenger.Utilities.Callback<ArrayList<DeletedMessage>> callback) {
+        final long owner = UserConfig.getInstance(account).getClientUserId();
+        AyuHistoryStorage.getQueue().postRunnable(() -> {
+            ArrayList<DeletedMessage> result = null;
+            try {
+                if (owner != 0 && owner == UserConfig.getInstance(account).getClientUserId()) {
+                    result = AyuHistoryStorage.getInstance().getTTLMediaPage(owner, beforeId, limit);
                 }
-                DeletedMessage row = new DeletedMessage();
-                fillRow(currentAccount, row, message, selfId);
-                if (row.dialogId == 0) {
-                    row.dialogId = dialogId;
-                }
-                saveMediaFor(currentAccount, message, row);
-                AyuHistoryStorage.getInstance().insertTTLMedia(row);
-                postHistoryUpdated(currentAccount, row.dialogId, row.messageId, 2);
+            } catch (Throwable e) { FileLog.e(e); }
+            final ArrayList<DeletedMessage> rows = result;
+            AndroidUtilities.runOnUIThread(() -> {
+                if (owner == UserConfig.getInstance(account).getClientUserId() && callback != null) callback.run(rows);
             });
-        }
+        });
     }
 
-    /** true when we already keep a permanent copy of this self-destructing media */
-    public boolean hasSavedSelfDestructMedia(int currentAccount, long dialogId, int messageId) {
-        try {
-            final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-            DeletedMessage row = AyuHistoryStorage.getInstance().getTTLMedia(selfId, dialogId, messageId);
-            return row != null && !TextUtils.isEmpty(row.mediaPath) && new File(row.mediaPath).exists();
-        } catch (Throwable e) {
-            FileLog.e(e);
-            return false;
-        }
+    public void removeSavedTTLMediaAsync(int account, long fakeId,
+                                        org.telegram.messenger.Utilities.Callback<Boolean> callback) {
+        final long owner = UserConfig.getInstance(account).getClientUserId();
+        AyuHistoryStorage.getQueue().postRunnable(() -> {
+            boolean success = false;
+            try {
+                if (owner != 0 && owner == UserConfig.getInstance(account).getClientUserId()) {
+                    DeletedMessage row = AyuHistoryStorage.getInstance().getTTLMediaById(owner, fakeId);
+                    if (row != null) {
+                        AyuTTLMediaCapture.cancel(account, owner, row.dialogId, row.messageId);
+                        success = AyuHistoryStorage.getInstance().removeTTLMedia(row);
+                        if (success) postHistoryUpdated(account, row.dialogId, row.messageId, 2);
+                    }
+                }
+            } catch (Throwable e) { FileLog.e(e); }
+            final boolean removed = success;
+            AndroidUtilities.runOnUIThread(() -> {
+                if (owner == UserConfig.getInstance(account).getClientUserId() && callback != null) callback.run(removed);
+            });
+        });
     }
 
-    /** rebuilds the saved self-destructing message (attachPath already points at our permanent copy) */
-    public TLRPC.Message getSavedSelfDestructMessage(int currentAccount, long dialogId, int messageId) {
-        try {
-            final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-            DeletedMessage row = AyuHistoryStorage.getInstance().getTTLMedia(selfId, dialogId, messageId);
-            if (row == null) {
-                return null;
-            }
-            return restoreMessage(currentAccount, row);
-        } catch (Throwable e) {
-            FileLog.e(e);
-            return null;
-        }
-    }
-
-    public String getSavedSelfDestructMediaPath(int currentAccount, long dialogId, int messageId) {
-        try {
-            final long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
-            DeletedMessage row = AyuHistoryStorage.getInstance().getTTLMedia(selfId, dialogId, messageId);
-            if (row != null && !TextUtils.isEmpty(row.mediaPath) && new File(row.mediaPath).exists()) {
-                return row.mediaPath;
-            }
-        } catch (Throwable e) {
-            FileLog.e(e);
-        }
-        return null;
+    /** A private saved-viewer clone; no cache restoration or mutation of the live TTL message. */
+    public void getSavedSelfDestructMessageAsync(int account, long dialogId, int messageId,
+                                               org.telegram.messenger.Utilities.Callback<TLRPC.Message> callback) {
+        final long owner = UserConfig.getInstance(account).getClientUserId();
+        AyuHistoryStorage.getQueue().postRunnable(() -> {
+            TLRPC.Message saved = null;
+            try {
+                if (owner != 0 && owner == UserConfig.getInstance(account).getClientUserId()) {
+                    DeletedMessage row = AyuHistoryStorage.getInstance().getTTLMedia(owner, dialogId, messageId);
+                    if (AyuTTLMediaCapture.validSavedFile(row) && row.messageSerialized != null) {
+                        SerializedData data = new SerializedData(row.messageSerialized);
+                        saved = TLRPC.Message.TLdeserialize(data, data.readInt32(true), true);
+                        data.cleanup();
+                        saved.dialog_id = dialogId;
+                        saved.ttl = 0;
+                        saved.destroyTime = 0;
+                        saved.destroyTimeMillis = 0;
+                        saved.attachPath = row.mediaPath;
+                        if (saved.media != null) {
+                            saved.media.ttl_seconds = 0;
+                            saved.media.flags &= ~4;
+                        }
+                    }
+                }
+            } catch (Throwable e) { FileLog.e(e); }
+            final TLRPC.Message result = saved;
+            AndroidUtilities.runOnUIThread(() -> {
+                if (owner == UserConfig.getInstance(account).getClientUserId() && callback != null) callback.run(result);
+            });
+        });
     }
 
     /**
@@ -637,6 +654,7 @@ public class AyuMessagesController {
         TLRPC.Message message = restoreMessage(currentAccount, row);
         if (message != null) {
             message.ayuDeleted = true;
+            message.ayuDeletedDate = row.entityCreateDate;
         }
         return message;
     }
@@ -804,11 +822,16 @@ public class AyuMessagesController {
         return account + "_" + dialogId + "_" + messageId;
     }
 
-    private void postHistoryUpdated(int currentAccount, long dialogId, int messageId, int type) {
+    void postHistoryUpdated(int currentAccount, long dialogId, int messageId, int type) {
+        final long owner = UserConfig.getInstance(currentAccount).getClientUserId();
         final ArrayList<Integer> ids = new ArrayList<>();
         ids.add(messageId);
-        AndroidUtilities.runOnUIThread(() -> NotificationCenter.getInstance(currentAccount)
-                .postNotificationName(NotificationCenter.ayuMessageHistoryUpdated, dialogId, ids, type));
+        AndroidUtilities.runOnUIThread(() -> {
+            if (owner != 0 && owner == UserConfig.getInstance(currentAccount).getClientUserId()) {
+                NotificationCenter.getInstance(currentAccount)
+                        .postNotificationName(NotificationCenter.ayuMessageHistoryUpdated, dialogId, ids, type);
+            }
+        });
     }
 
     /** loads the messages that are about to be deleted straight from messages_v2 (call on the storage queue) */
@@ -864,7 +887,7 @@ public class AyuMessagesController {
     }
 
     private boolean shouldSave(int currentAccount, TLRPC.Message message) {
-        if (message == null || message.id == 0) {
+        if (!AyuChatCapturePolicy.isRetainableMessage(message)) {
             return false;
         }
         if (message.ayuDeleted) {
@@ -877,22 +900,8 @@ public class AyuMessagesController {
         if (DialogObject.isEncryptedDialog(dialogId)) {
             return false;
         }
-        if (AyuAntiDeleteConfig.isExcluded(dialogId)) {
-            // the user asked not to keep anything from this chat
+        if (!AyuChatCapturePolicy.isEnabled(currentAccount, dialogId, message)) {
             return false;
-        }
-        if (message.id < 0) {
-            // local / not yet sent
-            return false;
-        }
-        if (message.action != null && !(message.action instanceof TLRPC.TL_messageActionEmpty)) {
-            return false;
-        }
-        if (!AyuConfig.saveForBots && DialogObject.isUserDialog(dialogId)) {
-            TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
-            if (UserObject.isBot(user)) {
-                return false;
-            }
         }
         return true;
     }
@@ -905,7 +914,7 @@ public class AyuMessagesController {
      * capture, which must keep working for our own messages.
      */
     private boolean shouldSaveDeleted(int currentAccount, TLRPC.Message message) {
-        if (!shouldSave(currentAccount, message)) {
+        if (message == null || message.ayuDeleted) {
             return false;
         }
         final long dialogId = message.dialog_id != 0 ? message.dialog_id : MessageObject.getDialogId(message);
@@ -958,10 +967,12 @@ public class AyuMessagesController {
         });
     }
 
-    private boolean isMediaSaveAllowed(int currentAccount, long dialogId) {
-        if (!AyuConfig.saveMedia) {
+    boolean isMediaSaveAllowed(int currentAccount, long dialogId) {
+        if (!AyuConfig.saveMedia || !AyuChatCapturePolicy.isEnabled(currentAccount, dialogId)) {
             return false;
         }
+        // A per-chat opt-in includes its media, while the global media master remains authoritative.
+        if (AyuChatCapturePolicy.isExplicitlyEnabled(currentAccount, dialogId)) return true;
         boolean isPrivate = DialogObject.isUserDialog(dialogId);
         boolean isBot = false;
         boolean isChannel = false;
@@ -1160,7 +1171,7 @@ public class AyuMessagesController {
     }
 
     /** copies every flat column + the fully serialized message into the row */
-    private void fillRow(int currentAccount, AyuMessageBase row, TLRPC.Message message, long selfId) {
+    void fillRow(int currentAccount, AyuMessageBase row, TLRPC.Message message, long selfId) {
         row.userId = selfId;
         row.dialogId = message.dialog_id != 0 ? message.dialog_id : MessageObject.getDialogId(message);
         row.peerId = message.peer_id != null ? DialogObject.getPeerDialogId(message.peer_id) : row.dialogId;
@@ -1447,6 +1458,13 @@ public class AyuMessagesController {
                 pendingDownloads.put(currentAccount + ":" + fileName, pending);
             }
             AndroidUtilities.runOnUIThread(() -> {
+                if (pending.userId != UserConfig.getInstance(currentAccount).getClientUserId()
+                        || !AyuConfig.saveDeletedMessages || !isMediaSaveAllowed(currentAccount, pending.dialogId)) {
+                    synchronized (pendingDownloads) {
+                        pendingDownloads.remove(currentAccount + ":" + fileName);
+                    }
+                    return;
+                }
                 ensureObserver(currentAccount);
                 try {
                     TLRPC.MessageMedia m = MessageObject.getMedia(finalMessage);
@@ -1492,6 +1510,8 @@ public class AyuMessagesController {
             }
             AyuHistoryStorage.getQueue().postRunnable(() -> {
                 try {
+                    if (pending.userId != UserConfig.getInstance(pending.account).getClientUserId()
+                            || !AyuConfig.saveDeletedMessages || !isMediaSaveAllowed(pending.account, pending.dialogId)) return;
                     DeletedMessage stored = AyuHistoryStorage.getInstance().getDeletedMessage(pending.userId, pending.dialogId, pending.messageId);
                     if (stored == null) {
                         return;

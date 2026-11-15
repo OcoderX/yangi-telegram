@@ -154,6 +154,9 @@ import me.vkryl.android.animator.FactorAnimator;
 public class SettingsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, ImageUpdater.ImageUpdaterDelegate, MainTabsActivity.TabFragmentDelegate, FactorAnimator.Target {
 
     private static final int ANIMATOR_ID_SEARCH_PAGE_VISIBLE = 0;
+    private static final int ROW_ADD_ACCOUNT = 31;
+    private static final int ROW_ADD_BOT_ACCOUNT = 32;
+    private static final int ROW_APP_UPDATES = 33;
 
     private final BoolAnimator animatorSearchPageVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_PAGE_VISIBLE,
             this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
@@ -499,6 +502,14 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        if (listView != null) {
+            listView.adapter.update(false);
+        }
+    }
+
+    @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
 
@@ -629,8 +640,11 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         final boolean bot = getUserConfig().isBotAccount();
 
         accountNumbers.clear();
+        boolean canAddAccount = false;
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (UserConfig.getInstance(a).isClientActivated() && currentAccount != a) {
+            if (!UserConfig.getInstance(a).isClientActivated()) {
+                canAddAccount = true;
+            } else if (currentAccount != a) {
                 accountNumbers.add(a);
             }
         }
@@ -685,10 +699,14 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
         }
 
-        if (accountNumbers.size() > 0) {
+        if (!accountNumbers.isEmpty() || canAddAccount) {
             items.add(UItem.asHeader(getString(R.string.SettingsAccounts)));
             for (int i = 0; i < accountNumbers.size(); ++i) {
                 items.add(AccountCell.Factory.of(i, accountNumbers.get(i)));
+            }
+            if (canAddAccount) {
+                items.add(SettingCell.Factory.of(ROW_ADD_ACCOUNT, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.msg_addbot, getString(R.string.AddAccount)));
+                items.add(SettingCell.Factory.of(ROW_ADD_BOT_ACCOUNT, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_bot, getString(R.string.AyuBotAddAccount)));
             }
             items.add(UItem.asShadow(null));
         }
@@ -744,6 +762,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(getString(R.string.SettingsHelp)));
+        if (ApplicationLoader.applicationLoaderInstance.isCustomUpdate()) {
+            items.add(SettingCell.Factory.of(ROW_APP_UPDATES, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_data, getString(R.string.OxUpdatesTitle)));
+        }
         items.add(SettingCell.Factory.of(17, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_ask, getString(R.string.AskAQuestion)));
         items.add(SettingCell.Factory.of(18, IconBackgroundColors.BLUE_LIGHT.top, IconBackgroundColors.BLUE_LIGHT.bottom, R.drawable.settings_faq, getString(R.string.TelegramFAQ)));
         items.add(SettingCell.Factory.of(23, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_features, getString(R.string.TelegramFeatures)));
@@ -773,6 +794,23 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             layout.presentFragment(new INavigationLayout.NavigationParams(fragment).setNoAnimation(true).forceRightLayout());
         } else {
             presentFragment(fragment);
+        }
+    }
+
+    private void openAddAccount(boolean botToken) {
+        final int availableAccount = UserConfig.findFreeAccount();
+        if (availableAccount >= 0) {
+            final LoginActivity loginActivity = new LoginActivity(availableAccount);
+            if (botToken) {
+                loginActivity.startWithBotToken();
+            }
+            presentFragment(loginActivity);
+        } else if (getContext() != null) {
+            showDialog(new AlertDialog.Builder(getContext())
+                .setTitle(getString(R.string.AppName))
+                .setMessage(AndroidUtilities.replaceTags(formatString(R.string.LimitReachedAccountsPremium, UserConfig.MAX_ACCOUNT_COUNT)))
+                .setPositiveButton(getString(R.string.OK), null)
+                .create());
         }
     }
 
@@ -816,6 +854,15 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             return;
         }
         switch (item.id) {
+            case ROW_APP_UPDATES:
+                presentSettingFragment(new org.telegram.ui.ayu.update.OxUpdatesActivity());
+                break;
+            case ROW_ADD_ACCOUNT:
+                openAddAccount(false);
+                break;
+            case ROW_ADD_BOT_ACCOUNT:
+                openAddAccount(true);
+                break;
             case 4: {
                 Bundle args = new Bundle();
                 args.putBoolean("needPhonebook", true);

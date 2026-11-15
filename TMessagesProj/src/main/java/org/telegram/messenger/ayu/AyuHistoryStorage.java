@@ -26,7 +26,7 @@ import java.util.Locale;
  */
 public class AyuHistoryStorage extends SQLiteOpenHelper {
 
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     public static final String TABLE_DELETED = "deleted_messages";
     public static final String TABLE_EDITED = "edited_messages";
@@ -227,6 +227,9 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
         createIndexes(db, TABLE_DELETED, true, false);
         createIndexes(db, TABLE_EDITED, false, true);
         createIndexes(db, TABLE_TTL, true, false);
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_ttl_media_page ON " + TABLE_TTL + " (userId, fakeId)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS ttl_media_removed (userId INTEGER NOT NULL, dialogId INTEGER NOT NULL, "
+                + "messageId INTEGER NOT NULL, PRIMARY KEY (userId, dialogId, messageId))");
     }
 
     @Override
@@ -404,6 +407,7 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
 
     public long insertTTLMedia(DeletedMessage row) {
         try {
+            if (!AyuTTLMediaCapture.validSavedFile(row) || isTTLMediaRemoved(row.userId, row.dialogId, row.messageId)) return -1;
             return db().insertWithOnConflict(TABLE_TTL, null, toValues(row), SQLiteDatabase.CONFLICT_REPLACE);
         } catch (Throwable e) {
             FileLog.e(e);
@@ -551,6 +555,91 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
         return null;
     }
 
+    /** Storage-queue only. Stop growing the archive; never silently evict an existing saved copy. */
+    boolean hasTTLMediaCapacity(long incomingBytes) {
+        final long maximum = 1024L * 1024 * 1024;
+        if (incomingBytes <= 0 || incomingBytes > maximum) return false;
+        long used = 0;
+        int count = 0;
+        try (Cursor cursor = db().query(TABLE_TTL, new String[]{"mediaPath"},
+                "mediaPath IS NOT NULL AND mediaPath != ''", null, null, null, null, "4097")) {
+            while (cursor.moveToNext()) {
+                if (++count > 4096) return false;
+                File file = new File(cursor.getString(0));
+                if (file.isFile()) used += file.length();
+                if (used > maximum - incomingBytes) return false;
+            }
+        }
+        return count < 4096;
+    }
+
+    /** Worker-only, with file validation and pruning so missing legacy rows do not stop pagination. */
+    public ArrayList<DeletedMessage> getTTLMediaPage(long userId, long beforeId, int limit) {
+        ArrayList<DeletedMessage> rows = new ArrayList<>();
+        int pageSize = Math.max(1, Math.min(limit, 100));
+        long cursorId = beforeId > 0 ? beforeId : Long.MAX_VALUE;
+        while (rows.size() < pageSize) {
+            int remaining = pageSize - rows.size();
+            int read = 0;
+            ArrayList<Long> missing = new ArrayList<>();
+            try (Cursor cursor = db().query(TABLE_TTL, PROJECTION,
+                    "userId = ? AND fakeId < ? AND documentType IN (?, ?, ?) AND mediaPath IS NOT NULL AND mediaPath != ''",
+                    new String[]{Long.toString(userId), Long.toString(cursorId), Integer.toString(AyuConstants.DOCUMENT_TYPE_PHOTO),
+                            Integer.toString(AyuConstants.DOCUMENT_TYPE_VIDEO), Integer.toString(AyuConstants.DOCUMENT_TYPE_ROUND)},
+                    null, null, "fakeId DESC", Integer.toString(remaining))) {
+                while (cursor.moveToNext()) {
+                    DeletedMessage row = readDeleted(cursor);
+                    cursorId = row.fakeId;
+                    read++;
+                    if (AyuTTLMediaCapture.validSavedFile(row)) rows.add(row);
+                    else missing.add(row.fakeId);
+                }
+            }
+            for (Long id : missing) db().delete(TABLE_TTL, "userId = ? AND fakeId = ?",
+                    new String[]{Long.toString(userId), Long.toString(id)});
+            if (read < remaining) break;
+        }
+        return rows;
+    }
+
+    public DeletedMessage getTTLMediaById(long userId, long fakeId) {
+        try (Cursor cursor = db().query(TABLE_TTL, PROJECTION, "userId = ? AND fakeId = ?",
+                new String[]{Long.toString(userId), Long.toString(fakeId)}, null, null, null, "1")) {
+            return cursor.moveToNext() ? readDeleted(cursor) : null;
+        }
+    }
+
+    public boolean isTTLMediaRemoved(long userId, long dialogId, int messageId) {
+        try (Cursor cursor = db().rawQuery("SELECT 1 FROM ttl_media_removed WHERE userId = ? AND dialogId = ? AND messageId = ? LIMIT 1",
+                new String[]{Long.toString(userId), Long.toString(dialogId), Integer.toString(messageId)})) {
+            return cursor.moveToNext();
+        }
+    }
+
+    /** The tombstone also prevents a late downloader or a later history refresh from recreating it. */
+    public boolean removeTTLMedia(DeletedMessage row) {
+        SQLiteDatabase database = db();
+        database.beginTransaction();
+        try {
+            database.execSQL("INSERT OR IGNORE INTO ttl_media_removed (userId, dialogId, messageId) VALUES (?, ?, ?)",
+                    new Object[]{row.userId, row.dialogId, row.messageId});
+            database.delete(TABLE_TTL, "userId = ? AND fakeId = ?",
+                    new String[]{Long.toString(row.userId), Long.toString(row.fakeId)});
+            database.setTransactionSuccessful();
+        } finally {
+            database.endTransaction();
+        }
+        // TTL files have a dedicated namespace; legacy paths may also belong to ordinary archives.
+        if (row.mediaPath != null) {
+            try {
+                File file = new File(row.mediaPath);
+                File root = new File(getMediaDir(), "ttl");
+                if (file.getCanonicalPath().startsWith(root.getCanonicalPath() + File.separator)) file.delete();
+            } catch (Exception e) { FileLog.e(e); }
+        }
+        return true;
+    }
+
     public boolean isDeleted(long userId, long dialogId, int messageId) {
         Cursor c = null;
         try {
@@ -646,7 +735,7 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
         return getRevisionsCount(userId, dialogId, messageId) > 0;
     }
 
-    /** ayu edit history: messageId -&gt; number of stored revisions for a whole dialog (one query) */
+    /** Worker queue only. Failed reads throw so the cache can retry instead of publishing empty. */
     public java.util.HashMap<Integer, Integer> getRevisionCounts(long userId, long dialogId) {
         java.util.HashMap<Integer, Integer> result = new java.util.HashMap<>();
         Cursor c = null;
@@ -657,7 +746,7 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
                 result.put(c.getInt(0), c.getInt(1));
             }
         } catch (Throwable e) {
-            FileLog.e(e);
+            throw new IllegalStateException("Unable to load revision counts", e);
         } finally {
             if (c != null) {
                 try {
@@ -732,6 +821,7 @@ public class AyuHistoryStorage extends SQLiteOpenHelper {
 
     /** wipes every stored row and every saved media file. Must be called on the ayu queue. */
     public void clear() {
+        AyuTTLMediaCapture.clearPending();
         try {
             SQLiteDatabase database = db();
             database.execSQL("DELETE FROM " + TABLE_DELETED);

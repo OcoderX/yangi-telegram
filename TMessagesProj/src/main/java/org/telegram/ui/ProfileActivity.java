@@ -708,6 +708,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private int subscribersRequestsRow;
     private int administratorsRow;
     private int settingsRow;
+    private int channelManagementHeaderRow;
+    private int channelStatisticsRow;
+    private int channelRecentActionsRow;
+    private int channelReactionsRow;
+    private int channelAffiliateProgramsRow;
     private int botStarsBalanceRow;
     private int botTonBalanceRow;
     private int channelBalanceRow;
@@ -2098,6 +2103,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     public boolean onFragmentCreate() {
         userId = arguments.getLong("user_id", 0);
         chatId = arguments.getLong("chat_id", 0);
+        long protectedDialogId = arguments.getLong("dialog_id", 0);
+        if (protectedDialogId == 0) protectedDialogId = chatId != 0 ? -chatId : userId;
+        org.telegram.messenger.ayu.hidden.HiddenChatsController hiddenChats = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount);
+        boolean ownProfileTab = arguments.getBoolean("my_profile", false) && userId == getUserConfig().getClientUserId() && protectedDialogId == userId;
+        if (!ownProfileTab && hiddenChats.isHidden(protectedDialogId) && !hiddenChats.isUnlocked()) return false;
         topicId = arguments.getLong("topic_id", 0);
         saved = arguments.getBoolean("saved", false);
         openSimilar = arguments.getBoolean("similar", false);
@@ -4506,7 +4516,50 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 fragment.setInfo(chatInfo);
                 presentFragment(fragment);
             } else if (position == settingsRow) {
-                editItem.performClick();
+                if (!canManageBroadcastChannel()) {
+                    updateListAnimated(false);
+                    return;
+                }
+                Bundle args = new Bundle();
+                args.putLong("chat_id", chatId);
+                ChatEditActivity fragment = new ChatEditActivity(args);
+                if (chatInfo != null) fragment.setInfo(chatInfo);
+                fragment.setCurrentAccount(currentAccount);
+                presentFragment(fragment);
+            } else if (position == channelReactionsRow) {
+                TLRPC.Chat channel = getMessagesController().getChat(chatId);
+                TLRPC.ChatFull full = getMessagesController().getChatFull(chatId);
+                if (!canManageBroadcastChannel() || !ChatObject.canChangeChatInfo(channel) || full == null) {
+                    updateListAnimated(false);
+                    return;
+                }
+                org.telegram.ui.Components.Reactions.ChatCustomReactionsEditActivity fragment =
+                        new org.telegram.ui.Components.Reactions.ChatCustomReactionsEditActivity(chatId, full);
+                fragment.setCurrentAccount(currentAccount);
+                presentFragment(fragment);
+            } else if (position == channelAffiliateProgramsRow) {
+                if (!canManageBroadcastChannel() || !getMessagesController().starrefConnectAllowed) {
+                    updateListAnimated(false);
+                    return;
+                }
+                ChannelAffiliateProgramsFragment fragment = new ChannelAffiliateProgramsFragment(-chatId);
+                fragment.setCurrentAccount(currentAccount);
+                presentFragment(fragment);
+            } else if (position == channelStatisticsRow) {
+                TLRPC.ChatFull full = getMessagesController().getChatFull(chatId);
+                if (!canManageBroadcastChannel() || full == null || !full.can_view_stats) {
+                    updateListAnimated(false);
+                    return;
+                }
+                presentFragment(StatisticActivity.create(getMessagesController().getChat(chatId), false, currentAccount));
+            } else if (position == channelRecentActionsRow) {
+                if (!canManageBroadcastChannel()) {
+                    updateListAnimated(false);
+                    return;
+                }
+                ChannelAdminLogActivity fragment = new ChannelAdminLogActivity(getMessagesController().getChat(chatId));
+                fragment.setCurrentAccount(currentAccount);
+                presentFragment(fragment);
             } else if (position == botStarsBalanceRow) {
                 presentFragment(new BotStarsActivity(BotStarsActivity.TYPE_STARS, userId));
             } else if (position == botTonBalanceRow) {
@@ -6464,6 +6517,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         } else {
             return -chatId;
         }
+    }
+
+    private boolean canManageBroadcastChannel() {
+        TLRPC.Chat channel = getMessagesController().getChat(chatId);
+        return !isTopic && currentAccount == UserConfig.selectedAccount
+                && ChatObject.isChannelAndNotMegaGroup(channel) && !ChatObject.isNotInChat(channel)
+                && (channel.creator || ChatObject.hasAdminRights(channel));
     }
 
     public void getEmojiStatusLocation(Rect rect) {
@@ -10861,6 +10921,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         sharedMediaRow = -1;
         notificationsSimpleRow = -1;
         settingsRow = -1;
+        channelManagementHeaderRow = -1;
+        channelStatisticsRow = -1;
+        channelRecentActionsRow = -1;
+        channelReactionsRow = -1;
+        channelAffiliateProgramsRow = -1;
         botStarsBalanceRow = -1;
         botTonBalanceRow = -1;
         channelBalanceRow = -1;
@@ -11233,13 +11298,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             }
 
             if (ChatObject.isChannel(currentChat) && !currentChat.megagroup) {
-                if (chatInfo != null && (currentChat.creator || chatInfo.can_view_participants)) {
-                    if (actionsView == null) {
+                boolean canManage = canManageBroadcastChannel();
+                boolean canViewParticipants = chatInfo != null && (currentChat.creator || chatInfo.can_view_participants);
+                if (canManage || canViewParticipants) {
+                    if (canManage) {
+                        channelManagementHeaderRow = rowCount++;
+                        if (chatInfo != null && ChatObject.canChangeChatInfo(currentChat)) channelReactionsRow = rowCount++;
+                    } else if (actionsView == null) {
                         membersHeaderRow = rowCount++;
                     }
-                    subscribersRow = rowCount++;
-                    if (chatInfo != null && chatInfo.requests_pending > 0) {
-                        subscribersRequestsRow = rowCount++;
+                    if (canViewParticipants) {
+                        subscribersRow = rowCount++;
+                        if (chatInfo.requests_pending > 0) subscribersRequestsRow = rowCount++;
                     }
                     administratorsRow = rowCount++;
                     if (chatInfo != null && (chatInfo.banned_count != 0 || chatInfo.kicked_count != 0)) {
@@ -11256,7 +11326,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     ) {
                         channelBalanceRow = rowCount++;
                     }
-                    settingsRow = rowCount++;
+                    if (canManage) {
+                        if (chatInfo != null && chatInfo.can_view_stats) channelStatisticsRow = rowCount++;
+                        channelRecentActionsRow = rowCount++;
+                        if (getMessagesController().starrefConnectAllowed) channelAffiliateProgramsRow = rowCount++;
+                        settingsRow = rowCount++;
+                    }
                     channelBalanceSectionRow = rowCount++;
                 }
             } else {
@@ -13777,6 +13852,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         }
                     } else if (position == membersHeaderRow) {
                         headerCell.setText(LocaleController.getString(R.string.ChannelMembers));
+                    } else if (position == channelManagementHeaderRow) {
+                        headerCell.setText(LocaleController.getString(R.string.OxChannelManagement));
                     } else if (position == settingsSectionRow2) {
                         headerCell.setText(LocaleController.getString(R.string.SETTINGS));
                     } else if (position == numberSectionRow) {
@@ -14094,7 +14171,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             textCell.setTextAndIcon(LocaleController.getString(R.string.ChannelAdministrators), R.drawable.msg_admins, position != membersSectionRow - 1);
                         }
                     } else if (position == settingsRow) {
-                        textCell.setTextAndIcon(LocaleController.getString(R.string.ChannelAdminSettings), R.drawable.msg_customize, position != membersSectionRow - 1);
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.ChannelAdminSettings), R.drawable.msg_customize, position != channelBalanceSectionRow - 1);
+                    } else if (position == channelStatisticsRow) {
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.Statistics), R.drawable.msg_stats, true);
+                    } else if (position == channelRecentActionsRow) {
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.EventLog), R.drawable.msg_log, true);
+                    } else if (position == channelReactionsRow) {
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.Reactions), R.drawable.msg_reactions2, true);
+                    } else if (position == channelAffiliateProgramsRow) {
+                        textCell.setTextAndIcon(LocaleController.getString(R.string.ChannelAffiliatePrograms), R.drawable.menu_feature_premium, true);
                     } else if (position == channelBalanceRow) {
                         final TL_stars.StarsAmount stars_balance = BotStarsController.getInstance(currentAccount).getBotStarsBalance(-chatId);
                         final long ton_balance = BotStarsController.getInstance(currentAccount).getTONBalance(-chatId);
@@ -14658,7 +14743,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public int getItemViewType(int position) {
-            if (position == infoHeaderRow || position == membersHeaderRow || position == settingsSectionRow2 ||
+            if (position == infoHeaderRow || position == membersHeaderRow || position == channelManagementHeaderRow || position == settingsSectionRow2 ||
                     position == numberSectionRow || position == helpHeaderRow || position == debugHeaderRow || position == botPermissionsHeader) {
                 return VIEW_TYPE_HEADER;
             } else if (position == phoneRow || position == locationRow || position == numberRow || position == birthdayRow || position == peerIdRow) {
@@ -14671,6 +14756,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 return VIEW_TYPE_ABOUT_LINK;
             } else if (position == settingsTimerRow || position == settingsKeyRow || position == reportRow || position == reportReactionRow || position == deleteReactionRow ||
                     position == subscribersRow || position == subscribersRequestsRow || position == administratorsRow || position == settingsRow || position == blockedUsersRow ||
+                    position == channelStatisticsRow || position == channelRecentActionsRow || position == channelReactionsRow || position == channelAffiliateProgramsRow ||
                     position == addMemberRow || position == membersFilterRow || position == joinRow || position == unblockRow ||
                     position == sendMessageRow || position == notificationRow || position == privacyRow ||
                     position == languageRow || position == dataRow || position == chatRow ||
@@ -16083,6 +16169,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             put(++pointer, settingsKeyRow, sparseIntArray);
             put(++pointer, secretSettingsSectionRow, sparseIntArray);
             put(++pointer, membersHeaderRow, sparseIntArray);
+            put(++pointer, channelManagementHeaderRow, sparseIntArray);
+            put(++pointer, channelStatisticsRow, sparseIntArray);
+            put(++pointer, channelRecentActionsRow, sparseIntArray);
+            put(++pointer, channelReactionsRow, sparseIntArray);
+            put(++pointer, channelAffiliateProgramsRow, sparseIntArray);
             put(++pointer, addMemberRow, sparseIntArray);
             put(++pointer, membersFilterRow, sparseIntArray);
             put(++pointer, subscribersRow, sparseIntArray);

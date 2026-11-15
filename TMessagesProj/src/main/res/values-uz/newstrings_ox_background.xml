@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxBackgroundReceiveInfo">Kirilgan hisoblarning ulanishini doimiy bildirishnoma bilan fonda saqlaydi. Faqat shu qurilmaga kelgan xabarlar saqlanishi mumkin. Android ulanishni to‘xtatishi mumkin; Android 15 va keyingi versiyalar fon sinxronlash vaqtini cheklaydi. Davom ettirish uchun ilovani qayta oching. Qo‘shimcha quvvat va internet sarflaydi.</string>
+</resources>

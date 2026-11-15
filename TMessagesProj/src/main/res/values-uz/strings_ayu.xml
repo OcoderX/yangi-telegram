@@ -45,6 +45,10 @@
     <string name="AyuDetailsFileId">Fayl ID</string>
     <string name="AyuDetailsTtl">TTL</string>
     <string name="AyuDetailsDeleted">O\'chirilgan</string>
+    <string name="AyuDetailsDeletedDate">O\'chirilgan sana</string>
+    <string name="AyuDetailsReadDate">O\'qilgan sana</string>
+    <string name="AyuDetailsUnread">O\'qilmagan</string>
+    <string name="AyuDetailsRead">O\'qilgan</string>
     <string name="AyuDetailsEntities">Obyektlar</string>
     <string name="AyuDetailsRevisions">Saqlangan versiyalar</string>
     <string name="AyuDetailsSectionGeneral">Umumiy</string>
@@ -338,7 +342,7 @@
     <string name="AyuBotFatherHint">Botning nomi, username, tavsifi va rasmi bu yerda emas, @BotFather orqali o\'zgartiriladi.</string>
     <string name="AyuBotFatherOpen">@BotFather ni ochish</string>
 
-    <!-- Ox-gram: xabar kontekst menyusi -->
+    <!-- OcoderX-gram: xabar kontekst menyusi -->
     <string name="AyuCopyPiece">Matn bo\'lagini nusxalash</string>
     <string name="AyuCopyPieceHint">Kerakli qismni belgilang va \"Nusxalash\"ni bosing.</string>
 
@@ -389,4 +393,7 @@
     <string name="AyuContextMenuOnTap">Bir marta bosishda menyu</string>
     <string name="AyuContextMenuOnTapInfo">Xabar pufagiga bir marta bosilganda kontekst menyusi ochiladi.</string>
     <string name="AyuMarkedMessagesEnable">Xabarlarni belgilash</string>
+
+    <string name="AyuSendSeparately">Har birini alohida yuborish</string>
+    <string name="AyuSendGrouped">Guruh qilib yuborish</string>
 </resources>

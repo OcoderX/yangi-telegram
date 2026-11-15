@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxChannelStatsFailed">Statistika yuklanmadi</string>
+    <string name="OxChannelStatsGraphEmpty">Grafik uchun hali ma’lumot yo‘q.</string>
+    <string name="OxChannelStatsGraphUnavailable">Bu grafik hozircha mavjud emas.</string>
+    <string name="OxChannelStatsAccess">Bu statistikani ko‘rish uchun ruxsat kerak.</string>
+</resources>

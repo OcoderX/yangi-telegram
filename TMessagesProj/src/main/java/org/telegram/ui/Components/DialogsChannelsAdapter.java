@@ -19,6 +19,8 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
+import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 import org.telegram.messenger.R;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
@@ -35,6 +37,25 @@ import java.util.HashMap;
 import java.util.HashSet;
 
 public class DialogsChannelsAdapter extends UniversalAdapter {
+
+    private final NotificationCenter.NotificationCenterDelegate hiddenChatsObserver = (id, account, args) -> {
+        updateMyChannels();
+        update(false);
+    };
+
+    @Override
+    public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
+        super.onAttachedToRecyclerView(recyclerView);
+        NotificationCenter.getGlobalInstance().addObserver(hiddenChatsObserver, NotificationCenter.ayuConfigChanged);
+        updateMyChannels();
+        update(false);
+    }
+
+    @Override
+    public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
+        NotificationCenter.getGlobalInstance().removeObserver(hiddenChatsObserver, NotificationCenter.ayuConfigChanged);
+        super.onDetachedFromRecyclerView(recyclerView);
+    }
 
     private final Context context;
     private final int currentAccount;
@@ -64,6 +85,7 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
         ArrayList<TLRPC.Chat> channels = new ArrayList<>();
         ArrayList<TLRPC.Dialog> dialogs = MessagesController.getInstance(currentAccount).getAllDialogs();
         for (TLRPC.Dialog d : dialogs) {
+            if (HiddenChatsController.getInstance(currentAccount).isHidden(d.id)) continue;
             TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-d.id);
             if (chat == null || !ChatObject.isChannelAndNotMegaGroup(chat) || !ChatObject.isPublic(chat) || ChatObject.isNotInChat(chat)) continue;
             channels.add(chat);
@@ -75,6 +97,12 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
     }
 
     public void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        HiddenChatsController hidden = HiddenChatsController.getInstance(currentAccount);
+        myChannels.removeIf(chat -> hidden.isHidden(-chat.id));
+        searchMyChannels.removeIf(chat -> hidden.isHidden(-chat.id));
+        searchRecommendedChannels.removeIf(chat -> hidden.isHidden(-chat.id));
+        searchChannels.removeIf(chat -> hidden.isHidden(-chat.id));
+        messages.removeIf(message -> hidden.isHidden(message.getDialogId()));
         if (TextUtils.isEmpty(query)) {
             if (myChannels != null && !myChannels.isEmpty()) {
                 if (myChannels.size() > 5) {
@@ -95,6 +123,7 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                 for (TLObject obj : recommendations.chats) {
                     if (obj instanceof TLRPC.Chat) {
                         final TLRPC.Chat chat = (TLRPC.Chat) obj;
+                        if (hidden.isHidden(-chat.id)) continue;
                         TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
                         if (ChatObject.isNotInChat(chat) && (localChat == null || ChatObject.isNotInChat(localChat)))
                             chats.add(chat);
@@ -143,7 +172,7 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                     items.add(UItem.asProfileCell(foundChannels.get(i)));
                 }
             }
-            if (!messages.isEmpty()) {
+            if (!messages.isEmpty() || hasMore) {
                 items.add(UItem.asGraySection(getString(R.string.SearchMessages)));
                 for (MessageObject message : messages) {
                     items.add(UItem.asSearchMessage(message));
@@ -176,13 +205,17 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
     }
 
     public TLRPC.Chat getChat(int position) {
-        UItem item = getItem(position);
-        return item != null && item.object instanceof TLRPC.Chat ? (TLRPC.Chat) item.object : null;
+        Object object = getObject(position);
+        return object instanceof TLRPC.Chat ? (TLRPC.Chat) object : null;
     }
 
     public Object getObject(int position) {
         UItem item = getItem(position);
-        return item != null ? item.object : null;
+        Object object = item != null ? item.object : null;
+        HiddenChatsController hidden = HiddenChatsController.getInstance(currentAccount);
+        if (object instanceof TLRPC.Chat && hidden.isHidden(-((TLRPC.Chat) object).id)
+                || object instanceof MessageObject && hidden.isHidden(((MessageObject) object).getDialogId())) return null;
+        return object;
     }
 
     public boolean loadingMessages;
@@ -191,9 +224,16 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
     private boolean hasMore;
     private int allCount;
     private int nextRate;
+    private TLRPC.Message rawLastMessage;
+    private int rawMessagesLoaded;
     private int searchChannelsId;
     public String query;
     private void searchMessages(boolean next) {
+        if (!next) {
+            rawLastMessage = null;
+            rawMessagesLoaded = 0;
+            nextRate = 0;
+        }
         loadingMessages = true;
         final int searchId = ++searchChannelsId;
         TLRPC.TL_messages_searchGlobal req = new TLRPC.TL_messages_searchGlobal();
@@ -205,14 +245,14 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
         req.q = this.query;
         req.limit = 25;
         req.filter = new TLRPC.TL_inputMessagesFilterEmpty();
-        if (next && !messages.isEmpty()) {
-            MessageObject lastMessage = messages.get(messages.size() - 1);
+        if (next && rawLastMessage != null) {
+            TLRPC.Message lastMessage = rawLastMessage;
             req.offset_rate = nextRate;
-            req.offset_id = lastMessage.getId();
-            if (lastMessage.messageOwner.peer_id == null) {
+            req.offset_id = lastMessage.id;
+            if (lastMessage.peer_id == null) {
                 req.offset_peer = new TLRPC.TL_inputPeerEmpty();
             } else {
-                req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(lastMessage.messageOwner.peer_id);
+                req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(lastMessage.peer_id);
             }
         } else {
             req.offset_rate = 0;
@@ -233,17 +273,22 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                     MessagesController.getInstance(currentAccount).putUsers(response.users, false);
                     MessagesController.getInstance(currentAccount).putChats(response.chats, false);
 
+                    rawMessagesLoaded += response.messages.size();
+                    if (!response.messages.isEmpty()) rawLastMessage = response.messages.get(response.messages.size() - 1);
+
                     for (TLRPC.Message message : response.messages) {
+                        if (HiddenChatsController.getInstance(currentAccount).isHidden(MessageObject.getDialogId(message))) continue;
                         MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                         messageObject.setQuery(query);
                         messages.add(messageObject);
                     }
 
-                    hasMore = response instanceof TLRPC.TL_messages_messagesSlice;
+                    hasMore = !response.messages.isEmpty() && response instanceof TLRPC.TL_messages_messagesSlice && rawMessagesLoaded < response.count;
                     allCount = Math.max(messages.size(), response.count);
                     nextRate = response.next_rate;
                 }
                 update(true);
+                if (hasMore && messages.isEmpty()) searchMore();
             }));
         }, next ? 800 : 0);
 
@@ -333,6 +378,11 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
         updateMyChannels();
         if (TextUtils.equals(query, this.query)) return;
         this.query = query;
+        searchChannelsId++;
+        rawLastMessage = null;
+        rawMessagesLoaded = 0;
+        hasMore = false;
+        nextRate = 0;
         AndroidUtilities.cancelRunOnUIThread(searchMessagesRunnable);
         if (TextUtils.isEmpty(this.query)) {
             messages.clear();

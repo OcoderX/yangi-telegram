@@ -207,6 +207,7 @@ public class ContactChangesActivity extends BaseFragment implements ContactChang
         long currentDay = Long.MIN_VALUE;
         for (int i = 0; i < changes.size(); i++) {
             ContactChange change = changes.get(i);
+            if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(change.userId)) continue;
             long day = dayStart(change.timestamp);
             if (day != currentDay) {
                 currentDay = day;
@@ -217,6 +218,12 @@ public class ContactChangesActivity extends BaseFragment implements ContactChang
         if (adapter != null) {
             adapter.notifyDataSetChanged();
         }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        rebuildItems();
     }
 
     private static long dayStart(long timestamp) {

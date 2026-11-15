@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxChannelStatsFailed">Statistics could not be loaded</string>
+    <string name="OxChannelStatsGraphEmpty">No chart data yet.</string>
+    <string name="OxChannelStatsGraphUnavailable">This graph is not available yet.</string>
+    <string name="OxChannelStatsAccess">You need access to view these statistics.</string>
+</resources>

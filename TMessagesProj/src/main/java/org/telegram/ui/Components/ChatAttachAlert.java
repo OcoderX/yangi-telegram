@@ -3929,6 +3929,26 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 }
             }
             final boolean self = UserObject.isUserSelf(user);
+            if (editingMessageObject == null && (currentAttachLayout == photoLayout || currentAttachLayout == photoPreviewLayout) && currentAttachLayout.getSelectedItemsCount() > 1) {
+                options.add(R.drawable.msg_photo_switch2, LocaleController.getString(R.string.AyuSendSeparately), () -> {
+                    final long effectId = messageSendPreview != null ? messageSendPreview.getSelectedEffect() : 0;
+                    writeButton.setEffect(ChatAttachAlert.this.effectId = effectId);
+                    boolean shownDialog = sendPressed(true, 0, 0, effectId, isCaptionAbove(), false);
+                    if (messageSendPreview != null) {
+                        messageSendPreview.dismiss(!shownDialog);
+                        messageSendPreview = null;
+                    }
+                });
+                options.add(R.drawable.msg_photos, LocaleController.getString(R.string.AyuSendGrouped), () -> {
+                    final long effectId = messageSendPreview != null ? messageSendPreview.getSelectedEffect() : 0;
+                    writeButton.setEffect(ChatAttachAlert.this.effectId = effectId);
+                    boolean shownDialog = sendPressed(true, 0, 0, effectId, isCaptionAbove(), true);
+                    if (messageSendPreview != null) {
+                        messageSendPreview.dismiss(!shownDialog);
+                        messageSendPreview = null;
+                    }
+                });
+            }
             if (editingMessageObject == null && (chatActivity == null || !ChatObject.isMonoForum(chatActivity.getCurrentChat())) && ((chatActivity != null && chatActivity.canScheduleMessage()) || currentAttachLayout.canScheduleMessages())) {
                 final long finalDialogId = dialogId;
                 options.add(R.drawable.msg_calendar2, getString(self ? R.string.SetReminder : R.string.ScheduleMessage), () -> {
@@ -4395,6 +4415,10 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
     }
 
     private boolean sendPressed(boolean notify, int scheduleDate, int scheduleRepeatPeriod, long effectId, boolean invertMedia) {
+        return sendPressed(notify, scheduleDate, scheduleRepeatPeriod, effectId, invertMedia, true);
+    }
+
+    private boolean sendPressed(boolean notify, int scheduleDate, int scheduleRepeatPeriod, long effectId, boolean invertMedia, boolean groupMedia) {
         if (buttonPressed) {
             return false;
         }
@@ -4413,12 +4437,12 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
         if (animatorEphemeralMessageVisibility.getValue()) {
             setButtonPressed(true);
-            delegate.didPressedButton(7, true, notify, scheduleDate, scheduleRepeatPeriod, effectId, invertMedia, false, 0);
+            delegate.didPressedButton(7, groupMedia, notify, scheduleDate, scheduleRepeatPeriod, effectId, invertMedia, false, 0);
             return true;
         } else {
             return AlertsCreator.ensurePaidMessageConfirmation(currentAccount, getDialogId(), (currentAttachLayout == null ? 1 : currentAttachLayout.getSelectedItemsCount()) + getAdditionalMessagesCount(), payStars -> {
                 setButtonPressed(true);
-                delegate.didPressedButton(7, true, notify, scheduleDate, scheduleRepeatPeriod, effectId, invertMedia, false, payStars);
+                delegate.didPressedButton(7, groupMedia, notify, scheduleDate, scheduleRepeatPeriod, effectId, invertMedia, false, payStars);
             });
         }
     }

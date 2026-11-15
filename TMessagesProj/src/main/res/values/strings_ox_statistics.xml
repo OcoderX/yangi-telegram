@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxStatsRetry">Try again</string>
+    <string name="OxStatsGraphLoading">Loading graph…</string>
+    <string name="OxStatsGraphLimited">Telegram needs more activity before it can show this graph.</string>
+    <string name="OxStatsGraphRetry">The graph could not be loaded. Check your connection and try again.</string>
+    <string name="OxStatsGraphInvalid">This graph could not be displayed. Try loading it again.</string>
+    <string name="OxStatsUnavailable">Telegram has not provided this graph for this post.</string>
+    <string name="OxStatsUnsupported">Telegram does not provide these statistics for this account.</string>
+    <string name="OxStatsForwardsRetry">Public shares could not be loaded completely.</string>
+    <string name="OxStatsForwardsLoading">Loading public shares…</string>
+    <string name="OxStatsForwardsEmpty">No public shares reported by Telegram. Private recipients are not shown.</string>
+    <string name="OxStatsForwardsHint">Public destinations reported by Telegram. Tap to open the shared post.</string>
+    <string name="OxStatsRatesHint">Actions per 100 views. Views and actions are not unique people.</string>
+    <string name="OxStatsHowCalculated">How these are calculated</string>
+    <string name="OxStatsStorySource">Counters from the latest available story snapshot.</string>
+    <string name="OxStatsUnknown">Not available yet</string>
+    <string name="OxStatsForwardsUnavailable">Public share details are unavailable.</string>
+    <string name="OxStatsPostTitle">Post statistics</string>
+    <string name="OxStatsStoryTitle">Story statistics</string>
+    <string name="OxStatsViewsTitle">Views and shares over time</string>
+    <string name="OxStatsReactionsTitle">Reactions over time</string>
+    <string name="OxStatsViews">Views</string>
+    <string name="OxStatsReactions">Reactions</string>
+    <string name="OxStatsPublicShares">Public shares</string>
+    <string name="OxStatsOverview">Overview</string>
+</resources>

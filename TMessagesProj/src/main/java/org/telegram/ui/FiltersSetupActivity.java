@@ -52,6 +52,7 @@ import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.HeaderCell;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
+import org.telegram.ui.Cells.TextSettingsCell;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.BulletinFactory;
@@ -548,6 +549,8 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
     private int filtersStartPosition;
     private int filtersSectionStart = -1, filtersSectionEnd = -1;
     private int folderTagsPosition;
+    private int categorySettingsPosition;
+    private org.telegram.ui.ayu.OxChatCategoryConfig categoryConfig;
 
     private void updateRows(boolean animated) {
         showTagsRow = -1;
@@ -567,6 +570,14 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
         ArrayList<TLRPC.TL_dialogFilterSuggested> suggestedFilters = getMessagesController().suggestedFilters;
         ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
         items.add(ItemInner.asHint());
+        categoryConfig = org.telegram.ui.ayu.OxChatCategoryConfig.forAccount(currentAccount);
+        items.add(ItemInner.asHeader(LocaleController.getString(R.string.OxChatVisibleCategories)));
+        for (int category = org.telegram.ui.ayu.OxChatCategories.PERSONAL; category <= org.telegram.ui.ayu.OxChatCategories.BOTS; category++) {
+            items.add(ItemInner.asCategory(category, org.telegram.ui.ayu.OxChatCategorySettingsActivity.visibilitySummary(categoryConfig, category)));
+        }
+        categorySettingsPosition = items.size();
+        items.add(ItemInner.asButton(LocaleController.getString(R.string.OxChatTabSettings)));
+        items.add(ItemInner.asShadow(null));
         if (!suggestedFilters.isEmpty() && dialogFilters.size() < 10) {
             int start = items.size();
             items.add(ItemInner.asHeader(LocaleController.getString(R.string.FilterRecommended)));
@@ -687,7 +698,11 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             if (item == null) {
                 return;
             }
-            if (item.viewType == VIEW_TYPE_CHECK) {
+            if (position == categorySettingsPosition) {
+                presentFragment(new org.telegram.ui.ayu.OxChatCategorySettingsActivity(currentAccount));
+            } else if (item.viewType == VIEW_TYPE_CATEGORY) {
+                org.telegram.ui.ayu.OxChatCategorySettingsActivity.showVisibility(this, currentAccount, item.category, () -> updateRows(true));
+            } else if (item.viewType == VIEW_TYPE_CHECK) {
                 if (!getUserConfig().isPremium()) {
                     showDialog(new PremiumFeatureBottomSheet(this, PremiumPreviewFragment.PREMIUM_FEATURE_FOLDER_TAGS, true));
                     return;
@@ -757,9 +772,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
     @Override
     public void onResume() {
         super.onResume();
-        if (adapter != null) {
-            adapter.notifyDataSetChanged();
-        }
+        updateRows(false);
     }
 
     private boolean loadingFiltersForColors;
@@ -784,6 +797,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
     private static final int VIEW_TYPE_BUTTON = 4;
     private static final int VIEW_TYPE_FILTER_SUGGESTION = 5;
     private static final int VIEW_TYPE_CHECK = 6;
+    private static final int VIEW_TYPE_CATEGORY = 7;
 
     private int shiftDp = -4;
 
@@ -795,6 +809,8 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
         CharSequence text;
         MessagesController.DialogFilter filter;
         int filterColor;
+        int category;
+        CharSequence value;
         TLRPC.TL_dialogFilterSuggested suggested;
 
         public static ItemInner asHeader(CharSequence text) {
@@ -831,6 +847,12 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             i.text = text;
             return i;
         }
+        public static ItemInner asCategory(int category, CharSequence value) {
+            ItemInner i = new ItemInner(VIEW_TYPE_CATEGORY);
+            i.category = category;
+            i.value = value;
+            return i;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -843,6 +865,9 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             ItemInner other = (ItemInner) obj;
             if (other.viewType != viewType) {
                 return false;
+            }
+            if (viewType == VIEW_TYPE_CATEGORY) {
+                return category == other.category && TextUtils.equals(value, other.value);
             }
             if (viewType == VIEW_TYPE_HEADER || viewType == VIEW_TYPE_BUTTON || viewType == VIEW_TYPE_SHADOW || viewType == VIEW_TYPE_CHECK) {
                 if (!TextUtils.equals(text, other.text)) {
@@ -976,6 +1001,10 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                 case VIEW_TYPE_CHECK:
                     view = new TextCheckCell(mContext);
                     break;
+                case VIEW_TYPE_CATEGORY:
+                    view = new TextSettingsCell(mContext);
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
                 case VIEW_TYPE_FILTER_SUGGESTION:
                 default:
                     SuggestedFilterCell suggestedFilterCell = new SuggestedFilterCell(mContext);
@@ -1075,6 +1104,13 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                 case VIEW_TYPE_BUTTON: {
                     TextCell textCell = (TextCell) holder.itemView;
 
+                    if (position == categorySettingsPosition) {
+                        Drawable icon = mContext.getResources().getDrawable(R.drawable.msg_settings).mutate();
+                        icon.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText2), PorterDuff.Mode.MULTIPLY));
+                        textCell.setTextAndIcon(item.text.toString(), icon, false);
+                        break;
+                    }
+
                     Drawable drawable1 = mContext.getResources().getDrawable(R.drawable.poll_add_circle);
                     Drawable drawable2 = mContext.getResources().getDrawable(R.drawable.poll_add_plus);
                     drawable1.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_switchTrackChecked), PorterDuff.Mode.MULTIPLY));
@@ -1088,6 +1124,12 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                     TextCheckCell cell = (TextCheckCell) holder.itemView;
                     cell.setTextAndCheck(item.text, getMessagesController().folderTags, divider);
                     cell.setCheckBoxIcon(!getUserConfig().isPremium() ? R.drawable.permission_locked : 0);
+                    break;
+                }
+                case VIEW_TYPE_CATEGORY: {
+                    TextSettingsCell cell = (TextSettingsCell) holder.itemView;
+                    cell.setTextAndValue(LocaleController.getString(org.telegram.ui.ayu.OxChatCategorySettingsActivity.titleForCategory(item.category)), item.value, divider);
+                    cell.setIcon(org.telegram.ui.ayu.OxChatCategorySettingsActivity.iconForCategory(item.category));
                     break;
                 }
                 case VIEW_TYPE_FILTER_SUGGESTION: {
@@ -1230,7 +1272,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
     public ArrayList<ThemeDescription> getThemeDescriptions() {
         ArrayList<ThemeDescription> themeDescriptions = new ArrayList<>();
 
-        themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{HeaderCell.class, TextCell.class, FilterCell.class, SuggestedFilterCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
+        themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{HeaderCell.class, TextCell.class, FilterCell.class, SuggestedFilterCell.class, TextSettingsCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
         themeDescriptions.add(new ThemeDescription(fragmentView, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundGray));
 
 //        themeDescriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_actionBarDefault));
@@ -1247,6 +1289,9 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
 
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{FilterCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText));
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{FilterCell.class}, new String[]{"valueTextView"}, null, null, null, Theme.key_windowBackgroundWhiteGrayText2));
+        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextSettingsCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText));
+        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextSettingsCell.class}, new String[]{"valueTextView"}, null, null, null, Theme.key_windowBackgroundWhiteValueText));
+        themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_IMAGECOLOR, new Class[]{TextSettingsCell.class}, new String[]{"imageView"}, null, null, null, Theme.key_windowBackgroundWhiteGrayIcon));
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{FilterCell.class}, new String[]{"moveImageView"}, null, null, null, Theme.key_stickers_menu));
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{FilterCell.class}, new String[]{"optionsImageView"}, null, null, null, Theme.key_stickers_menu));
         themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_USEBACKGROUNDDRAWABLE | ThemeDescription.FLAG_DRAWABLESELECTEDSTATE, new Class[]{FilterCell.class}, new String[]{"optionsImageView"}, null, null, null, Theme.key_stickers_menuSelector));

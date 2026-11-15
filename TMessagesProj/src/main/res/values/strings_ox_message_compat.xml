@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="AccDescrIVButtons">Buttons</string>
+    <string name="UnsupportedBlockTitle">Unsupported Block</string>
+    <string name="UnsupportedBlockMessage">Update OcoderX-gram to view this part of the message</string>
+    <string name="UnsupportedUpdate">Update</string>
+</resources>

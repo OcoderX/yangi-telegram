@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxSpecialForwardApply">Применить</string>
+    <string name="OxSpecialForwardEdit">Изменить перед пересылкой</string>
+    <string name="OxSpecialForwardEditApplied">Изменения применены · просмотр</string>
+    <string name="OxSpecialForwardCopyInfo">Изменения будут отправлены новыми копиями от выбранного отправителя, без заголовка исходной пересылки. Применение изменений показывает подписи; «Скрыть подпись» может снова их скрыть. Форматирование следует за изменяемым текстом.</string>
+    <string name="OxSpecialForwardUnsupported">В подборке есть содержимое, которое нельзя безопасно изменить (например, опросы, кнопки, сложные публикации или временные медиа), либо больше 100 сообщений. Их можно переслать без изменений.</string>
+    <string name="OxSpecialForwardPrevious">Назад</string>
+    <string name="OxSpecialForwardNext">Далее</string>
+    <string name="OxSpecialForwardItem">Сообщение %1$d из %2$d</string>
+    <string name="OxSpecialForwardCaption">Подпись</string>
+    <string name="OxSpecialForwardText">Текст</string>
+    <string name="OxSpecialForwardLength">Введите текст не длиннее %1$d символов. Текстовое сообщение не может быть пустым.</string>
+</resources>

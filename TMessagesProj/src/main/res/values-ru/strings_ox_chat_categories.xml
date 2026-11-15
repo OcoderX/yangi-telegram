@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxChatsAll">Все</string>
+    <string name="OxChatsPersonal">Личные</string>
+    <string name="OxChatsGroups">Группы</string>
+    <string name="OxChatsChannels">Каналы</string>
+    <string name="OxChatsBots">Боты</string>
+    <string name="OxChatTabSettings">Настройки вкладок</string>
+    <string name="OxChatCategoriesEnabled">Показывать категории чатов</string>
+    <string name="OxChatCategoriesInfo">Выберите, где показывать категории. Нажмите на категорию, чтобы отдельно настроить её видимость на главной странице и при пересылке. У каждой страницы свой общий переключатель. Настройки сохраняются для этого аккаунта на этом устройстве.</string>
+    <string name="OxChatVisibleCategories">Видимые категории</string>
+    <string name="OxChatAllAlwaysAvailable">Все чаты всегда доступны. Выбор категорий сохраняется и после их отключения. Вернуть скрытые категории можно здесь: Настройки → Папки с чатами → Настройки вкладок.</string>
+    <string name="OxChatHideCategory">Скрыть</string>
+    <string name="OxChatHideCategories">Скрыть категории</string>
+    <string name="OxChatEditFolders">Изменить папки</string>
+    <string name="OxChatCategoriesMain">Категории на главной странице</string>
+    <string name="OxChatCategoriesForward">Категории при пересылке</string>
+    <string name="OxChatShowInMain">Показывать на главной странице</string>
+    <string name="OxChatShowInForward">Показывать при пересылке</string>
+    <string name="OxChatVisibleBoth">Главная и пересылка</string>
+    <string name="OxChatVisibleMain">Главная страница</string>
+    <string name="OxChatVisibleForward">Пересылка</string>
+    <string name="OxChatVisibleNowhere">Скрыто</string>
+</resources>

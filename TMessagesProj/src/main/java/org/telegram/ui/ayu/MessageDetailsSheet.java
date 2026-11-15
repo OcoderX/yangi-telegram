@@ -20,9 +20,14 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
+import org.telegram.messenger.ayu.AyuHistoryStorage;
 import org.telegram.messenger.ayu.AyuMessagesController;
+import org.telegram.messenger.ayu.entities.DeletedMessage;
+import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.Vector;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.HeaderCell;
@@ -65,6 +70,7 @@ public class MessageDetailsSheet extends BottomSheetWithRecyclerListView {
     private final MessageObject messageObject;
     private final TLRPC.Message message;
     private final ArrayList<Row> rows;
+    private Adapter adapter;
 
     {
         rows = new ArrayList<>();
@@ -145,6 +151,15 @@ public class MessageDetailsSheet extends BottomSheetWithRecyclerListView {
         if (message.edit_date != 0) {
             addRow(R.string.AyuDetailsEditDate, formatFullDate(message.edit_date));
         }
+        if (messageObject != null && (messageObject.isOutOwner() || message.out)) {
+            if (messageObject.isUnread()) {
+                addRow(R.string.AyuDetailsReadDate, getString(R.string.AyuDetailsUnread));
+            } else {
+                final int readRowIndex = rows.size();
+                addRow(R.string.AyuDetailsReadDate, getString(R.string.Loading));
+                loadReadDate(readRowIndex, dialogId, message.id);
+            }
+        }
         if (message.grouped_id != 0) {
             addRow(R.string.AyuDetailsGroupedId, String.valueOf(message.grouped_id));
         }
@@ -222,7 +237,21 @@ public class MessageDetailsSheet extends BottomSheetWithRecyclerListView {
             addRow(R.string.AyuDetailsTtl, LocaleController.formatTTLString(media.ttl_seconds));
         }
         addRow(R.string.AyuDetailsEntities, String.valueOf(message.entities == null ? 0 : message.entities.size()));
+        if (message.ayuDeletedDate == 0) {
+            try {
+                DeletedMessage dm = AyuHistoryStorage.getInstance().getDeletedMessage(UserConfig.getInstance(currentAccount).getClientUserId(), dialogId, message.id);
+                if (dm != null && dm.entityCreateDate != 0) {
+                    message.ayuDeleted = true;
+                    message.ayuDeletedDate = dm.entityCreateDate;
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
         addRow(R.string.AyuDetailsDeleted, String.valueOf(message.ayuDeleted));
+        if (message.ayuDeletedDate != 0) {
+            addRow(R.string.AyuDetailsDeletedDate, formatFullDate(message.ayuDeletedDate));
+        }
         //ayu: the stored revisions are the only reliable source (ayuEditedCount is in-memory only)
         int revisions = 0;
         try {
@@ -269,6 +298,82 @@ public class MessageDetailsSheet extends BottomSheetWithRecyclerListView {
                     + " (" + date + ")";
         } catch (Exception e) {
             return String.valueOf(date);
+        }
+    }
+
+    private void loadReadDate(int rowIndex, long dialogId, int messageId) {
+        if (dialogId > 0) {
+            TLRPC.TL_messages_getOutboxReadDate req = new TLRPC.TL_messages_getOutboxReadDate();
+            req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
+            req.msg_id = messageId;
+            ConnectionsManager.getInstance(currentAccount).sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
+                if (isDismissed()) {
+                    return;
+                }
+                String text;
+                if (res instanceof TLRPC.TL_outboxReadDate) {
+                    TLRPC.TL_outboxReadDate r = (TLRPC.TL_outboxReadDate) res;
+                    if (r.date != 0) {
+                        text = formatFullDate(r.date);
+                    } else {
+                        text = getString(R.string.AyuDetailsRead);
+                    }
+                } else if (err != null) {
+                    if ("USER_PRIVACY_RESTRICTED".equals(err.text)) {
+                        text = LocaleController.getString(R.string.PmReadUnknown);
+                    } else if ("YOUR_PRIVACY_RESTRICTED".equals(err.text)) {
+                        text = LocaleController.getString(R.string.PmRead);
+                    } else {
+                        text = getString(R.string.AyuDetailsRead);
+                    }
+                } else {
+                    text = getString(R.string.AyuDetailsRead);
+                }
+                updateRow(rowIndex, text);
+            }));
+        } else if (dialogId < 0) {
+            TLRPC.TL_messages_getMessageReadParticipants req = new TLRPC.TL_messages_getMessageReadParticipants();
+            req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
+            req.msg_id = messageId;
+            ConnectionsManager.getInstance(currentAccount).sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
+                if (isDismissed()) {
+                    return;
+                }
+                String text = null;
+                if (res instanceof Vector) {
+                    Vector vector = (Vector) res;
+                    int latestDate = 0;
+                    for (int i = 0; i < vector.objects.size(); i++) {
+                        Object obj = vector.objects.get(i);
+                        if (obj instanceof TLRPC.TL_readParticipantDate) {
+                            int d = ((TLRPC.TL_readParticipantDate) obj).date;
+                            if (d > latestDate) {
+                                latestDate = d;
+                            }
+                        }
+                    }
+                    if (latestDate != 0) {
+                        text = formatFullDate(latestDate);
+                    }
+                }
+                if (text == null) {
+                    text = getString(R.string.AyuDetailsRead);
+                }
+                updateRow(rowIndex, text);
+            }));
+        }
+    }
+
+    private void updateRow(int rowIndex, String text) {
+        if (isDismissed()) {
+            return;
+        }
+        if (rowIndex >= 0 && rowIndex < rows.size()) {
+            Row old = rows.get(rowIndex);
+            rows.set(rowIndex, new Row(old.viewType, text, old.value));
+            if (adapter != null) {
+                adapter.notifyItemChanged(rowIndex);
+            }
         }
     }
 
@@ -405,7 +510,7 @@ public class MessageDetailsSheet extends BottomSheetWithRecyclerListView {
 
     @Override
     protected RecyclerListView.SelectionAdapter createAdapter(RecyclerListView listView) {
-        return new Adapter();
+        return adapter = new Adapter();
     }
 
     private class Adapter extends RecyclerListView.SelectionAdapter {

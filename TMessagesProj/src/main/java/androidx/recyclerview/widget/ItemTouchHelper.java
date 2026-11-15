@@ -510,6 +510,16 @@ public class ItemTouchHelper extends RecyclerView.ItemDecoration
         mRecoverAnimations.clear();
     }
 
+    public void clearSwipeRecovery(@NonNull ViewHolder viewHolder) {
+        removeChildDrawingOrderCallbackIfNecessary(viewHolder.itemView);
+        endRecoverAnimation(viewHolder, true);
+        mPendingCleanup.remove(viewHolder.itemView);
+        if (mRecyclerView != null) {
+            mCallback.clearView(mRecyclerView, viewHolder);
+            mRecyclerView.invalidate();
+        }
+    }
+
     private void startGestureDetection() {
         mItemTouchHelperGestureListener = new ItemTouchHelperGestureListener();
         mGestureDetector = new GestureDetectorCompat(mRecyclerView.getContext(),

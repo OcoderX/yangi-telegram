@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxSimpleConversionTitle">Converted message</string>
+    <string name="OxSimpleConversionDescription">Review the ordinary message under your own name. Applying it places text in your draft; you send it yourself.</string>
+    <string name="OxSimpleConversionPreviewLabel">Message preview</string>
+    <string name="OxSimpleConversionChanges">What changes</string>
+    <string name="OxSimpleConversionStyle">Headings become bold text. Colors and special formatting are removed.</string>
+    <string name="OxSimpleConversionTable">Tables become text with separate rows and columns.</string>
+    <string name="OxSimpleConversionButtons">Buttons with links become links in the text.</string>
+    <string name="OxSimpleConversionInteractive">Interactive actions are removed and will no longer run.</string>
+    <string name="OxSimpleConversionMedia">Photos, videos, audio and files are not attached with this text.</string>
+    <string name="OxSimpleConversionUnknown">Some unsupported parts could not be converted. Check the preview.</string>
+    <string name="OxSimpleConversionLimit">The message is too long or complex. Shorten it and try again.</string>
+    <string name="OxSimpleConversionBlocked">Conversion could not be completed. Continue editing the original message.</string>
+    <string name="OxSimpleConversionEmpty">There is no text to convert.</string>
+    <string name="OxSimpleConversionApply">Convert to text</string>
+    <string name="OxSimpleConversionCancel">Cancel</string>
+    <string name="OxRichConversionEditUnavailableTitle">Rich message editing</string>
+    <string name="OxRichConversionEditUnavailable">This rich message cannot be edited as ordinary text with the current account. Copy its text into a new draft or cancel; the original message will remain unchanged.</string>
+    <string name="OxSimpleLabelUnknown">[Unsupported content]</string>
+    <string name="OxSimpleLabelMediaNotAttached">%1$s not attached</string>
+    <string name="OxSimpleLabelFile">File</string>
+    <string name="OxSimpleLabelAudio">Audio</string>
+    <string name="OxSimpleLabelVideo">Video</string>
+    <string name="OxSimpleLabelPhoto">Photo</string>
+    <string name="OxSimpleLabelWeb">Web page</string>
+    <string name="OxSimpleLabelAnimation">Animation</string>
+    <string name="OxSimpleLabelMap">Map</string>
+    <string name="OxSimpleLabelEmoji">[Emoji]</string>
+    <string name="OxSimpleLabelRemovedAction">[Interactive action removed]</string>
+    <string name="OxSimpleLabelChannel">Channel</string>
+    <string name="OxRichConversionPendingUploads">Wait for attachments to finish uploading before converting.</string>
+</resources>

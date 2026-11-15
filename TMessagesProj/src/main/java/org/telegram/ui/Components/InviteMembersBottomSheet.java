@@ -1,5 +1,7 @@
 package org.telegram.ui.Components;
 
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -121,6 +123,7 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
         needSnapToTop = false;
         this.parentFragment = parentFragment;
         this.chatId = chatId;
+        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
         fixNavigationBar();
 
         searchView.searchEditText.setHint(LocaleController.getString(R.string.SearchForChats));
@@ -190,7 +193,7 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
                 }
             }
 
-            if (object != null) {
+            if (object != null && !isHiddenPeer(object)) {
                 long id;
                 if (object instanceof TLRPC.User) {
                     id = ((TLRPC.User) object).id;
@@ -257,6 +260,7 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
                 ArrayList<Long> dialogs = new ArrayList<>();
                 for (int a = 0; a < selectedContacts.size(); a++) {
                     long uid = selectedContacts.keyAt(a);
+                    if (HiddenChatsController.getInstance(currentAccount).isHidden(uid)) continue;
                     dialogs.add(uid);
                 }
                 dialogsDelegate.didSelectDialogs(dialogs);
@@ -267,6 +271,7 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
                 StringBuilder stringBuilder = new StringBuilder();
                 for (int a = 0; a < selectedContacts.size(); a++) {
                     long uid = selectedContacts.keyAt(a);
+                    if (HiddenChatsController.getInstance(currentAccount).isHidden(uid)) continue;
                     TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(uid);
                     if (user == null) {
                         continue;
@@ -325,6 +330,7 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
     public void setSelectedContacts(ArrayList<Long> dialogs) {
         for (int a = 0, N = dialogs.size(); a < N; a++) {
             long dialogId = dialogs.get(a);
+            if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) continue;
             TLObject object;
             if (DialogObject.isChatDialog(dialogId)) {
                 object = MessagesController.getInstance(currentAccount).getChat(-dialogId);
@@ -424,7 +430,14 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
         }
     }
 
+    private boolean isHiddenPeer(Object object) {
+        long did = object instanceof TLRPC.User ? ((TLRPC.User) object).id : object instanceof TLRPC.Chat ? -((TLRPC.Chat) object).id : object instanceof TLRPC.Dialog ? ((TLRPC.Dialog) object).id : 0;
+        return HiddenChatsController.getInstance(currentAccount).isHidden(did);
+    }
+
     private void updateRows() {
+        contacts.removeIf(this::isHiddenPeer);
+        if (dialogsServerOnly != null) dialogsServerOnly.removeIf(this::isHiddenPeer);
         contactsStartRow = -1;
         contactsEndRow = -1;
         copyLinkRow = -1;
@@ -474,10 +487,16 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
         if (id == NotificationCenter.dialogsNeedReload) {
-            if (dialogsDelegate != null && dialogsServerOnly.isEmpty()) {
-                dialogsServerOnly = new ArrayList<>(MessagesController.getInstance(currentAccount).dialogsServerOnly);
-                listViewAdapter.notifyDataSetChanged();
+            for (int i = 0; i < selectedContacts.size(); i++) {
+                if (HiddenChatsController.getInstance(currentAccount).isHidden(selectedContacts.keyAt(i))) {
+                    dismiss();
+                    return;
+                }
             }
+            if (dialogsDelegate != null) dialogsServerOnly = new ArrayList<>(MessagesController.getInstance(currentAccount).dialogsServerOnly);
+            updateRows();
+            listViewAdapter.notifyDataSetChanged();
+            searchAdapter.notifyDataSetChanged();
         }
     }
 
@@ -619,6 +638,17 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
     }
 
     private class SearchAdapter extends RecyclerListView.SelectionAdapter {
+        @Override
+        public void notifyDataSetChanged() {
+            for (int i = searchResult.size() - 1; i >= 0; i--) {
+                if (isHiddenPeer(searchResult.get(i))) {
+                    searchResult.remove(i);
+                    if (i < searchResultNames.size()) searchResultNames.remove(i);
+                }
+            }
+            if (searchAdapterHelper != null) searchAdapterHelper.removeHiddenResults();
+            super.notifyDataSetChanged();
+        }
 
         private ArrayList<Object> searchResult = new ArrayList<>();
         private ArrayList<CharSequence> searchResultNames = new ArrayList<>();
@@ -704,7 +734,7 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
                     } else {
                         object = null;
                     }
-                    if (object != null) {
+                    if (object != null && !isHiddenPeer(object)) {
                         String objectUserName;
                         if (object instanceof TLRPC.User) {
                             objectUserName = ((TLRPC.User) object).username;

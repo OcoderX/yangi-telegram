@@ -46,7 +46,7 @@ public class StackLinearChartData extends ChartData {
             }
         }
 
-        int n = lines.get(0).y.length;
+        int n = x.length;
         int k = lines.size();
 
         ySum = new long[n];

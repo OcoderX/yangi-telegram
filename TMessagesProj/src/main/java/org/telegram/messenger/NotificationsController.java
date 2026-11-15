@@ -8,6 +8,8 @@
 
 package org.telegram.messenger;
 
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
+
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
@@ -500,6 +502,11 @@ public class NotificationsController extends BaseController implements Notificat
             }
             if (!popupArray.isEmpty() && !AndroidUtilities.needShowPasscode() && !SharedConfig.isWaitingForPasscodeEnter) {
                 AndroidUtilities.runOnUIThread(() -> {
+                    if (!canShowAccountNotifications()) {
+                        return;
+                    }
+                    popupArray.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
+                    if (popupArray.isEmpty()) return;
                     popupReplyMessages = popupArray;
                     Intent popupIntent = new Intent(ApplicationLoader.applicationContext, PopupNotificationActivity.class);
                     popupIntent.putExtra("force", true);
@@ -1025,7 +1032,7 @@ public class NotificationsController extends BaseController implements Notificat
         if (messageObjects != null) {
             for (int i = 0; i < messageObjects.size(); ++i) {
                 final MessageObject messageObject = messageObjects.get(i);
-                if (messageObject != null && messageObject.messageOwner != null&& !messageObject.isOutOwner() && messageObject.messageOwner.action instanceof TLRPC.TL_messageActionConferenceCall) {
+                if (messageObject != null && !HiddenChatsController.getInstance(currentAccount).isHidden(messageObject.getDialogId()) && messageObject.messageOwner != null&& !messageObject.isOutOwner() && messageObject.messageOwner.action instanceof TLRPC.TL_messageActionConferenceCall) {
                     final TLRPC.TL_messageActionConferenceCall action = (TLRPC.TL_messageActionConferenceCall) messageObject.messageOwner.action;
                     if (!action.active && !action.missed && (getConnectionsManager().getCurrentTime() - messageObject.messageOwner.date) < getMessagesController().callRingTimeout / 1000L) {
                         final HashSet<Long> ids = new HashSet<>();
@@ -1069,7 +1076,7 @@ public class NotificationsController extends BaseController implements Notificat
 
             for (int a = 0; a < messageObjects.size(); a++) {
                 MessageObject messageObject = messageObjects.get(a);
-                if (org.telegram.messenger.ayu.AyuFilter.isFiltered(messageObject)) { continue; }
+                if (HiddenChatsController.getInstance(currentAccount).isHidden(messageObject.getDialogId()) || org.telegram.messenger.ayu.AyuFilter.isFiltered(messageObject)) { continue; }
                 if (messageObject.messageOwner != null && (messageObject.isImportedForward() ||
                         messageObject.messageOwner.action instanceof TLRPC.TL_messageActionSetMessagesTTL ||
                         messageObject.messageOwner.silent && (messageObject.messageOwner.action instanceof TLRPC.TL_messageActionContactSignUp || messageObject.messageOwner.action instanceof TLRPC.TL_messageActionUserJoined)) ||
@@ -1266,6 +1273,10 @@ public class NotificationsController extends BaseController implements Notificat
             if (!popupArrayAdd.isEmpty() && !AndroidUtilities.needShowPasscode() && !SharedConfig.isWaitingForPasscodeEnter) {
                 int popupFinal = popup;
                 AndroidUtilities.runOnUIThread(() -> {
+                    if (!canShowAccountNotifications()) {
+                        return;
+                    }
+                    popupArrayAdd.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
                     popupMessages.addAll(0, popupArrayAdd);
                     if (ApplicationLoader.mainInterfacePaused || !ApplicationLoader.isScreenOn) {
                         if (popupFinal == 3 || popupFinal == 1 && ApplicationLoader.isScreenOn || popupFinal == 2 && !ApplicationLoader.isScreenOn) {
@@ -1320,7 +1331,7 @@ public class NotificationsController extends BaseController implements Notificat
                             newCount = override;
                         }
                     }
-                    canAddValue = canAddValue && !messageObject.isStoryPush;
+                    canAddValue = canAddValue && !messageObject.isStoryPush && !HiddenChatsController.getInstance(currentAccount).isHidden(dialog_id);
 
                     if (canAddValue) {
                         if (getMessagesController().isCommunity(dialog_id)) {
@@ -1388,7 +1399,7 @@ public class NotificationsController extends BaseController implements Notificat
             for (int b = 0; b < dialogsToUpdate.size(); b++) {
                 long dialogId = dialogsToUpdate.keyAt(b);
                 Integer currentCount = pushDialogs.get(dialogId);
-                int newCount = dialogsToUpdate.get(dialogId);
+                int newCount = HiddenChatsController.getInstance(currentAccount).isHidden(dialogId) ? 0 : dialogsToUpdate.get(dialogId);
                 boolean forum = false;
                 if (DialogObject.isChatDialog(dialogId)) {
                     TLRPC.Chat chat = getMessagesController().getChat(-dialogId);
@@ -1421,6 +1432,7 @@ public class NotificationsController extends BaseController implements Notificat
                     }
                 }
 
+                if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) newCount = 0;
                 if (newCount == 0) {
                     smartNotificationsDialogs.remove(dialogId);
                 }
@@ -1529,7 +1541,7 @@ public class NotificationsController extends BaseController implements Notificat
                     if (message == null) {
                         continue;
                     }
-                    if (org.telegram.messenger.ayu.AyuFilter.isFiltered(message, 0, currentAccount)) { continue; }
+                    if (HiddenChatsController.getInstance(currentAccount).isHidden(MessageObject.getDialogId(message)) || org.telegram.messenger.ayu.AyuFilter.isFiltered(message, 0, currentAccount)) { continue; }
                     if (message.fwd_from != null && message.fwd_from.imported ||
                             message.action instanceof TLRPC.TL_messageActionSetMessagesTTL ||
                             message.silent && (message.action instanceof TLRPC.TL_messageActionContactSignUp || message.action instanceof TLRPC.TL_messageActionUserJoined)) {
@@ -1585,6 +1597,7 @@ public class NotificationsController extends BaseController implements Notificat
             }
             for (int a = 0; a < dialogs.size(); a++) {
                 long dialog_id = dialogs.keyAt(a);
+                if (HiddenChatsController.getInstance(currentAccount).isHidden(dialog_id)) continue;
                 int index = settingsCache.indexOfKey(dialog_id);
                 boolean value;
                 if (index >= 0) {
@@ -1616,6 +1629,7 @@ public class NotificationsController extends BaseController implements Notificat
             if (push != null) {
                 for (int a = 0; a < push.size(); a++) {
                     MessageObject messageObject = push.get(a);
+                    if (HiddenChatsController.getInstance(currentAccount).isHidden(messageObject.getDialogId())) continue;
                     int mid = messageObject.getId();
                     if (pushMessagesDict.indexOfKey(mid) >= 0) {
                         continue;
@@ -1693,6 +1707,7 @@ public class NotificationsController extends BaseController implements Notificat
             if (storyPushes != null) {
                 for (StoryNotification notification : storyPushes) {
                     long dialogId = notification.dialogId;
+                    if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) continue;
                     StoryNotification oldNotification = storyPushMessagesDict.get(dialogId);
                     if (oldNotification != null) {
                         oldNotification.dateByIds.putAll(notification.dateByIds);
@@ -1742,6 +1757,7 @@ public class NotificationsController extends BaseController implements Notificat
                         final ArrayList<TLRPC.Dialog> dialogs = new ArrayList<>(MessagesController.getInstance(a).allDialogs);
                         for (int i = 0, N = dialogs.size(); i < N; i++) {
                             TLRPC.Dialog dialog = dialogs.get(i);
+                            if (dialog != null && HiddenChatsController.getInstance(a).isHidden(dialog.id)) continue;
                             if (dialog != null && DialogObject.isChatDialog(dialog.id)) {
                                 TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
                                 if (ChatObject.isNotInChat(chat) || ChatObject.isCommunity(chat)) {
@@ -1763,6 +1779,7 @@ public class NotificationsController extends BaseController implements Notificat
                     try {
                         for (int i = 0, N = MessagesController.getInstance(a).allDialogs.size(); i < N; i++) {
                             TLRPC.Dialog dialog = MessagesController.getInstance(a).allDialogs.get(i);
+                            if (HiddenChatsController.getInstance(a).isHidden(dialog.id)) continue;
                             if (DialogObject.isChatDialog(dialog.id)) {
                                 TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
                                 if (ChatObject.isNotInChat(chat) || ChatObject.isCommunity(chat)) {
@@ -1799,6 +1816,7 @@ public class NotificationsController extends BaseController implements Notificat
     }
 
     public String getShortStringForMessage(MessageObject messageObject, String[] userName, boolean[] preview) {
+        if (HiddenChatsController.getInstance(currentAccount).isHidden(messageObject.getDialogId())) return null;
         if (AndroidUtilities.needShowPasscode() || SharedConfig.isWaitingForPasscodeEnter) {
             return LocaleController.getString(R.string.NotificationHiddenMessage);
         }
@@ -3229,11 +3247,12 @@ public class NotificationsController extends BaseController implements Notificat
     private void scheduleNotificationRepeat() {
         try {
             Intent intent = new Intent(ApplicationLoader.applicationContext, NotificationRepeat.class);
+            intent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
             intent.putExtra("currentAccount", currentAccount);
             PendingIntent pintent = PendingIntent.getService(ApplicationLoader.applicationContext, 0, intent, PendingIntent.FLAG_MUTABLE);
             SharedPreferences preferences = getAccountInstance().getNotificationsSettings();
             int minutes = preferences.getInt("repeat_messages", 60);
-            if (minutes > 0 && personalCount > 0) {
+            if (canShowAccountNotifications() && minutes > 0 && personalCount > 0) {
                 alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + minutes * 60 * 1000, pintent);
             } else {
                 alarmManager.cancel(pintent);
@@ -3266,21 +3285,134 @@ public class NotificationsController extends BaseController implements Notificat
         notificationsQueue.postRunnable(() -> showOrUpdateNotification(false));
     }
 
-    public void hideNotifications() {
+    private boolean canShowAccountNotifications() {
+        return SharedConfig.showNotificationsForAllAccounts || currentAccount == UserConfig.selectedAccount;
+    }
+
+    /** Reapply account selection without creating controllers for unused slots. */
+    public static void refreshAccountNotifications() {
         notificationsQueue.postRunnable(() -> {
-            notificationManager.cancel(notificationId);
+            cancelInactivePostedNotifications();
+            org.telegram.messenger.ayu.contacts.ContactNotifier.cancelInactiveNotifications();
+            org.telegram.messenger.ayu.radar.RadarNotifier.cancelInactiveNotifications();
+            for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
+                final NotificationsController controller;
+                synchronized (lockObjects[account]) {
+                    controller = Instance[account];
+                }
+                if (controller == null) {
+                    continue;
+                }
+                if (controller.canShowAccountNotifications()) {
+                    controller.showOrUpdateNotification(false);
+                    if (account == UserConfig.selectedAccount) {
+                        controller.setBadge(controller.getTotalAllUnreadCount());
+                    }
+                } else {
+                    controller.hideNotificationsInternal();
+                }
+            }
+            AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated));
+        });
+    }
+
+    private static void cancelInactivePostedNotifications() {
+        if (Build.VERSION.SDK_INT < 23) {
+            return;
+        }
+        try {
+            NotificationManager manager = (NotificationManager) ApplicationLoader.applicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager == null) {
+                return;
+            }
+            // Also cover notifications surviving a process restart or the old untagged format.
+            for (android.service.notification.StatusBarNotification posted : manager.getActiveNotifications()) {
+                final Notification notification = posted.getNotification();
+                final String tag = posted.getTag();
+                for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
+                    String group = "messages" + (account == 0 ? "" : account);
+                    boolean belongsToAccount = group.equals(tag) || (group + "_summary").equals(tag) || group.equals(notification.getGroup());
+                    if (!belongsToAccount && Build.VERSION.SDK_INT >= 26) {
+                        String channel = notification.getChannelId();
+                        belongsToAccount = channel != null && channel.startsWith(account + "channel_");
+                    }
+                    if (belongsToAccount) {
+                        if (tag == null || !SharedConfig.showNotificationsForAllAccounts && account != UserConfig.selectedAccount) {
+                            manager.cancel(tag, posted.getId());
+                        }
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
+    public void hideNotifications() {
+        notificationsQueue.postRunnable(this::hideNotificationsInternal);
+    }
+
+    private void hideNotificationsInternal() {
+        try {
+            notificationManager.cancel(notificationGroup + "_summary", notificationId);
             lastWearNotifiedMessageId.clear();
             for (int a = 0; a < wearNotificationsIds.size(); a++) {
-                notificationManager.cancel(wearNotificationsIds.valueAt(a));
+                notificationManager.cancel(notificationGroup, wearNotificationsIds.valueAt(a));
             }
             wearNotificationsIds.clear();
+            notificationsQueue.cancelRunnable(notificationDelayRunnable);
+            if (notificationDelayWakelock != null && notificationDelayWakelock.isHeld()) {
+                notificationDelayWakelock.release();
+            }
+            Intent repeatIntent = new Intent(ApplicationLoader.applicationContext, NotificationRepeat.class);
+            repeatIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
+            PendingIntent repeat = PendingIntent.getService(ApplicationLoader.applicationContext, 0, repeatIntent, PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_NO_CREATE);
+            if (repeat != null && alarmManager != null) {
+                alarmManager.cancel(repeat);
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+        AndroidUtilities.runOnUIThread(() -> {
+            if (!canShowAccountNotifications()) {
+                popupMessages.clear();
+                popupReplyMessages.clear();
+                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated);
+            }
         });
+    }
+
+    private void postAccountNotification(String tag, int id, Notification notification) {
+        for (MessageObject message : pushMessages) {
+            if (HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId())) {
+                removeHiddenNotificationData();
+                notificationsQueue.postRunnable(() -> showOrUpdateNotification(false));
+                return;
+            }
+        }
+        for (StoryNotification story : storyPushMessages) {
+            if (HiddenChatsController.getInstance(currentAccount).isHidden(story.dialogId)) {
+                removeHiddenNotificationData();
+                notificationsQueue.postRunnable(() -> showOrUpdateNotification(false));
+                return;
+            }
+        }
+        if (!canShowAccountNotifications()) {
+            hideNotificationsInternal();
+            return;
+        }
+        notificationManager.notify(tag, id, notification);
+        // Selection may change while NotificationManager performs its binder call.
+        if (!canShowAccountNotifications()) {
+            notificationManager.cancel(tag, id);
+        }
     }
 
     private void dismissNotification() {
         FileLog.d("NotificationsController dismissNotification");
         try {
-            notificationManager.cancel(notificationId);
+            notificationManager.cancel(notificationGroup + "_summary", notificationId);
             pushMessages.clear();
             pushMessagesDict.clear();
             lastWearNotifiedMessageId.clear();
@@ -3289,7 +3421,7 @@ public class NotificationsController extends BaseController implements Notificat
                 if (openedInBubbleDialogs.contains(did)) {
                     continue;
                 }
-                notificationManager.cancel(wearNotificationsIds.valueAt(a));
+                notificationManager.cancel(notificationGroup, wearNotificationsIds.valueAt(a));
             }
             wearNotificationsIds.clear();
             AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated));
@@ -3319,7 +3451,7 @@ public class NotificationsController extends BaseController implements Notificat
     }
 
     private void playInChatSound() {
-        if (!inChatSoundEnabled || MediaController.getInstance().isRecordingAudio()) {
+        if (!canShowAccountNotifications() || !inChatSoundEnabled || MediaController.getInstance().isRecordingAudio()) {
             return;
         }
         try {
@@ -3337,14 +3469,14 @@ public class NotificationsController extends BaseController implements Notificat
                 return;
             }
             notificationsQueue.postRunnable(() -> {
-                if (Math.abs(SystemClock.elapsedRealtime() - lastSoundPlay) <= 500) {
+                if (!canShowAccountNotifications() || Math.abs(SystemClock.elapsedRealtime() - lastSoundPlay) <= 500) {
                     return;
                 }
                 try {
                     if (soundPool == null) {
                         soundPool = new SoundPool(3, AudioManager.STREAM_SYSTEM, 0);
                         soundPool.setOnLoadCompleteListener((soundPool, sampleId, status) -> {
-                            if (status == 0) {
+                            if (status == 0 && canShowAccountNotifications()) {
                                 try {
                                     soundPool.play(sampleId, 1.0f, 1.0f, 1, 0, 1.0f);
                                 } catch (Exception e) {
@@ -3357,7 +3489,7 @@ public class NotificationsController extends BaseController implements Notificat
                         soundInLoaded = true;
                         soundIn = soundPool.load(ApplicationLoader.applicationContext, R.raw.sound_in, 1);
                     }
-                    if (soundIn != 0) {
+                    if (soundIn != 0 && canShowAccountNotifications()) {
                         try {
                             soundPool.play(soundIn, 1.0f, 1.0f, 1, 0, 1.0f);
                         } catch (Exception e) {
@@ -3374,6 +3506,10 @@ public class NotificationsController extends BaseController implements Notificat
     }
 
     private void scheduleNotificationDelay(boolean onlineReason) {
+        if (!canShowAccountNotifications()) {
+            hideNotificationsInternal();
+            return;
+        }
         try {
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("delay notification start, onlineReason = " + onlineReason);
@@ -3389,9 +3525,13 @@ public class NotificationsController extends BaseController implements Notificat
 
     protected void repeatNotificationMaybe() {
         notificationsQueue.postRunnable(() -> {
+            if (!canShowAccountNotifications()) {
+                hideNotificationsInternal();
+                return;
+            }
             int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
             if (hour >= 11 && hour <= 22) {
-                notificationManager.cancel(notificationId);
+                notificationManager.cancel(notificationGroup + "_summary", notificationId);
                 showOrUpdateNotification(true);
             } else {
                 scheduleNotificationRepeat();
@@ -4096,8 +4236,69 @@ public class NotificationsController extends BaseController implements Notificat
         return channelId;
     }
 
+    public void onHiddenChatsChanged() {
+        AndroidUtilities.runOnUIThread(() -> {
+            popupMessages.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
+            popupReplyMessages.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated);
+        });
+        notificationsQueue.postRunnable(() -> {
+            removeHiddenNotificationData();
+            hideNotificationsInternal();
+            showOrUpdateNotification(false);
+            if (showBadgeNumber) setBadge(getTotalAllUnreadCount());
+            final int count = pushDialogs.size();
+            AndroidUtilities.runOnUIThread(() -> {
+                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.notificationsCountUpdated, currentAccount);
+                getNotificationCenter().postNotificationName(NotificationCenter.dialogsUnreadCounterChanged, count);
+            });
+        });
+    }
+
+    private void removeHiddenNotificationData() {
+        final HiddenChatsController hidden = HiddenChatsController.getInstance(currentAccount);
+        if (!hidden.hasHiddenChats()) return;
+        pushMessages.removeIf(message -> hidden.isHidden(message.getDialogId()));
+        delayedPushMessages.removeIf(message -> hidden.isHidden(message.getDialogId()));
+        for (int i = pushMessagesDict.size() - 1; i >= 0; i--) {
+            SparseArray<MessageObject> messages = pushMessagesDict.valueAt(i);
+            for (int j = messages.size() - 1; j >= 0; j--) {
+                if (hidden.isHidden(messages.valueAt(j).getDialogId())) messages.removeAt(j);
+            }
+            if (messages.size() == 0) pushMessagesDict.removeAt(i);
+        }
+        for (int i = fcmRandomMessagesDict.size() - 1; i >= 0; i--) {
+            if (hidden.isHidden(fcmRandomMessagesDict.valueAt(i).getDialogId())) fcmRandomMessagesDict.removeAt(i);
+        }
+        storyPushMessages.removeIf(story -> hidden.isHidden(story.dialogId));
+        for (int i = storyPushMessagesDict.size() - 1; i >= 0; i--) {
+            if (hidden.isHidden(storyPushMessagesDict.keyAt(i))) storyPushMessagesDict.removeAt(i);
+        }
+        total_unread_count = 0;
+        for (int i = pushDialogs.size() - 1; i >= 0; i--) {
+            long did = pushDialogs.keyAt(i);
+            if (hidden.isHidden(did)) {
+                pushDialogs.removeAt(i);
+                pushDialogsOverrideMention.remove(did);
+                smartNotificationsDialogs.remove(did);
+            } else if (!getMessagesController().isCommunity(did)) {
+                int count = pushDialogs.valueAt(i);
+                total_unread_count += getMessagesController().isForum(did) ? (count > 0 ? 1 : 0) : count;
+            }
+        }
+        personalCount = 0;
+        for (MessageObject message : pushMessages) {
+            if (isPersonalMessage(message)) personalCount++;
+        }
+    }
+
     private void showOrUpdateNotification(boolean notifyAboutLast) {
-        if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty() || !SharedConfig.showNotificationsForAllAccounts && currentAccount != UserConfig.selectedAccount) {
+        removeHiddenNotificationData();
+        if (!canShowAccountNotifications()) {
+            hideNotificationsInternal();
+            return;
+        }
+        if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty()) {
             dismissNotification();
             return;
         }
@@ -4601,6 +4802,7 @@ public class NotificationsController extends BaseController implements Notificat
 
             try {
                 Intent dismissIntent = new Intent(ApplicationLoader.applicationContext, NotificationDismissReceiver.class);
+                dismissIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
                 dismissIntent.putExtra("messageDate", lastMessageObject.messageOwner.date);
                 dismissIntent.putExtra("currentAccount", currentAccount);
                 if (lastMessageObject.isStoryPush) {
@@ -4730,6 +4932,7 @@ public class NotificationsController extends BaseController implements Notificat
                             TLRPC.KeyboardButton button = row.buttons.get(b);
                             if (button instanceof TLRPC.TL_keyboardButtonCallback) {
                                 Intent callbackIntent = new Intent(ApplicationLoader.applicationContext, NotificationCallbackReceiver.class);
+                                callbackIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
                                 callbackIntent.putExtra("currentAccount", currentAccount);
                                 callbackIntent.putExtra("did", dialog_id);
                                 if (button.data != null) {
@@ -4746,6 +4949,7 @@ public class NotificationsController extends BaseController implements Notificat
 
             if (!hasCallback && Build.VERSION.SDK_INT < 24 && SharedConfig.passcodeHash.length() == 0 && hasMessagesToReply()) {
                 Intent replyIntent = new Intent(ApplicationLoader.applicationContext, PopupReplyReceiver.class);
+                replyIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
                 replyIntent.putExtra("currentAccount", currentAccount);
                 if (Build.VERSION.SDK_INT <= 19) {
                     mBuilder.addAction(R.drawable.ic_ab_reply2, LocaleController.getString(R.string.Reply), PendingIntent.getBroadcast(ApplicationLoader.applicationContext, 2, replyIntent, PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
@@ -4814,7 +5018,7 @@ public class NotificationsController extends BaseController implements Notificat
             editor.commit();
             sound = Settings.System.DEFAULT_RINGTONE_URI;
             notificationBuilder.setChannelId(validateChannelId(dialogId, topicId, chatName, vibrationPattern, ledColor, sound, importance, isDefault, isInApp, isSilent, chatType));
-            notificationManager.notify(notificationId, notificationBuilder.build());
+            postAccountNotification(notificationGroup + "_summary", notificationId, notificationBuilder.build());
         }
     }
 
@@ -4826,7 +5030,7 @@ public class NotificationsController extends BaseController implements Notificat
         }
         Notification mainNotification = notificationBuilder.build();
         if (Build.VERSION.SDK_INT <= 19) {
-            notificationManager.notify(notificationId, mainNotification);
+            postAccountNotification(notificationGroup + "_summary", notificationId, mainNotification);
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("show summary notification by SDK check");
             }
@@ -4888,11 +5092,15 @@ public class NotificationsController extends BaseController implements Notificat
             }
 
             void call() {
+                if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) {
+                    notificationManager.cancel(notificationGroup, id);
+                    return;
+                }
                 if (BuildVars.LOGS_ENABLED) {
                     FileLog.w("show dialog notification with id " + id + " " + dialogId +  " user=" + user + " chat=" + chat);
                 }
                 try {
-                    notificationManager.notify(id, notification.build());
+                    postAccountNotification(notificationGroup, id, notification.build());
                 } catch (SecurityException e) {
                     FileLog.e(e);
                     resetNotificationSound(notification, dialogId, lastTopicId, chatName, vibrationPattern, ledColor, sound, importance, isDefault, isInApp, isSilent, chatType);
@@ -5134,6 +5342,7 @@ public class NotificationsController extends BaseController implements Notificat
 
             if ((!isChannel || isSupergroup) && canReply && !SharedConfig.isWaitingForPasscodeEnter && selfUserId != dialogId && !UserObject.isReplyUser(dialogId) && MessagesController.getInstance(currentAccount).getSendPaidMessagesStars(dialogId) <= 0) {
                 Intent replyIntent = new Intent(ApplicationLoader.applicationContext, WearReplyReceiver.class);
+                replyIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
                 replyIntent.putExtra("dialog_id", dialogId);
                 replyIntent.putExtra("max_id", maxId);
                 replyIntent.putExtra("topic_id", topicId);
@@ -5537,6 +5746,7 @@ public class NotificationsController extends BaseController implements Notificat
                 wearableExtender.addAction(wearReplyAction);
             }
             Intent msgHeardIntent = new Intent(ApplicationLoader.applicationContext, AutoMessageHeardReceiver.class);
+            msgHeardIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
             msgHeardIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
             msgHeardIntent.setAction("org.telegram.messenger.ACTION_MESSAGE_HEARD");
             msgHeardIntent.putExtra("dialog_id", dialogId);
@@ -5597,6 +5807,7 @@ public class NotificationsController extends BaseController implements Notificat
 
             try {
                 Intent dismissIntent = new Intent(ApplicationLoader.applicationContext, NotificationDismissReceiver.class);
+                dismissIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
                 dismissIntent.putExtra("messageDate", maxDate);
                 dismissIntent.putExtra("dialogId", dialogId);
                 dismissIntent.putExtra("currentAccount", currentAccount);
@@ -5631,6 +5842,7 @@ public class NotificationsController extends BaseController implements Notificat
             }
             if (copybutton != null) {
                 Intent copyIntent = new Intent(ApplicationLoader.applicationContext, CopyCodeReceiver.class);
+                copyIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
                 copyIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                 copyIntent.setAction("org.telegram.messenger.ACTION_COPY_CODE");
                 copyIntent.putExtra("text", copybutton.copy_text);
@@ -5666,6 +5878,7 @@ public class NotificationsController extends BaseController implements Notificat
                             TLRPC.KeyboardButton button = row.buttons.get(c);
                             if (button instanceof TLRPC.TL_keyboardButtonCallback) {
                                 Intent callbackIntent = new Intent(ApplicationLoader.applicationContext, NotificationCallbackReceiver.class);
+                                callbackIntent.setData(Uri.parse("tgaccount://notification/" + currentAccount));
                                 callbackIntent.putExtra("currentAccount", currentAccount);
                                 callbackIntent.putExtra("did", dialogId);
                                 if (button.data != null) {
@@ -5696,7 +5909,7 @@ public class NotificationsController extends BaseController implements Notificat
                 FileLog.d("show summary with id " + notificationId);
             }
             try {
-                notificationManager.notify(notificationId, mainNotification);
+                postAccountNotification(notificationGroup + "_summary", notificationId, mainNotification);
             } catch (SecurityException e) {
                 FileLog.e(e);
                 resetNotificationSound(notificationBuilder, lastDialogId, lastTopicId, chatName, vibrationPattern, ledColor, sound, importance, isDefault, isInApp, isSilent, chatType);
@@ -5706,7 +5919,7 @@ public class NotificationsController extends BaseController implements Notificat
                 if (BuildVars.LOGS_ENABLED) {
                     FileLog.d("cancel summary with id " + notificationId);
                 }
-                notificationManager.cancel(notificationId);
+                notificationManager.cancel(notificationGroup + "_summary", notificationId);
             }
         }
 
@@ -5719,7 +5932,7 @@ public class NotificationsController extends BaseController implements Notificat
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("cancel notification id " + id);
             }
-            notificationManager.cancel(id);
+            notificationManager.cancel(notificationGroup, id);
         }
 
         ArrayList<String> ids = new ArrayList<>(holders.size());
@@ -5911,7 +6124,7 @@ public class NotificationsController extends BaseController implements Notificat
     }
 
     public void playOutChatSound() {
-        if (!inChatSoundEnabled || MediaController.getInstance().isRecordingAudio()) {
+        if (!canShowAccountNotifications() || !inChatSoundEnabled || MediaController.getInstance().isRecordingAudio()) {
             return;
         }
         try {
@@ -5923,14 +6136,14 @@ public class NotificationsController extends BaseController implements Notificat
         }
         notificationsQueue.postRunnable(() -> {
             try {
-                if (Math.abs(SystemClock.elapsedRealtime() - lastSoundOutPlay) <= 100) {
+                if (!canShowAccountNotifications() || Math.abs(SystemClock.elapsedRealtime() - lastSoundOutPlay) <= 100) {
                     return;
                 }
                 lastSoundOutPlay = SystemClock.elapsedRealtime();
                 if (soundPool == null) {
                     soundPool = new SoundPool(3, AudioManager.STREAM_SYSTEM, 0);
                     soundPool.setOnLoadCompleteListener((soundPool, sampleId, status) -> {
-                        if (status == 0) {
+                        if (status == 0 && canShowAccountNotifications()) {
                             try {
                                 soundPool.play(sampleId, 1.0f, 1.0f, 1, 0, 1.0f);
                             } catch (Exception e) {
@@ -5943,7 +6156,7 @@ public class NotificationsController extends BaseController implements Notificat
                     soundOutLoaded = true;
                     soundOut = soundPool.load(ApplicationLoader.applicationContext, R.raw.sound_out, 1);
                 }
-                if (soundOut != 0) {
+                if (soundOut != 0 && canShowAccountNotifications()) {
                     try {
                         soundPool.play(soundOut, 1.0f, 1.0f, 1, 0, 1.0f);
                     } catch (Exception e) {

@@ -186,14 +186,14 @@ public final class AyuAntiDelete {
      * the per-chat "don't save here" exclusion.
      */
     public static boolean shouldKeepDeleted(int account, long dialogId, TLRPC.Message message) {
-        if (!AyuConfig.saveDeletedMessages || message == null || message.id <= 0) {
+        if (!AyuConfig.saveDeletedMessages || !org.telegram.messenger.ayu.AyuChatCapturePolicy.isRetainableMessage(message)) {
             return false;
         }
         long did = dialogId != 0 ? dialogId : (message.dialog_id != 0 ? message.dialog_id : MessageObject.getDialogId(message));
         if (did == 0 || DialogObject.isEncryptedDialog(did)) {
             return false;
         }
-        if (AyuAntiDeleteConfig.isExcluded(did)) {
+        if (!org.telegram.messenger.ayu.AyuChatCapturePolicy.isEnabled(account, did, message)) {
             return false;
         }
         // the only real deletion is the one the user performed in THIS app: everything else

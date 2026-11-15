@@ -23,6 +23,7 @@ import androidx.collection.LongSparseArray;
 import com.google.android.exoplayer2.util.Log;
 
 import org.telegram.tgnet.TLRPC;
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.EditWidgetActivity;
@@ -102,6 +103,12 @@ class ContactsRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactor
                 rv.setViewVisibility(a == 0 ? R.id.contacts_widget_item1 : R.id.contacts_widget_item2, View.VISIBLE);
 
                 Long id = dids.get(position * 2 + a);
+                if (HiddenChatsController.getInstance(accountInstance.getCurrentAccount()).isHidden(id)) {
+                    rv.setViewVisibility(a == 0 ? R.id.contacts_widget_item1 : R.id.contacts_widget_item2, View.INVISIBLE);
+                    rv.setTextViewText(a == 0 ? R.id.contacts_widget_item_text1 : R.id.contacts_widget_item_text2, "");
+                    rv.setImageViewBitmap(a == 0 ? R.id.contacts_widget_item_avatar1 : R.id.contacts_widget_item_avatar2, null);
+                    continue;
+                }
                 String name;
 
                 TLRPC.FileLocation photoPath = null;
@@ -237,6 +244,14 @@ class ContactsRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactor
         ArrayList<TLRPC.Chat> chats = new ArrayList<>();
         LongSparseArray<TLRPC.Message> messages = new LongSparseArray<>();
         accountInstance.getMessagesStorage().getWidgetDialogs(appWidgetId, 1, dids, dialogs, messages, users, chats);
+        HiddenChatsController hidden = HiddenChatsController.getInstance(accountInstance.getCurrentAccount());
+        for (int i = dids.size() - 1; i >= 0; i--) {
+            long id = dids.get(i);
+            if (hidden.isHidden(id)) {
+                dids.remove(i);
+                dialogs.remove(id);
+            }
+        }
         accountInstance.getMessagesController().putUsers(users, true);
         accountInstance.getMessagesController().putChats(chats, true);
     }

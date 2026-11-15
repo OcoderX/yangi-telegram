@@ -1,5 +1,11 @@
 package org.telegram.ui.Components;
 
+import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.messenger.ayu.hidden.HiddenChatsController;
+import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.R;
+
 import android.content.Context;
 import android.text.TextUtils;
 import android.view.View;
@@ -15,7 +21,7 @@ import org.telegram.ui.Stories.StoriesController;
 
 import java.util.ArrayList;
 
-public class HashtagsSearchAdapter extends UniversalAdapter {
+public class HashtagsSearchAdapter extends UniversalAdapter implements NotificationCenter.NotificationCenterDelegate {
 
     private final int currentAccount;
     private final ArrayList<MessageObject> messages = new ArrayList<>();
@@ -30,6 +36,8 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
 
     private boolean hadStories;
     public void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        messages.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
+        if (list != null) list.removeHiddenResults();
         boolean hasStories = hasList && list != null && list.getLoadedCount() > 0;
         if (hasStories) {
             items.add(MessagesSearchAdapter.StoriesView.Factory.asStoriesList(list));
@@ -38,7 +46,12 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
         for (int i = 0; i < messages.size(); ++i) {
             items.add(UItem.asSearchMessage(1 + i, messages.get(i)));
         }
-        if (loading || !endReached) {
+        if (!loading && !endReached && messages.isEmpty() && hiddenEmptyPages > 4) {
+            items.add(UItem.asGraySection("", LocaleController.getString(R.string.Retry), view -> {
+                hiddenEmptyPages = 0;
+                search(lastQuery);
+            }));
+        } else if (loading || !endReached) {
             items.add(UItem.asFlicker(-2, FlickerLoadingView.DIALOG_TYPE));
             items.add(UItem.asFlicker(-3, FlickerLoadingView.DIALOG_TYPE));
             items.add(UItem.asFlicker(-4, FlickerLoadingView.DIALOG_TYPE));
@@ -58,6 +71,9 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
     private String lastQuery;
     private String hashtagQuery;
     private int lastRate;
+    private TLRPC.Message lastRawMessage;
+    private int rawLoadedCount;
+    private int hiddenEmptyPages;
     private Runnable searchRunnable;
 
     public void setInitialData(String hashtag, ArrayList<MessageObject> messages, int messagesLastRate, int totalCount) {
@@ -66,8 +82,18 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
         this.messages.clear();
         this.messages.addAll(messages);
         this.totalCount = totalCount;
-        endReached = totalCount > messages.size();
-        this.lastRate = messagesLastRate;
+        rawLoadedCount = messages.size();
+        lastRawMessage = messages.isEmpty() ? null : messages.get(messages.size() - 1).messageOwner;
+        endReached = rawLoadedCount >= totalCount;
+        hiddenEmptyPages = 0;
+        if (HiddenChatsController.getInstance(currentAccount).hasHiddenChats()) {
+            // Seed results may already be filtered; restart to obtain a trustworthy raw cursor.
+            this.messages.clear();
+            rawLoadedCount = 0;
+            lastRawMessage = null;
+            endReached = false;
+        }
+        this.lastRate = lastRawMessage == null ? 0 : messagesLastRate;
         hashtagQuery = hashtag;
         update(true);
     }
@@ -81,6 +107,10 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
             messages.clear();
             endReached = false;
             totalCount = 0;
+            rawLoadedCount = 0;
+            lastRawMessage = null;
+            lastRate = 0;
+            hiddenEmptyPages = 0;
             cancel();
         } else if (loading) {
             return;
@@ -93,7 +123,7 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
             if (id != searchId) {
                 return;
             }
-            final String finalQuery = (cashtag[0] ? "$" : "#") + hashtagQuery;
+            final String finalQuery = (cashtag[0] ? "$" : "#") + hashtag;
             if (list == null || !TextUtils.equals(list.query, finalQuery)) {
                 list = new StoriesController.SearchStoriesList(currentAccount, null, finalQuery);
             }
@@ -105,10 +135,11 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
             req.flags |= 1;
             req.hashtag = this.hashtagQuery = hashtag;
             req.limit = 10;
-            if (!messages.isEmpty()) {
-                MessageObject lastMessage = messages.get(messages.size() - 1);
+            if (lastRawMessage != null) {
+                TLRPC.Message lastMessage = lastRawMessage;
+                req.offset_id = lastMessage.id;
                 req.offset_rate = lastRate;
-                req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(lastMessage.messageOwner.peer_id);
+                req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(lastMessage.peer_id);
             } else {
                 req.offset_peer = new TLRPC.TL_inputPeerEmpty();
             }
@@ -125,17 +156,26 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
                     } else if (msgs instanceof TLRPC.TL_messages_messagesSlice) {
                         totalCount = ((TLRPC.TL_messages_messagesSlice) msgs).count;
                     }
+                    if (!(msgs instanceof TLRPC.TL_messages_messages) && !(msgs instanceof TLRPC.TL_messages_messagesSlice)) totalCount = msgs.count;
                     lastRate = msgs.next_rate;
                     MessagesController.getInstance(currentAccount).putUsers(msgs.users, false);
                     MessagesController.getInstance(currentAccount).putChats(msgs.chats, false);
                     for (int i = 0; i < msgs.messages.size(); ++i) {
                         final TLRPC.Message msg = msgs.messages.get(i);
+                        if (HiddenChatsController.getInstance(currentAccount).isHidden(MessageObject.getDialogId(msg))) continue;
                         final MessageObject messageObject = new MessageObject(currentAccount, msg, false, true);
                         messageObject.setQuery(finalQuery);
                         messages.add(messageObject);
                     }
-                    endReached = messages.size() >= totalCount;
-                    checkBottom();
+                    lastRawMessage = msgs.messages.isEmpty() ? null : msgs.messages.get(msgs.messages.size() - 1);
+                    rawLoadedCount += msgs.messages.size();
+                    endReached = msgs.messages.isEmpty() || rawLoadedCount >= totalCount;
+                    if (HiddenChatsController.getInstance(currentAccount).hasHiddenChats()) totalCount = messages.size();
+                    if (!endReached && messages.isEmpty() && hiddenEmptyPages++ < 4) {
+                        AndroidUtilities.runOnUIThread(() -> {
+                            if (id == searchId && !loading) search(lastQuery);
+                        }, 1);
+                    }
                 } else {
                     endReached = true;
                     totalCount = messages.size();
@@ -180,7 +220,7 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
 
     public void checkBottom() {
         if (!TextUtils.isEmpty(lastQuery)) {
-            if (!endReached && !loading && seesLoading()) {
+            if (!endReached && !loading && !(messages.isEmpty() && hiddenEmptyPages > 4) && seesLoading()) {
                 search(lastQuery);
             }
         }
@@ -195,6 +235,31 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
             }
         }
         return false;
+    }
+
+    @Override
+    public void onAttachedToRecyclerView(RecyclerView recyclerView) {
+        super.onAttachedToRecyclerView(recyclerView);
+        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
+        update(false);
+    }
+
+    @Override
+    public void onDetachedFromRecyclerView(RecyclerView recyclerView) {
+        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.dialogsNeedReload);
+        super.onDetachedFromRecyclerView(recyclerView);
+    }
+
+    @Override
+    public void didReceivedNotification(int id, int account, Object... args) {
+        if (id == NotificationCenter.dialogsNeedReload) update(true);
+    }
+
+    @Override
+    public boolean isEnabled(RecyclerView.ViewHolder holder) {
+        UItem item = getItem(holder.getAdapterPosition());
+        if (item != null && item.object instanceof MessageObject && HiddenChatsController.getInstance(currentAccount).isHidden(((MessageObject) item.object).getDialogId())) return false;
+        return super.isEnabled(holder);
     }
 
     protected void scrollToTop(boolean ifAtTop) {

@@ -383,7 +383,7 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
             doOnAnimationReadyRunnables.clear();
             return;
         }
-        if (org.telegram.messenger.ayu.AyuConfig.alertBeforeOpeningStory && org.telegram.messenger.ayu.AyuConfig.sendReadStories && !ayuSkipStoryAlert) {
+        if (org.telegram.messenger.ayu.AyuGhostConfig.get(account).alertBeforeOpeningStory && org.telegram.messenger.ayu.AyuGhostConfig.get(account).sendReadStories && !ayuSkipStoryAlert) {
             final int fAccount = account;
             final Context fContext = context;
             final TL_stories.StoryItem fStoryItem = storyItem;
@@ -393,7 +393,7 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
             final TL_stories.PeerStories fUserStories = userStories;
             final PlaceProvider fPlaceProvider = placeProvider;
             final boolean fReversed = reversed;
-            org.telegram.ui.ayu.AyuGhostAlert.showStoryAlert(context, resourcesProvider, () -> {
+            org.telegram.ui.ayu.AyuGhostAlert.showStoryAlert(account, context, resourcesProvider, () -> {
                 ayuSkipStoryAlert = true;
                 open(fAccount, fContext, fStoryItem, fPeerIds, fPosition, fStoriesList, fUserStories, fPlaceProvider, fReversed);
                 ayuSkipStoryAlert = false;

@@ -160,6 +160,7 @@ public class TextSettingsCell extends FrameLayout {
         } else {
             width = availableWidth;
         }
+        width = Math.max(0, width);
         textView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.EXACTLY));
     }
 

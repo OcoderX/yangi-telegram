@@ -3,7 +3,6 @@ package org.telegram.ui;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.messenger.LocaleController.getString;
-import static org.telegram.ui.Components.Premium.LimitReachedBottomSheet.TYPE_ACCOUNTS;
 
 import android.animation.Animator;
 import android.content.Context;
@@ -55,6 +54,7 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.EdgeToEdgeSupportMode;
 import org.telegram.ui.ActionBar.Theme;
@@ -68,7 +68,6 @@ import org.telegram.ui.Components.FolderDrawable;
 import org.telegram.ui.Components.HintsController;
 import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
-import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.BlurredBackgroundWithFadeDrawable;
 import org.telegram.ui.Components.blur3.RenderNodeWithHash;
@@ -316,9 +315,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabs[INDEX_CHATS].setOnLongClickListener(this::openFoldersSelector);
         tabs[INDEX_CALLS].setOnLongClickListener(this::openCallsSelector);
         tabs[INDEX_PROFILE].setOnLongClickListener(this::openAccountSelector);
+        tabs[INDEX_SETTINGS].setOnLongClickListener(v -> {
+            org.telegram.ui.ayu.hidden.HiddenChatsUi.open(this);
+            return true;
+        });
+        tabs[INDEX_OCODERX].setOnLongClickListener(v -> {
+            org.telegram.ui.ayu.hidden.HiddenChatsUi.open(this);
+            return true;
+        });
 
         tabsView.addTabToIgnoreClick(tabs[INDEX_CHATS]);
         tabsView.addTabToIgnoreClick(tabs[INDEX_OCODERX]);
+        tabsView.addTabToIgnoreClick(tabs[INDEX_SETTINGS]);
         tabsView.addTabToIgnoreClick(tabs[INDEX_PROFILE]);
         tabsView.addTabToIgnoreClick(tabs[INDEX_CALLS]);
 
@@ -397,7 +405,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             return;
         }
 
-        final int unreadCount = MessagesStorage.getInstance(currentAccount).getMainUnreadCount();
+        final int unreadCount = getMessagesController().getVisibleUnreadCount(0);
         if (unreadCount > 0) {
             final String unreadCountFmt = LocaleController.formatNumber(unreadCount, ',');
             tabs[INDEX_CHATS].setCounter(unreadCountFmt, false, animated);
@@ -456,8 +464,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 title = MessageObject.replaceAnimatedEmoji(title, folder.entities, folderItem.getTextView().getPaint().getFontMetricsInt());
             }
             final int unreadCount = folder.isDefault()
-                    ? MessagesStorage.getInstance(currentAccount).getMainUnreadCount()
-                    : folder.unreadCount;
+                    ? getMessagesController().getVisibleUnreadCount(0)
+                    : getMessagesController().getVisibleFilterUnreadCount(folder);
             if (unreadCount > 0) {
                 final SpannableStringBuilder titleWithCounter = new SpannableStringBuilder(title);
                 final int counterStart = titleWithCounter.length();
@@ -581,29 +589,25 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         }
     }
 
+    private AlertDialog accountLimitDialog() {
+        return new AlertDialog.Builder(getContext())
+                .setTitle(LocaleController.getString(R.string.AppName))
+                .setMessage(AndroidUtilities.replaceTags(LocaleController.formatString(R.string.LimitReachedAccountsPremium, UserConfig.MAX_ACCOUNT_COUNT)))
+                .setPositiveButton(LocaleController.getString(R.string.OK), null)
+                .create();
+    }
+
     /** Opens the login screen in a free slot; with {@code botToken} it starts on the bot token page. */
     private void openAddAccount(boolean botToken) {
-        int freeAccounts = 0;
-        Integer availableAccount = null;
-        for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
-            if (!UserConfig.getInstance(a).isClientActivated()) {
-                freeAccounts++;
-                if (availableAccount == null) {
-                    availableAccount = a;
-                }
-            }
-        }
-        if (!UserConfig.hasPremiumOnAccounts()) {
-            freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-        }
-        if (freeAccounts > 0 && availableAccount != null) {
+        final int availableAccount = UserConfig.findFreeAccount();
+        if (availableAccount >= 0) {
             final LoginActivity loginActivity = new LoginActivity(availableAccount);
             if (botToken) {
                 loginActivity.startWithBotToken();
             }
             presentFragment(loginActivity);
-        } else if (!UserConfig.hasPremiumOnAccounts()) {
-            showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
+        } else if (getContext() != null) {
+            showDialog(accountLimitDialog());
         }
     }
 
@@ -943,7 +947,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         navigationBarHeight = systemInsets.bottom;
         final boolean isUpdateLayoutVisible = updateLayoutWrapper.isUpdateLayoutVisible();
         final int updateLayoutHeight = isUpdateLayoutVisible ? dp(UpdateLayoutWrapper.HEIGHT) : 0;
-        updateLayoutWrapper.setPadding(0, 0, 0, navigationBarHeight);
+        updateLayoutWrapper.setPadding(systemInsets.left, 0, systemInsets.right, navigationBarHeight);
 
         ViewGroup.MarginLayoutParams lp;
         {
@@ -981,7 +985,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.notificationsCountUpdated || id == NotificationCenter.updateInterfaces) {
+        if (id == NotificationCenter.notificationsCountUpdated || id == NotificationCenter.updateInterfaces || id == NotificationCenter.dialogsNeedReload) {
             checkUnreadCount(fragmentView != null && fragmentView.isAttachedToWindow());
         } else if (id == NotificationCenter.appUpdateLoading) {
             if (updateLayout != null) {
@@ -1042,6 +1046,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             .add(NotificationCenter.fileLoadProgressChanged)
             .add(NotificationCenter.fileLoadFailed)
             .add(NotificationCenter.notificationsCountUpdated)
+            .add(NotificationCenter.dialogsNeedReload)
             .add(NotificationCenter.updateInterfaces)
             .add(NotificationCenter.callTabsVisibleToggled)
             .add(NotificationCenter.mainUserInfoChanged);

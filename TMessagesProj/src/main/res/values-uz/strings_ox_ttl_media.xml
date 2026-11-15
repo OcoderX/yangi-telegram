@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxSaveTimedPhotos">Taymerli va bir martalik mediani saqlash</string>
+    <string name="OxSaveTimedPhotosInfo">Kelgan taymerli yoki bir martalik rasm va video to‘liq yuklanganda nusxasi qurilmada saqlanadi. Chegaralar: rasm 25 MB, video 100 MB, jami 1 GB. Joy to‘lsa, saqlangan nusxalarni o‘chiring. Oldin yo‘qolgan yoki bu qurilmaga kelmagan mediani tiklab bo‘lmaydi.</string>
+    <string name="OxSavedTimedPhotos">Saqlangan taymerli media</string>
+    <string name="OxSavedTimedPhotosInfo">Bu akkaunt uchun shu qurilmada saqlangan rasm va videolar. Ochish uchun bosing, mahalliy nusxani o‘chirish uchun bosib turing. Yashirin chatlar bu ro‘yxatda ko‘rsatilmaydi.</string>
+    <string name="OxTimedPhoto">Rasm</string>
+    <string name="OxTimedPhotosEmpty">Hali saqlangan media yo‘q. Xabarlarni saqlash sozlamasida saqlashni yoqing, so‘ng kelgan taymerli yoki bir martalik rasm yoxud video to‘liq yuklanishini kuting.</string>
+    <string name="OxTimedPhotosLoadError">Saqlangan mediani yuklab bo‘lmadi.</string>
+    <string name="OxTimedPhotosRetry">Qayta urinish</string>
+    <string name="OxTimedPhotosLoadMore">Yana yuklash</string>
+    <string name="OxTimedPhotosRefresh">Yangilash</string>
+    <string name="OxTimedPhotosRemoving">Mahalliy nusxa o‘chirilmoqda…</string>
+    <string name="OxTimedPhotosOpenError">Bu mediani ochib bo‘lmadi. Ro‘yxatni yangilab, qayta urinib ko‘ring.</string>
+    <string name="OxTimedPhotosRemove">Mahalliy nusxa o‘chirilsinmi?</string>
+    <string name="OxTimedPhotosRemoveInfo">Saqlangan rasm yoki video shu qurilmadan o‘chiriladi. Chat va asl xabar o‘zgarmaydi.</string>
+    <string name="OxTimedPhotosRemoveError">Mahalliy nusxani o‘chirib bo‘lmadi. Qayta urinib ko‘ring.</string>
+    <string name="OxTimedVideo">Video</string>
+</resources>

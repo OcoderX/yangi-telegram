@@ -164,6 +164,11 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
     private int currentStyle = STYLE_NOT_SET;
     private String lastString;
     private boolean isMusic;
+    private boolean musicPlayerReplacedByIsland;
+
+    public boolean isMusicPlayerReplacedByIsland() {
+        return musicPlayerReplacedByIsland;
+    }
     private boolean supportsCalls = true;
     private AvatarsImageView avatars;
 
@@ -1071,6 +1076,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
 
     private void checkVisibility() {
         boolean show = false;
+        musicPlayerReplacedByIsland = false;
         if (isLocation) {
             if (fragment instanceof DialogsActivity) {
                 show = LocationController.getLocationsCount() != 0;
@@ -1088,7 +1094,8 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
                 startJoinFlickerAnimation();
             } else {
                 MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
-                if (messageObject != null && messageObject.getId() != 0) {
+                musicPlayerReplacedByIsland = org.telegram.ui.ayu.DynamicIslandView.shouldReplaceMusicPlayer(messageObject, this);
+                if (messageObject != null && messageObject.getId() != 0 && !musicPlayerReplacedByIsland) {
                     show = true;
                 }
             }
@@ -1416,6 +1423,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
             NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
             NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.webRtcMicAmplitudeEvent);
             NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.groupCallVisibilityChanged);
+            NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.dynamicIslandPlayerChanged);
         }
 
         if (currentStyle == STYLE_ACTIVE_GROUP_CALL || currentStyle == STYLE_CONNECTING_GROUP_CALL) {
@@ -1453,6 +1461,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
             NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.webRtcSpeakerAmplitudeEvent);
             NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.webRtcMicAmplitudeEvent);
             NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.groupCallVisibilityChanged);
+            NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.dynamicIslandPlayerChanged);
 
             if (LivePlayer.recording != null) {
                 checkLiveStory(true);
@@ -1504,7 +1513,9 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.liveLocationsChanged) {
+        if (id == NotificationCenter.dynamicIslandPlayerChanged) {
+            if (!isLocation && currentStyle != STYLE_LIVE_STORY) checkPlayer(false);
+        } else if (id == NotificationCenter.liveLocationsChanged) {
             checkLiveLocation(false);
         } else if (id == NotificationCenter.liveStoryUpdated) {
             checkLiveStory(false);
@@ -1808,10 +1819,22 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
     }
 
     private void checkPlayer(boolean create) {
+        musicPlayerReplacedByIsland = false;
         if (visible && (currentStyle == STYLE_CONNECTING_GROUP_CALL || currentStyle == STYLE_ACTIVE_GROUP_CALL || (currentStyle == STYLE_INACTIVE_GROUP_CALL || currentStyle == STYLE_IMPORTING_MESSAGES) && !isPlayingVoice())) {
             return;
         }
         MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
+        musicPlayerReplacedByIsland = org.telegram.ui.ayu.DynamicIslandView.shouldReplaceMusicPlayer(messageObject, this);
+        if (musicPlayerReplacedByIsland) {
+            // Do not leave a second music control fading below the island, or let a previous
+            // show animation restore it after ownership has changed.
+            create = true;
+            if (animatorSet != null) {
+                AnimatorSet previousAnimator = animatorSet;
+                animatorSet = null;
+                previousAnimator.cancel();
+            }
+        }
         View fragmentView = fragment.getFragmentView();
         if (!create && fragmentView != null) {
             if (fragmentView.getParent() == null || ((View) fragmentView.getParent()).getVisibility() != VISIBLE) {
@@ -1819,7 +1842,7 @@ public class FragmentContextView extends FrameLayout implements NotificationCent
             }
         }
         boolean wasVisible = visible;
-        if (messageObject == null || messageObject.getId() == 0 || messageObject.isVideo()) {
+        if (messageObject == null || messageObject.getId() == 0 || messageObject.isVideo() || musicPlayerReplacedByIsland) {
             lastMessageObject = null;
             boolean callAvailable = supportsCalls && VoIPService.getSharedInstance() != null && !VoIPService.getSharedInstance().isHangingUp() && VoIPService.getSharedInstance().getCallState() != VoIPService.STATE_WAITING_INCOMING && !GroupCallPip.isShowing();
             if (!isPlayingVoice() && !callAvailable && chatActivity != null && !GroupCallPip.isShowing()) {

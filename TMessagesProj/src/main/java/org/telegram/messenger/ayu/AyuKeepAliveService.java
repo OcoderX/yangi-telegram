@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
@@ -19,17 +20,17 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.ayu.upload.AyuUploadConfig;
 import org.telegram.messenger.ayu.upload.AyuUploadManager;
+import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.ui.LaunchActivity;
 
 /**
  * AyuGram "keep-alive" service.
  * <p>
- * A minimal foreground service whose only purpose is to keep the application process alive so that
- * updates (and therefore the deleted/edited message history) keep being received while the app is in
- * the background. It does no work of its own: the persistent low-priority notification is what makes
- * Android treat the process as foreground-important.
+ * A foreground service that holds activated accounts' update connections while Android permits
+ * background data synchronization. Transport holds do not change UI pause state or online presence.
  * <p>
  * Controlled by {@link AyuConfig#keepAliveService}; call {@link #checkState(Context)} after the flag
  * changes (and once from ApplicationLoader after init) to start or stop it.
@@ -42,15 +43,28 @@ public class AyuKeepAliveService extends Service {
     private static volatile boolean running;
     private static volatile AyuKeepAliveService instance;
     private static volatile long lastNotificationUpdate;
+    private static boolean startRequested;
+    private static boolean restartBlocked;
+    private static boolean restartBlockLoaded;
+    private static final String TIMEOUT_PREFS = "ayu_background_service";
+    private static final String TIMEOUT_BLOCKED = "timeout_blocked";
+
+    private final ConnectionsManager[] heldConnections = new ConnectionsManager[UserConfig.MAX_ACCOUNT_COUNT];
+    private final long[] heldOwners = new long[UserConfig.MAX_ACCOUNT_COUNT];
+    private boolean stopping;
+    private boolean restartAfterStop;
 
     /**
      * The service is needed either because the user wants the process kept alive, or because the
-     * AyuGram upload queue still has files to send (a foreground service is the only way Android
-     * lets an upload continue while the app is in the background).
+     * AyuGram upload queue still has files to send and needs foreground execution priority.
      */
     private static boolean shouldRun() {
         if (AyuConfig.keepAliveService) {
-            return true;
+            for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
+                if (UserConfig.getInstance(account).isClientActivated()) {
+                    return true;
+                }
+            }
         }
         try {
             return AyuUploadManager.hasActiveUploads();
@@ -73,21 +87,26 @@ public class AyuKeepAliveService extends Service {
      * nothing is left to upload (unless the keep-alive option itself is on).
      */
     public static void onUploadStatusChanged(Context context) {
-        if (context == null) {
-            context = ApplicationLoader.applicationContext;
-        }
-        final AyuKeepAliveService local = instance;
-        if (local != null && running && shouldRun()) {
-            final long now = System.currentTimeMillis();
-            // throttle progress refreshes, but never skip the one that clears the progress bar
-            if (isUploading() && now - lastNotificationUpdate < 1000) {
+        final Context appContext = context == null ? ApplicationLoader.applicationContext : context.getApplicationContext();
+        AndroidUtilities.runOnUIThread(() -> {
+            final AyuKeepAliveService local = instance;
+            if (local != null && running && !local.stopping) {
+                if (!shouldRun()) {
+                    checkStateOnMain(appContext);
+                    return;
+                }
+                final long now = System.currentTimeMillis();
+                final boolean uploading = isUploading();
+                // Throttle progress refreshes, but never skip clearing the progress bar.
+                if (uploading && now - lastNotificationUpdate < 1000) {
+                    return;
+                }
+                lastNotificationUpdate = now;
+                local.updateNotification();
                 return;
             }
-            lastNotificationUpdate = now;
-            local.updateNotification();
-            return;
-        }
-        checkState(context);
+            checkStateOnMain(appContext);
+        });
     }
 
     /**
@@ -95,25 +114,74 @@ public class AyuKeepAliveService extends Service {
      * Safe to call from any thread and any number of times.
      */
     public static void checkState(Context context) {
-        if (context == null) {
-            context = ApplicationLoader.applicationContext;
+        final Context appContext = context == null ? ApplicationLoader.applicationContext : context.getApplicationContext();
+        AndroidUtilities.runOnUIThread(() -> checkStateOnMain(appContext));
+    }
+
+    /** Login/logout and slot reuse are reconciled from current identity, never a queued old owner. */
+    public static void onAccountChanged() {
+        checkState(ApplicationLoader.applicationContext);
+    }
+
+    /** A real foreground interaction allows a fresh attempt after an OS limit or start rejection. */
+    public static void onAppForeground() {
+        AndroidUtilities.runOnUIThread(() -> {
+            Context context = ApplicationLoader.applicationContext;
+            if (context == null) {
+                return;
+            }
+            SharedPreferences preferences = context.getSharedPreferences(TIMEOUT_PREFS, Context.MODE_PRIVATE);
+            if (preferences.getBoolean(TIMEOUT_BLOCKED, false)) {
+                preferences.edit().remove(TIMEOUT_BLOCKED).apply();
+            }
+            restartBlockLoaded = true;
+            restartBlocked = false;
+            checkStateOnMain(context);
+        });
+    }
+
+    private static void loadRestartBlock(Context context) {
+        if (!restartBlockLoaded) {
+            restartBlocked = context.getSharedPreferences(TIMEOUT_PREFS, Context.MODE_PRIVATE).getBoolean(TIMEOUT_BLOCKED, false);
+            restartBlockLoaded = true;
         }
+    }
+
+    private static void checkStateOnMain(Context context) {
         if (context == null) {
+            return;
+        }
+        loadRestartBlock(context);
+        final boolean needed = !restartBlocked && shouldRun();
+        final AyuKeepAliveService local = instance;
+        if (local != null) {
+            if (local.stopping) {
+                local.restartAfterStop = needed;
+                return;
+            }
+            if (!needed) {
+                local.stopSelfSafely();
+            } else if (running) {
+                local.reconcileNetworkHolds();
+                local.updateNotification();
+            }
+            return;
+        }
+        if (!needed || startRequested) {
             return;
         }
         final Intent intent = new Intent(context, AyuKeepAliveService.class);
         try {
-            if (shouldRun()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent);
-                } else {
-                    context.startService(intent);
-                }
-            } else if (running) {
-                context.stopService(intent);
+            startRequested = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
             }
         } catch (Throwable e) {
-            // starting a foreground service from the background throws on API 31+; never crash for it
+            startRequested = false;
+            restartBlocked = true;
+            // Retry on user foreground, not on every upload progress callback.
             FileLog.e(e);
         }
     }
@@ -153,7 +221,7 @@ public class AyuKeepAliveService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        running = true;
+        startRequested = false;
         instance = this;
     }
 
@@ -171,19 +239,56 @@ public class AyuKeepAliveService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        startRequested = false;
         // The service may have been started with startForegroundService(); Android then *requires*
         // startForeground() to be called before the service goes away, even when the option was
         // switched off in the meantime. So always enter the foreground first, then stop if disabled.
         final boolean inForeground = enterForeground();
         if (!inForeground) {
+            restartBlocked = true;
             stopSelfSafely();
             return START_NOT_STICKY;
         }
-        if (!shouldRun()) {
+        ApplicationLoader.postInitApplication();
+        loadRestartBlock(this);
+        if (stopping || restartBlocked || !shouldRun()) {
             stopSelfSafely();
             return START_NOT_STICKY;
         }
+        running = true;
+        reconcileNetworkHolds();
         return START_STICKY;
+    }
+
+    private void reconcileNetworkHolds() {
+        for (int account = 0; account < heldOwners.length; account++) {
+            long owner = running && !stopping && AyuConfig.keepAliveService
+                    ? UserConfig.getInstance(account).getClientUserId() : 0;
+            if (heldOwners[account] == owner) {
+                continue;
+            }
+            if (heldConnections[account] != null) {
+                heldConnections[account].setBackgroundNetworkEnabled(heldOwners[account], false);
+                heldConnections[account] = null;
+                heldOwners[account] = 0;
+            }
+            if (owner != 0) {
+                ConnectionsManager connection = ConnectionsManager.getInstance(account);
+                connection.setBackgroundNetworkEnabled(owner, true);
+                heldConnections[account] = connection;
+                heldOwners[account] = owner;
+            }
+        }
+    }
+
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        // Android 15 dataSync limits also apply to sticky restarts. Only user foreground unblocks it.
+        restartBlocked = true;
+        restartBlockLoaded = true;
+        getSharedPreferences(TIMEOUT_PREFS, Context.MODE_PRIVATE).edit().putBoolean(TIMEOUT_BLOCKED, true).apply();
+        restartAfterStop = false;
+        stopSelfSafely();
     }
 
     /** promotes the service to the foreground; returns false when that was not possible */
@@ -203,11 +308,21 @@ public class AyuKeepAliveService extends Service {
     }
 
     private void stopSelfSafely() {
+        stopping = true;
+        running = false;
+        reconcileNetworkHolds();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(Service.STOP_FOREGROUND_REMOVE);
             } else {
                 stopForeground(true);
+            }
+        } catch (Throwable ignore) {
+        }
+        try {
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager != null) {
+                manager.cancel(NOTIFICATION_ID);
             }
         } catch (Throwable ignore) {
         }
@@ -249,6 +364,8 @@ public class AyuKeepAliveService extends Service {
             builder.setPriority(NotificationCompat.PRIORITY_LOW);
             builder.setCategory(NotificationCompat.CATEGORY_PROGRESS);
             builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE);
+        } else {
+            builder.setProgress(0, 0, false);
         }
         return builder.build();
     }
@@ -279,11 +396,16 @@ public class AyuKeepAliveService extends Service {
 
     @Override
     public void onDestroy() {
-        running = false;
+        stopping = true;
+        reconcileNetworkHolds();
         if (instance == this) {
+            running = false;
             instance = null;
         }
         super.onDestroy();
+        if (restartAfterStop && !restartBlocked) {
+            checkState(ApplicationLoader.applicationContext);
+        }
     }
 
     @Override

@@ -6,6 +6,7 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.ayu.AyuHistoryStorage;
+import org.telegram.messenger.ayu.AyuChatCapturePolicy;
 import org.telegram.messenger.ayu.AyuMessagesController;
 import org.telegram.tgnet.SerializedData;
 import org.telegram.tgnet.TLRPC;
@@ -51,10 +52,15 @@ public class AyuEditHistoryDetector {
                 return;
             }
 
+            AyuChatCapturePolicy.load();
+            if (!AyuChatCapturePolicy.isEnabled(currentAccount, dialogId, messages.messages.get(0))) {
+                return;
+            }
+
             final HashMap<Integer, TLRPC.Message> candidates = new HashMap<>();
             for (int a = 0, N = messages.messages.size(); a < N && candidates.size() < MAX_BATCH; a++) {
                 final TLRPC.Message message = messages.messages.get(a);
-                if (message == null || message instanceof TLRPC.TL_messageEmpty) {
+                if (!AyuChatCapturePolicy.isRetainableMessage(message)) {
                     continue;
                 }
                 if (message.id <= 0 || message.edit_date == 0) {
@@ -79,7 +85,8 @@ public class AyuEditHistoryDetector {
             if (stored.isEmpty()) {
                 return;
             }
-            AyuHistoryStorage.getQueue().postRunnable(() -> compare(currentAccount, dialogId, candidates, stored));
+            final long owner = UserConfig.getInstance(currentAccount).getClientUserId();
+            AyuHistoryStorage.getQueue().postRunnable(() -> compare(currentAccount, owner, dialogId, candidates, stored));
         } catch (Throwable e) {
             FileLog.e(e);
         }
@@ -139,13 +146,15 @@ public class AyuEditHistoryDetector {
     }
 
     /** //perf: runs on the edit-history queue, never on the storage queue */
-    private static void compare(int currentAccount, long dialogId, HashMap<Integer, TLRPC.Message> candidates, ArrayList<StoredRow> stored) {
+    private static void compare(int currentAccount, long owner, long dialogId, HashMap<Integer, TLRPC.Message> candidates, ArrayList<StoredRow> stored) {
         try {
             final long selfId = UserConfig.getInstance(currentAccount).clientUserId;
+            if (owner == 0 || selfId != owner || !AyuEditHistoryConfig.isCaptureEnabled()
+                    || !AyuEditHistoryConfig.captureOnHistoryLoad) return;
             for (int a = 0; a < stored.size(); a++) {
                 final StoredRow row = stored.get(a);
                 final TLRPC.Message newMessage = candidates.get(row.id);
-                if (newMessage == null) {
+                if (newMessage == null || !AyuChatCapturePolicy.isEnabled(currentAccount, dialogId, newMessage)) {
                     continue;
                 }
                 final TLRPC.Message oldMessage = deserialize(row, dialogId, selfId);

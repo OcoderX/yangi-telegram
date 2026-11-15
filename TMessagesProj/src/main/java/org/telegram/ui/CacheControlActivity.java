@@ -1098,6 +1098,7 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
 
         if (allItemsClear) {
             FileLoader.getInstance(currentAccount).clearFilePaths();
+            org.telegram.ui.ayu.OxChannelMembershipGate.onCacheCleared();
         }
         FileLoader.getInstance(currentAccount).checkCurrentDownloadsFiles();
 

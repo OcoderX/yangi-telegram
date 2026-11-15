@@ -5,6 +5,10 @@ import android.text.Spanned;
 import android.text.TextUtils;
 
 import org.telegram.messenger.CodeHighlighting;
+import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.R;
+import org.telegram.tgnet.tl.TL_keyboard;
 import org.telegram.tgnet.tl.TL_iv;
 import org.telegram.ui.Components.QuoteSpan;
 import org.telegram.ui.Components.TextStyleSpan;
@@ -69,6 +73,7 @@ public class RichMessageConvert {
                 final TL_iv.pageBlockBlockquote bq = new TL_iv.pageBlockBlockquote();
                 bq.text = RichTextStyle.fromSpannable(content);
                 bq.caption = new TL_iv.textEmpty();
+                bq.collapsed = quote != null && quote.isCollapsing;
                 blocks.add(bq);
             }
             i = j;
@@ -156,7 +161,7 @@ public class RichMessageConvert {
         if (block instanceof TL_iv.pageBlockDetails) {
             final TL_iv.pageBlockDetails d = (TL_iv.pageBlockDetails) block;
             final ArrayList<CharSequence> parts = new ArrayList<>();
-            final CharSequence title = bold(RichTextStyle.toSpannable(d.title));
+            final CharSequence title = RichTextStyle.toSpannable(d.title);
             if (!TextUtils.isEmpty(title)) parts.add(title);
             collectBlocks(parts, d.blocks);
             return parts.isEmpty() ? null : join(parts);
@@ -181,6 +186,23 @@ public class RichMessageConvert {
 
         if (block instanceof TL_iv.pageBlockDivider) {
             return "——————————";
+        }
+
+        if (block instanceof TL_iv.pageBlockButtonRow) {
+            final SpannableStringBuilder text = new SpannableStringBuilder();
+            for (TL_keyboard.PageButton button : ((TL_iv.pageBlockButtonRow) block).buttons) {
+                if (text.length() > 0) text.append("  ");
+                text.append(RichTextStyle.toSimpleSpannable(button.text, block));
+            }
+            return text;
+        }
+
+        if (block instanceof TL_iv.pageBlockDocument) {
+            return LocaleController.getString(R.string.AttachDocument);
+        }
+
+        if (block instanceof TL_iv.pageBlockUnsupported) {
+            return LocaleController.getString(R.string.UnsupportedAttachment);
         }
 
         if (isHeading(block)) {
@@ -230,7 +252,7 @@ public class RichMessageConvert {
 
     private static CharSequence renderTable(TL_iv.pageBlockTable table) {
         final ArrayList<CharSequence> lines = new ArrayList<>();
-        final CharSequence title = bold(RichTextStyle.toSpannable(table.title));
+        final CharSequence title = RichTextStyle.toSpannable(table.title);
         if (!TextUtils.isEmpty(title)) lines.add(title);
         if (table.rows != null) {
             for (TL_iv.pageTableRow row : table.rows) {
@@ -367,6 +389,10 @@ public class RichMessageConvert {
     }
 
     public static CharSequence rowsToCharSequence(List<BlockRow> rows) {
+        return rowsToCharSequence(rows, false);
+    }
+
+    private static CharSequence rowsToCharSequence(List<BlockRow> rows, boolean simple) {
         final ArrayList<CharSequence> units = new ArrayList<>();
         int i = 0;
         while (rows != null && i < rows.size()) {
@@ -377,21 +403,24 @@ public class RichMessageConvert {
                 int j = i;
                 while (j < rows.size() && !rows.get(j).quoteIds.isEmpty() && rows.get(j).quoteIds.get(0) == qid) {
                     if (j > i) q.append('\n');
-                    q.append(renderLeaf(rows.get(j)));
+                    q.append(renderLeaf(rows.get(j), simple));
                     j++;
                 }
                 if (q.length() > 0) QuoteSpan.putQuote(q, 0, q.length(), false);
                 units.add(q);
                 i = j;
             } else if (isQuoteLeaf(r.block)) {
-                final SpannableStringBuilder q = new SpannableStringBuilder(RichTextStyle.toSpannable(r.block.text, r.block));
+                final CharSequence text = simple
+                        ? RichTextStyle.toSimpleSpannable(r.block.text, r.block)
+                        : RichTextStyle.toSpannable(r.block.text, r.block);
+                final SpannableStringBuilder q = new SpannableStringBuilder(text);
                 final boolean collapsed = r.block instanceof TL_iv.pageBlockBlockquote
                         && ((TL_iv.pageBlockBlockquote) r.block).collapsed;
                 if (q.length() > 0) QuoteSpan.putQuote(q, 0, q.length(), collapsed);
                 units.add(q);
                 i++;
             } else {
-                units.add(renderLeaf(r));
+                units.add(renderLeaf(r, simple));
                 i++;
             }
         }
@@ -399,7 +428,7 @@ public class RichMessageConvert {
     }
 
     public static CharSequence rowsToSimpleMessage(List<BlockRow> rows) {
-        final SpannableStringBuilder sb = new SpannableStringBuilder(rowsToCharSequence(rows));
+        final SpannableStringBuilder sb = new SpannableStringBuilder(rowsToCharSequence(rows, true));
         final int n = sb.length();
         RichTextStyle.setStyle(sb, 0, n, RichTextStyle.MARKED, false);
         RichTextStyle.setStyle(sb, 0, n, RichTextStyle.SUBSCRIPT, false);
@@ -423,21 +452,34 @@ public class RichMessageConvert {
             }
             return false;
         }
-        if (rt instanceof TL_iv.textMarked
-                || rt instanceof TL_iv.textSubscript
-                || rt instanceof TL_iv.textSuperscript
-                || rt instanceof TL_iv.textMath) {
-            return true;
+        if (rt instanceof TL_iv.textBold
+                || rt instanceof TL_iv.textItalic
+                || rt instanceof TL_iv.textUnderline
+                || rt instanceof TL_iv.textStrike
+                || rt instanceof TL_iv.textFixed
+                || rt instanceof TL_iv.textSpoiler
+                || rt instanceof TL_iv.textUrl
+                || rt instanceof TL_iv.textDate) {
+            return inlineLossy(rt.text);
         }
-        return inlineLossy(rt.text);
+        return true;
     }
 
     private static boolean isQuoteLeaf(TL_iv.PageBlock b) {
         return b instanceof TL_iv.pageBlockBlockquote || b instanceof TL_iv.pageBlockPullquote;
     }
 
-    private static CharSequence renderLeaf(BlockRow r) {
-        final CharSequence cs = RichTextStyle.toSpannable(r.block == null ? null : r.block.text, r.block);
+    private static CharSequence renderLeaf(BlockRow r, boolean simple) {
+        if (r.block instanceof TL_iv.pageBlockButtonRow || r.block instanceof TL_iv.pageBlockUnsupported) {
+            return renderBlock(r.block);
+        }
+        if (r.block instanceof TL_iv.pageBlockDocument) {
+            final String name = r.media == null || r.media.document == null ? null : FileLoader.getDocumentFileName(r.media.document);
+            return TextUtils.isEmpty(name) ? LocaleController.getString(R.string.AttachDocument) : name;
+        }
+        final CharSequence cs = simple
+                ? RichTextStyle.toSimpleSpannable(r.block == null ? null : r.block.text, r.block)
+                : RichTextStyle.toSpannable(r.block == null ? null : r.block.text, r.block);
         if (r.block instanceof TL_iv.pageBlockPreformatted) {
             final SpannableStringBuilder sb = new SpannableStringBuilder(cs);
             final String lng = ((TL_iv.pageBlockPreformatted) r.block).language;

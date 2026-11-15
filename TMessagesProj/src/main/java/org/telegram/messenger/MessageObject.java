@@ -764,6 +764,8 @@ public class MessageObject {
 
     public void copyStableParams(MessageObject old) {
         stableId = old.stableId;
+        putInDownloadsStore = old.putInDownloadsStore;
+        loadingCancelled = old.loadingCancelled;
         messageOwner.premiumEffectWasPlayed = old.messageOwner.premiumEffectWasPlayed;
         forcePlayEffect = old.forcePlayEffect;
         wasJustSent = old.wasJustSent;
@@ -6128,7 +6130,7 @@ public class MessageObject {
         return out;
     }
     public static boolean isBlueBlock(TL_iv.PageBlock block) {
-        return block instanceof TL_iv.pageBlockTable || block instanceof TL_iv.pageBlockMath || block instanceof TL_iv.pageBlockAudio || block instanceof TL_iv.pageBlockMap || block instanceof TL_iv.pageBlockPhoto || block instanceof TL_iv.pageBlockVideo || block instanceof TL_iv.pageBlockCollage || block instanceof TL_iv.pageBlockSlideshow;
+        return block instanceof TL_iv.pageBlockTable || block instanceof TL_iv.pageBlockMath || block instanceof TL_iv.pageBlockAudio || block instanceof TL_iv.pageBlockDocument || block instanceof TL_iv.pageBlockMap || block instanceof TL_iv.pageBlockPhoto || block instanceof TL_iv.pageBlockVideo || block instanceof TL_iv.pageBlockCollage || block instanceof TL_iv.pageBlockSlideshow;
     }
     public static SpannableStringBuilder span(String str, int icon) {
         final SpannableStringBuilder sb = new SpannableStringBuilder(str);
@@ -6263,7 +6265,7 @@ public class MessageObject {
             final TL_iv.pageBlockTable table = (TL_iv.pageBlockTable) block;
             out.append(span("⊞", R.drawable.iv_preview_table)).append(" ");
             if (table.title != null && !(table.title instanceof TL_iv.textEmpty)) {
-                formatRichText(table.title, isOut, photoViewer, maxLength, out, TextStyleSpan.FLAG_STYLE_BOLD);
+                formatRichText(table.title, isOut, photoViewer, maxLength, out, 0);
             } else {
                 out.append(getString(R.string.AccDescrIVTable));
             }
@@ -6291,6 +6293,10 @@ public class MessageObject {
                     out.append(span("🎵", R.drawable.iv_audio_preview)).append(" ").append(fileAttr.file_name);
                 }
             }
+        } else if (block instanceof TL_iv.pageBlockDocument) {
+            final TLRPC.Document document = AndroidUtilities.findDocument(richMessage.documents, ((TL_iv.pageBlockDocument) block).document_id);
+            final String name = document == null ? null : FileLoader.getDocumentFileName(document);
+            out.append(span("📎", R.drawable.msg_filled_data_files)).append(" ").append(TextUtils.isEmpty(name) ? getString(R.string.AttachDocument) : name);
         } else if (block instanceof TL_iv.pageBlockCover) {
             formatRichBlock(((TL_iv.pageBlockCover) block).cover, isOut, photoViewer, maxLength, out, richMessage);
         } else if (block instanceof TL_iv.pageBlockPhoto) {
@@ -6303,6 +6309,12 @@ public class MessageObject {
             out.append(getString(R.string.AccDescrIVSlideshow));
         } else if (block instanceof TL_iv.pageBlockUnsupported) {
             out.append(getString(R.string.UnsupportedAttachment));
+        } else if (block instanceof TL_iv.pageBlockButtonRow) {
+            final TL_iv.pageBlockButtonRow row = (TL_iv.pageBlockButtonRow) block;
+            for (int i = 0; i < row.buttons.size(); ++i) {
+                if (i > 0) out.append("  ");
+                formatRichText(row.buttons.get(i).text, isOut, photoViewer, maxLength, out, 0);
+            }
         }
         return out;
     }
@@ -6311,6 +6323,10 @@ public class MessageObject {
         int start = out.length();
         if (text instanceof TL_iv.textPlain) {
             out.append(((TL_iv.textPlain) text).text);
+        } else if (text instanceof TL_iv.textButton) {
+            formatRichText(text.text, isOut, photoViewer, maxLength, out, flags);
+        } else if (text instanceof TL_iv.textTonAddress) {
+            formatRichText(text.text, isOut, photoViewer, maxLength, out, flags);
         } else if (text instanceof TL_iv.textBold) {
             formatRichText(text.text, isOut, photoViewer, maxLength, out, flags | TextStyleSpan.FLAG_STYLE_BOLD);
         } else if (text instanceof TL_iv.textItalic) {

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxSimpleConversionTitle">Moslashtirilgan xabar</string>
+    <string name="OxSimpleConversionDescription">O‘z nomingizdan yuboriladigan oddiy xabarni tekshiring. Moslashtirilgan matn qoralamaga qo‘yiladi; yuborishni o‘zingiz tasdiqlaysiz.</string>
+    <string name="OxSimpleConversionPreviewLabel">Xabar ko‘rinishi</string>
+    <string name="OxSimpleConversionChanges">Nimalar o‘zgaradi</string>
+    <string name="OxSimpleConversionStyle">Sarlavhalar qalin matnga aylantiriladi. Ranglar va maxsus ko‘rinish olib tashlanadi.</string>
+    <string name="OxSimpleConversionTable">Jadvallar qator va ustunlari ajratilgan matnga aylantiriladi.</string>
+    <string name="OxSimpleConversionButtons">Havolali tugmalar matn ichidagi havolalarga aylantiriladi.</string>
+    <string name="OxSimpleConversionInteractive">Interaktiv amallar olib tashlanadi va ishga tushmaydi.</string>
+    <string name="OxSimpleConversionMedia">Rasm, video, audio va fayllar bu matnga biriktirilmaydi.</string>
+    <string name="OxSimpleConversionUnknown">Baʼzi qo‘llanmaydigan qismlar moslashtirilmadi. Xabar ko‘rinishini tekshiring.</string>
+    <string name="OxSimpleConversionLimit">Xabar juda uzun yoki murakkab. Uni qisqartirib qayta urinib ko‘ring.</string>
+    <string name="OxSimpleConversionBlocked">Moslashtirish yakunlanmadi. Asl xabarni tahrirlashni davom ettiring.</string>
+    <string name="OxSimpleConversionEmpty">Moslashtiriladigan matn yo‘q.</string>
+    <string name="OxSimpleConversionApply">Matnga moslashtirish</string>
+    <string name="OxSimpleConversionCancel">Bekor qilish</string>
+    <string name="OxRichConversionEditUnavailableTitle">Murakkab xabarni tahrirlash</string>
+    <string name="OxRichConversionEditUnavailable">Bu murakkab xabarni joriy hisobdan oddiy matn sifatida tahrirlab bo‘lmaydi. Matnini yangi qoralamaga ko‘chiring yoki bekor qiling; asl xabar o‘zgarmaydi.</string>
+    <string name="OxSimpleLabelUnknown">[Qo‘llanmaydigan mazmun]</string>
+    <string name="OxSimpleLabelMediaNotAttached">%1$s biriktirilmadi</string>
+    <string name="OxSimpleLabelFile">Fayl</string>
+    <string name="OxSimpleLabelAudio">Audio</string>
+    <string name="OxSimpleLabelVideo">Video</string>
+    <string name="OxSimpleLabelPhoto">Rasm</string>
+    <string name="OxSimpleLabelWeb">Veb sahifa</string>
+    <string name="OxSimpleLabelAnimation">Animatsiya</string>
+    <string name="OxSimpleLabelMap">Xarita</string>
+    <string name="OxSimpleLabelEmoji">[Emoji]</string>
+    <string name="OxSimpleLabelRemovedAction">[Interaktiv amal olib tashlandi]</string>
+    <string name="OxSimpleLabelChannel">Kanal</string>
+    <string name="OxRichConversionPendingUploads">Moslashtirishdan oldin biriktirmalar yuklanishini kuting.</string>
+</resources>

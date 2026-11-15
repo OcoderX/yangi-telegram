@@ -1172,7 +1172,7 @@ public class AnimatedTextView extends View {
         }
         lastMaxWidth = width;
         if (adaptWidth && MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.AT_MOST) {
-            width = getPaddingLeft() + (int) Math.ceil(drawable.getWidth()) + getPaddingRight();
+            width = Math.min(width, getPaddingLeft() + (int) Math.ceil(drawable.getWidth()) + getPaddingRight());
         }
         setMeasuredDimension(width, height);
     }

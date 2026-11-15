@@ -161,6 +161,7 @@ public class SpecialContactsActivity extends BaseFragment implements Notificatio
     private void updateRows() {
         userIds.clear();
         userIds.addAll(SpecialContactsConfig.getAll());
+        userIds.removeIf(id -> org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(id));
 
         rowCount = 0;
         addRow = rowCount++;

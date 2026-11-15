@@ -18,6 +18,8 @@ import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.ayu.AyuConstants;
 import org.telegram.ui.LaunchActivity;
 
@@ -38,16 +40,34 @@ public class RadarNotifier {
     /** far away from Telegram's own notification ids (and from AyuKeepAliveService's 3117) */
     private static final int NOTIFICATION_ID_BASE = 74100;
 
+    private static boolean canNotify(int account) {
+        return SharedConfig.showNotificationsForAllAccounts || account == UserConfig.selectedAccount;
+    }
+
     public static void notifyKeywordHits(int account, ArrayList<RadarHit> hits) {
-        if (hits == null || hits.isEmpty() || !RadarConfig.notifyOnKeyword) {
+        if (hits == null || hits.isEmpty() || !RadarConfig.notifyOnKeyword || !canNotify(account)) {
             return;
         }
-        final RadarHit last = hits.get(hits.size() - 1);
-        final int count = hits.size();
+        RadarHit visibleLast = null;
+        int visibleCount = 0;
+        org.telegram.messenger.ayu.hidden.HiddenChatsController hidden = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(account);
+        for (RadarHit hit : hits) {
+            if (hit != null && !hidden.isHidden(hit.dialogId)) {
+                visibleLast = hit;
+                visibleCount++;
+            }
+        }
+        if (visibleLast == null) return;
+        final RadarHit last = visibleLast;
+        final int count = visibleCount;
         AndroidUtilities.runOnUIThread(() -> post(account, last, count));
     }
 
     private static void post(int account, RadarHit hit, int count) {
+        if (!canNotify(account) || hit == null
+                || org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(account).isHidden(hit.dialogId)) {
+            return;
+        }
         try {
             Context context = ApplicationLoader.applicationContext;
             if (context == null || hit == null) {
@@ -96,7 +116,14 @@ public class RadarNotifier {
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE);
 
             Notification notification = builder.build();
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_BASE + account, notification);
+            if (!canNotify(account)) {
+                return;
+            }
+            NotificationManagerCompat manager = NotificationManagerCompat.from(context);
+            manager.notify(NOTIFICATION_ID_BASE + account, notification);
+            if (!canNotify(account)) {
+                manager.cancel(NOTIFICATION_ID_BASE + account);
+            }
         } catch (Throwable e) {
             FileLog.e(e);
         }
@@ -132,5 +159,43 @@ public class RadarNotifier {
         } catch (Throwable e) {
             FileLog.e(e);
         }
+    }
+
+    public static void cancelInactiveNotifications() {
+        if (SharedConfig.showNotificationsForAllAccounts) {
+            return;
+        }
+        AndroidUtilities.runOnUIThread(() -> {
+            if (SharedConfig.showNotificationsForAllAccounts) {
+                return;
+            }
+            try {
+                Context context = ApplicationLoader.applicationContext;
+                if (context == null) {
+                    return;
+                }
+                NotificationManagerCompat manager = NotificationManagerCompat.from(context);
+                for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
+                    if (SharedConfig.showNotificationsForAllAccounts) {
+                        return;
+                    }
+                    if (account != UserConfig.selectedAccount) {
+                        manager.cancel(NOTIFICATION_ID_BASE + account);
+                    }
+                }
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
+    }
+
+    public static void cancelForAccount(int account) {
+        AndroidUtilities.runOnUIThread(() -> {
+            try {
+                NotificationManagerCompat.from(ApplicationLoader.applicationContext).cancel(NOTIFICATION_ID_BASE + account);
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
     }
 }

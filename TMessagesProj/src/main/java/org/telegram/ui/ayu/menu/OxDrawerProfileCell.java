@@ -39,12 +39,21 @@ public class OxDrawerProfileCell extends FrameLayout {
     private final TextView nameTextView;
     private final TextView phoneTextView;
     private final ImageView arrowView;
-    private final AvatarDrawable avatarDrawable = new AvatarDrawable();
+    private final AvatarDrawable avatarDrawable;
+    private final Theme.ResourcesProvider resourcesProvider;
+    private PorterDuffColorFilter arrowColorFilter;
+    private int arrowColor;
 
     private int accountNumber = UserConfig.selectedAccount;
 
     public OxDrawerProfileCell(Context context) {
+        this(context, null);
+    }
+
+    public OxDrawerProfileCell(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
+        this.resourcesProvider = resourcesProvider;
+        avatarDrawable = new AvatarDrawable(resourcesProvider);
 
         avatarImageView = new BackupImageView(context);
         avatarImageView.setRoundRadius(dp(32));
@@ -73,6 +82,8 @@ public class OxDrawerProfileCell extends FrameLayout {
         arrowView.setScaleType(ImageView.ScaleType.CENTER);
         arrowView.setImageResource(R.drawable.ic_arrow_drop_down);
         addView(arrowView, LayoutHelper.createFrame(48, 48, Gravity.RIGHT | Gravity.TOP, 0, 88, 6, 0));
+
+        updateColors();
     }
 
     @Override
@@ -83,11 +94,14 @@ public class OxDrawerProfileCell extends FrameLayout {
 
     /** Repaints every piece with the current theme; call it from {@code updateThemeColors()} too. */
     public void updateColors() {
-        setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground));
-        nameTextView.setTextColor(Theme.getColor(Theme.key_chats_menuName));
-        phoneTextView.setTextColor(Theme.getColor(Theme.key_chats_menuPhone));
-        arrowView.setColorFilter(new PorterDuffColorFilter(
-                Theme.getColor(Theme.key_chats_menuName), PorterDuff.Mode.SRC_IN));
+        setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+        nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+        phoneTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
+        final int color = Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider);
+        if (arrowColorFilter == null || arrowColor != color) {
+            arrowColor = color;
+            arrowView.setColorFilter(arrowColorFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        }
     }
 
     /** Binds the cell to {@code account} and points the arrow up when the account list is open. */

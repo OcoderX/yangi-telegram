@@ -2,7 +2,6 @@ package org.telegram.ui.ayu;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
-import static org.telegram.ui.Components.Premium.LimitReachedBottomSheet.TYPE_ACCOUNTS;
 
 import android.app.Activity;
 import android.content.Context;
@@ -33,8 +32,10 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_stars;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.ActionIntroActivity;
 import org.telegram.ui.CallLogActivity;
 import org.telegram.ui.Cells.DividerCell;
@@ -45,7 +46,6 @@ import org.telegram.ui.ChannelCreateActivity;
 import org.telegram.ui.ChatActivity;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
-import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.ContactsActivity;
 import org.telegram.ui.DialogsActivity;
@@ -150,6 +150,7 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
         }
         getNotificationCenter().addObserver(this, NotificationCenter.mainUserInfoChanged);
         getNotificationCenter().addObserver(this, NotificationCenter.updateInterfaces);
+        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewTheme);
         return super.onFragmentCreate();
     }
 
@@ -157,6 +158,7 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
     public void onFragmentDestroy() {
         getNotificationCenter().removeObserver(this, NotificationCenter.mainUserInfoChanged);
         getNotificationCenter().removeObserver(this, NotificationCenter.updateInterfaces);
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.didSetNewTheme);
         super.onFragmentDestroy();
     }
 
@@ -187,6 +189,13 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT,
                 Gravity.TOP | (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT)));
         listView.setOnItemClickListener((view, position) -> onItemClick(view, position));
+        listView.setOnItemLongClickListener((view, position) -> {
+            if (position < 0 || position >= items.size()) return false;
+            int id = items.get(position).id;
+            if (id != ID_CONTACTS && id != ID_SETTINGS && id != ID_ALL_SETTINGS) return false;
+            org.telegram.ui.ayu.hidden.HiddenChatsUi.open(this);
+            return true;
+        });
 
         if (hasMainTabs) {
             // the action bar overlays the page and the floating tabs bar covers its bottom
@@ -202,12 +211,19 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
     @Override
     public void onResume() {
         super.onResume();
+        updateThemeColors();
         updateRows();
     }
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.updateInterfaces) {
+        if (id == NotificationCenter.didSetNewTheme) {
+            // needSetDayNightTheme is only a request; its colors can still belong to the old theme.
+            updateThemeColors();
+            if (adapter != null) {
+                adapter.notifyDataSetChanged();
+            }
+        } else if (id == NotificationCenter.updateInterfaces) {
             //perf: updateInterfaces fires for every online-status / typing / read update; this page
             // only shows names, avatars, phones and emoji statuses, so everything else is ignored
             // instead of rebinding the whole list
@@ -225,6 +241,64 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
                 adapter.notifyDataSetChanged();
             }
         }
+    }
+
+    private void updateThemeColors() {
+        if (fragmentView != null) {
+            fragmentView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        }
+        if (listView != null) {
+            listView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
+            listView.setListSelectorColor(getThemedColor(Theme.key_listSelector));
+            for (int i = 0; i < listView.getChildCount(); i++) {
+                updateCellColors(listView.getChildAt(i));
+            }
+        }
+        if (actionBar != null) {
+            actionBar.setBackgroundColor(getThemedColor(Theme.key_actionBarDefault));
+            actionBar.setTitleColor(getThemedColor(Theme.key_actionBarDefaultTitle));
+            actionBar.setItemsColor(getThemedColor(Theme.key_actionBarDefaultIcon), false);
+        }
+    }
+
+    private void updateCellColors(View view) {
+        view.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        if (view instanceof OxDrawerProfileCell) {
+            ((OxDrawerProfileCell) view).updateColors();
+        } else if (view instanceof OxDrawerUserCell) {
+            ((OxDrawerUserCell) view).updateColors();
+        } else if (view instanceof HeaderCell) {
+            ((HeaderCell) view).setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlueHeader));
+        } else if (view instanceof TextCell) {
+            final TextCell cell = (TextCell) view;
+            cell.updateColors();
+            if (cell.getCheckBox() != null) {
+                cell.getCheckBox().setChecked(Theme.isCurrentThemeDark(), false);
+                cell.getCheckBox().invalidate();
+            }
+        }
+        view.invalidate();
+    }
+
+    @Override
+    public ArrayList<ThemeDescription> getThemeDescriptions() {
+        final ArrayList<ThemeDescription> descriptions = new ArrayList<>();
+        // ViewPagerActivity forwards these to the native theme animator, including this page.
+        // Repaint attached cells only; cached/recycled cells resolve colors again when bound.
+        final ThemeDescription.ThemeDescriptionDelegate delegate = this::updateThemeColors;
+        final int[] keys = {
+                Theme.key_windowBackgroundWhite, Theme.key_windowBackgroundWhiteBlackText,
+                Theme.key_windowBackgroundWhiteGrayText, Theme.key_windowBackgroundWhiteGrayIcon,
+                Theme.key_windowBackgroundWhiteBlueText, Theme.key_windowBackgroundWhiteBlueHeader,
+                Theme.key_actionBarDefault, Theme.key_actionBarDefaultTitle, Theme.key_actionBarDefaultIcon,
+                Theme.key_listSelector, Theme.key_divider, Theme.key_switchTrack, Theme.key_switchTrackChecked
+        };
+        for (int key : keys) {
+            final ThemeDescription description = new ThemeDescription(null, 0, null, null, null, delegate, key);
+            description.resourcesProvider = getResourceProvider();
+            descriptions.add(description);
+        }
+        return descriptions;
     }
 
     // ------------------------------------------------------------------ rows
@@ -305,10 +379,9 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
             items.add(Item.divider());
             items.add(Item.action(ID_CONTACTS, R.drawable.msg_contacts, getString(R.string.Contacts)));
             items.add(Item.action(ID_CALLS, R.drawable.msg_calls, getString(R.string.Calls)));
-            items.add(Item.action(ID_SAVED_MESSAGES, R.drawable.msg_saved, getString(R.string.SavedMessages)));
-        }
-        items.add(Item.action(ID_SETTINGS, R.drawable.msg_settings, getString(R.string.Settings)));
-        if (!bot) {
+            if (!org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(getUserConfig().getClientUserId())) {
+                items.add(Item.action(ID_SAVED_MESSAGES, R.drawable.msg_saved, getString(R.string.SavedMessages)));
+            }
             items.add(Item.divider());
             items.add(Item.action(ID_INVITE, R.drawable.settings_invite, getString(R.string.InviteFriends)));
         }
@@ -579,25 +652,21 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
         Theme.turnOffAutoNight(BulletinFactory.of(this), () -> presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_NIGHT)));
     }
 
+    private AlertDialog accountLimitDialog() {
+        return new AlertDialog.Builder(getContext())
+                .setTitle(LocaleController.getString(R.string.AppName))
+                .setMessage(AndroidUtilities.replaceTags(LocaleController.formatString(R.string.LimitReachedAccountsPremium, UserConfig.MAX_ACCOUNT_COUNT)))
+                .setPositiveButton(LocaleController.getString(R.string.OK), null)
+                .create();
+    }
+
     /** Opens the login screen in a free account slot, exactly like the classic "Add account" row. */
     private void openAddAccount() {
-        int freeAccounts = 0;
-        Integer availableAccount = null;
-        for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
-            if (!UserConfig.getInstance(a).isClientActivated()) {
-                freeAccounts++;
-                if (availableAccount == null) {
-                    availableAccount = a;
-                }
-            }
-        }
-        if (!UserConfig.hasPremiumOnAccounts()) {
-            freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-        }
-        if (freeAccounts > 0 && availableAccount != null) {
+        final int availableAccount = UserConfig.findFreeAccount();
+        if (availableAccount >= 0) {
             presentFragment(new LoginActivity(availableAccount));
-        } else if (!UserConfig.hasPremiumOnAccounts() && getContext() != null) {
-            showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
+        } else if (getContext() != null) {
+            showDialog(accountLimitDialog());
         }
     }
 
@@ -704,29 +773,29 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
             View view;
             switch (viewType) {
                 case VIEW_TYPE_PROFILE:
-                    view = new OxDrawerProfileCell(context);
+                    view = new OxDrawerProfileCell(context, getResourceProvider());
                     break;
                 case VIEW_TYPE_ACCOUNT:
-                    view = new OxDrawerUserCell(context);
+                    view = new OxDrawerUserCell(context, getResourceProvider());
                     view.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
                     break;
                 case VIEW_TYPE_DIVIDER:
-                    view = new DividerCell(context);
+                    view = new DividerCell(context, getResourceProvider());
                     view.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
                     view.setPadding(dp(24), dp(4), dp(24), dp(4));
                     break;
                 case VIEW_TYPE_HEADER: {
-                    HeaderCell cell = new HeaderCell(context);
+                    HeaderCell cell = new HeaderCell(context, getResourceProvider());
                     cell.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
                     view = cell;
                     break;
                 }
                 case VIEW_TYPE_SHADOW:
-                    view = new ShadowSectionCell(context);
+                    view = new ShadowSectionCell(context, getResourceProvider());
                     break;
                 case VIEW_TYPE_CHECK:
                 default: {
-                    TextCell cell = new TextCell(context, 23, false, viewType == VIEW_TYPE_CHECK, null);
+                    TextCell cell = new TextCell(context, 23, false, viewType == VIEW_TYPE_CHECK, getResourceProvider());
                     cell.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
                     view = cell;
                     break;
@@ -739,6 +808,7 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
 
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            holder.itemView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
             final Item item = items.get(position);
             switch (holder.getItemViewType()) {
                 case VIEW_TYPE_PROFILE:
@@ -748,18 +818,21 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
                     ((OxDrawerUserCell) holder.itemView).setAccount(item.account, item.account == currentAccount);
                     break;
                 case VIEW_TYPE_HEADER:
+                    ((HeaderCell) holder.itemView).setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlueHeader));
                     ((HeaderCell) holder.itemView).setText(item.text);
                     break;
                 case VIEW_TYPE_CHECK: {
                     TextCell cell = (TextCell) holder.itemView;
                     cell.setTextAndCheckAndIcon(item.text, Theme.isCurrentThemeDark(), item.icon, false);
-                    cell.setColors(Theme.key_chats_menuItemIcon, Theme.key_chats_menuItemText);
+                    cell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
+                    cell.updateColors();
                     break;
                 }
                 case VIEW_TYPE_ACTION: {
                     TextCell cell = (TextCell) holder.itemView;
                     cell.setTextAndIcon(item.text, item.icon, false);
-                    cell.setColors(Theme.key_chats_menuItemIcon, Theme.key_chats_menuItemText);
+                    cell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
+                    cell.updateColors();
                     break;
                 }
             }

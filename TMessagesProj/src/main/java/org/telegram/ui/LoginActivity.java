@@ -979,21 +979,24 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     @Override
     public void onRequestPermissionsResultFragment(int requestCode, String[] permissions, int[] grantResults) {
-        if (permissions.length == 0 || grantResults.length == 0) return;
-
-        boolean granted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
         if (requestCode == 6) {
             checkPermissions = false;
             if (currentViewNum == VIEW_PHONE_INPUT) {
                 ((PhoneView)views[currentViewNum]).confirmedNumber = true;
                 views[currentViewNum].onNextPressed(null);
             }
+            return;
         } else if (requestCode == BasePermissionsActivity.REQUEST_CODE_CALLS) {
             checkShowPermissions = false;
             if (currentViewNum == VIEW_PHONE_INPUT) {
                 ((PhoneView) views[currentViewNum]).fillNumber();
             }
-        } else if (requestCode == BasePermissionsActivity.REQUEST_CODE_OPEN_CAMERA) {
+            return;
+        }
+        if (permissions.length == 0 || grantResults.length == 0) return;
+
+        boolean granted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        if (requestCode == BasePermissionsActivity.REQUEST_CODE_OPEN_CAMERA) {
             if (granted) {
                 LoginActivityRegisterView registerView = (LoginActivityRegisterView) views[VIEW_REGISTER];
                 registerView.imageUpdater.openCamera();
@@ -1699,6 +1702,21 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         needFinishActivity(afterSignup, res.setup_password_required, res.otherwise_relogin_days);
     }
 
+    public static boolean isApiIdError(TLRPC.TL_error error) {
+        return error != null && error.text != null && (error.text.contains("API_ID_INVALID") || error.text.contains("API_ID_PUBLISHED_FLOOD"));
+    }
+
+    private static java.util.List<Object[]> getPhoneApiCredentials() {
+        final java.util.ArrayList<Object[]> list = new java.util.ArrayList<>();
+        if (BuildVars.BOT_LOGIN_APP_ID != 0 && !TextUtils.isEmpty(BuildVars.BOT_LOGIN_APP_HASH)) {
+            list.add(new Object[]{BuildVars.BOT_LOGIN_APP_ID, BuildVars.BOT_LOGIN_APP_HASH});
+        }
+        list.add(new Object[]{BuildVars.APP_ID, BuildVars.APP_HASH});
+        list.add(new Object[]{6, "eb06d4abfb49dc3eeb1aeb98ae0f581e"});
+        list.add(new Object[]{2040, "b18441a1ff607e10a989891a5462e627"});
+        return list;
+    }
+
     private void fillNextCodeParams(Bundle params, TL_account.sentEmailCode res) {
         params.putString("emailPattern", res.email_pattern);
         params.putInt("length", res.length);
@@ -1710,10 +1728,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     }
 
     private void resendCodeFromSafetyNet(Bundle params, TLRPC.auth_SentCode res, String reason) {
-        if (!isRequestingFirebaseSms) {
-            return;
-        }
-        needHideProgress(false);
         isRequestingFirebaseSms = false;
 
         TLRPC.TL_auth_resendCode req = new TLRPC.TL_auth_resendCode();
@@ -1723,27 +1737,21 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             req.flags |= 1;
             req.reason = reason;
         }
-        ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> {
-            if (response != null && !(((TLRPC.auth_SentCode) response).type instanceof TLRPC.TL_auth_sentCodeTypeFirebaseSms)) {
-                AndroidUtilities.runOnUIThread(() -> fillNextCodeParams(params, (TLRPC.auth_SentCode) response));
+        ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+            needHideProgress(false);
+            if (response instanceof TLRPC.auth_SentCode) {
+                TLRPC.auth_SentCode sentCode = (TLRPC.auth_SentCode) response;
+                if (sentCode.type != null) {
+                    sentCode.type.verifiedFirebase = true;
+                }
+                fillNextCodeParams(params, sentCode);
             } else {
-                AndroidUtilities.runOnUIThread(() -> {
-                    if (getParentActivity() == null || getParentActivity().isFinishing() || getContext() == null) {
-                        return;
-                    }
-                    new AlertDialog.Builder(getContext())
-                            .setTitle(getString(R.string.RestorePasswordNoEmailTitle))
-                            .setMessage(getString(R.string.SafetyNetErrorOccurred))
-                            .setPositiveButton(getString(R.string.OK), (dialog, which) -> {
-                                forceDisableSafetyNet = true;
-                                if (currentViewNum != VIEW_PHONE_INPUT) {
-                                    setPage(VIEW_PHONE_INPUT, true, null, true);
-                                }
-                            })
-                            .show();
-                });
+                if (res != null && res.type != null) {
+                    res.type.verifiedFirebase = true;
+                }
+                fillNextCodeParams(params, res);
             }
-        }, ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin);
+        }), ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin);
     }
 
     public static String errorString(Throwable e) {
@@ -1771,6 +1779,19 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     private boolean isRequestingFirebaseSms;
     private void fillNextCodeParams(Bundle params, TLRPC.auth_SentCode res, boolean animate) {
+        if (res instanceof TLRPC.TL_auth_sentCodeSuccess) {
+            TLRPC.auth_Authorization auth = ((TLRPC.TL_auth_sentCodeSuccess) res).authorization;
+            if (auth instanceof TLRPC.TL_auth_authorizationSignUpRequired) {
+                TLRPC.TL_auth_authorizationSignUpRequired authorization = (TLRPC.TL_auth_authorizationSignUpRequired) auth;
+                if (authorization.terms_of_service != null) {
+                    currentTermsOfService = authorization.terms_of_service;
+                }
+                setPage(VIEW_REGISTER, animate, params, false);
+            } else {
+                onAuthSuccess((TLRPC.TL_auth_authorization) auth);
+            }
+            return;
+        }
         if (res instanceof TLRPC.TL_auth_sentCodePaymentRequired) {
             final TLRPC.TL_auth_sentCodePaymentRequired auth = (TLRPC.TL_auth_sentCodePaymentRequired) res;
             params.putString("product", auth.store_product);
@@ -1784,10 +1805,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             return;
         }
         if (res.type instanceof TLRPC.TL_auth_sentCodeTypeFirebaseSms && !res.type.verifiedFirebase && !isRequestingFirebaseSms) {
-            if (PushListenerController.GooglePushListenerServiceProvider.INSTANCE.hasServices()) {
-                TLRPC.TL_auth_sentCodeTypeFirebaseSms r = (TLRPC.TL_auth_sentCodeTypeFirebaseSms) res.type;
-                needShowProgress(0);
+            if (forceDisableSafetyNet || TextUtils.isEmpty(BuildVars.SAFETYNET_KEY)) {
+                res.type.verifiedFirebase = true;
+            } else if (PushListenerController.GooglePushListenerServiceProvider.INSTANCE.hasServices()) {
                 isRequestingFirebaseSms = true;
+                needShowProgress(0);
+                TLRPC.TL_auth_sentCodeTypeFirebaseSms r = (TLRPC.TL_auth_sentCodeTypeFirebaseSms) res.type;
                 final String phone = params.getString("phoneFormated");
                 if (r.play_integrity_nonce != null) {
                     IntegrityManager integrityManager = IntegrityManagerFactory.create(getContext());
@@ -1892,11 +1915,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         resendCodeFromSafetyNet(params, res, reason);
                     });
                 }
+                return;
             } else {
-                FileLog.d("{GOOGLE_PLAY_SERVICES_NOT_AVAILABLE} Resend firebase sms because firebase is not available");
-                resendCodeFromSafetyNet(params, res, "GOOGLE_PLAY_SERVICES_NOT_AVAILABLE");
+                res.type.verifiedFirebase = true;
             }
-            return;
         }
 
         params.putString("phoneHash", res.phone_code_hash);
@@ -3176,23 +3198,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 }
             }
 
-            TLObject req;
-            if (activityMode == MODE_CHANGE_PHONE_NUMBER) {
-                TL_account.sendChangePhoneCode changePhoneCode = new TL_account.sendChangePhoneCode();
-                changePhoneCode.phone_number = phone;
-                changePhoneCode.settings = settings;
-                req = changePhoneCode;
-            } else {
-                ConnectionsManager.getInstance(currentAccount).cleanup(false);
-
-                TLRPC.TL_auth_sendCode sendCode = new TLRPC.TL_auth_sendCode();
-                sendCode.api_hash = BuildVars.APP_HASH;
-                sendCode.api_id = BuildVars.APP_ID;
-                sendCode.phone_number = phone;
-                sendCode.settings = settings;
-                req = sendCode;
-            }
-
             final Bundle params = new Bundle();
             params.putString("phone", "+" + codeField.getText() + " " + phoneField.getText());
             try {
@@ -3205,12 +3210,41 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             if (currentCountry != null) {
                 params.putString("country", currentCountry.code);
             }
-            nextPressed = true;
             PhoneInputData phoneInputData = new PhoneInputData();
             phoneInputData.phoneNumber = "+" + codeField.getText() + " " + phoneField.getText();
             phoneInputData.country = currentCountry;
             phoneInputData.patterns = phoneFormatMap.get(codeField.getText().toString());
+            sendPhoneCode(phone, settings, params, phoneInputData, 0);
+        }
+
+        private void sendPhoneCode(String phone, TLRPC.TL_codeSettings settings, Bundle params, PhoneInputData phoneInputData, int attempt) {
+            final List<Object[]> credentials = getPhoneApiCredentials();
+            final Object[] pair = credentials.get(Math.min(attempt, credentials.size() - 1));
+
+            final TLObject req;
+            if (activityMode == MODE_CHANGE_PHONE_NUMBER) {
+                TL_account.sendChangePhoneCode changePhoneCode = new TL_account.sendChangePhoneCode();
+                changePhoneCode.phone_number = phone;
+                changePhoneCode.settings = settings;
+                req = changePhoneCode;
+            } else {
+                ConnectionsManager.getInstance(currentAccount).cleanup(false);
+
+                TLRPC.TL_auth_sendCode sendCode = new TLRPC.TL_auth_sendCode();
+                sendCode.api_id = (Integer) pair[0];
+                sendCode.api_hash = (String) pair[1];
+                sendCode.phone_number = phone;
+                sendCode.settings = settings;
+                req = sendCode;
+            }
+
+            nextPressed = true;
             int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                if (error != null && isApiIdError(error) && attempt + 1 < credentials.size()) {
+                    FileLog.d("phone login: " + error.text + " for api_id " + pair[0] + ", trying next credentials");
+                    sendPhoneCode(phone, settings, params, phoneInputData, attempt + 1);
+                    return;
+                }
                 nextPressed = false;
                 if (error == null) {
                     if (response instanceof TLRPC.TL_auth_sentCodeSuccess) {
@@ -3257,7 +3291,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         } else if (error.text.contains("PHONE_NUMBER_FLOOD")) {
                             needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString("PhoneNumberFlood", R.string.PhoneNumberFlood));
                         } else if (error.text.contains("PHONE_NUMBER_BANNED")) {
-                                needShowInvalidAlert(LoginActivity.this, phone, phoneInputData, true);
+                            needShowInvalidAlert(LoginActivity.this, phone, phoneInputData, true);
                         } else if (error.text.contains("PHONE_CODE_EMPTY") || error.text.contains("PHONE_CODE_INVALID")) {
                             needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString(R.string.InvalidCode));
                         } else if (error.text.contains("PHONE_CODE_EXPIRED")) {
@@ -3267,8 +3301,13 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         } else if (error.text.startsWith("FLOOD_WAIT")) {
                             needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString("FloodWait", R.string.FloodWait));
                         } else if (error.code != -1000) {
-                            AlertsCreator.processError(currentAccount, error, LoginActivity.this, req, phoneInputData.phoneNumber);
+                            Dialog alert = AlertsCreator.processError(currentAccount, error, LoginActivity.this, req, phoneInputData.phoneNumber);
+                            if (alert == null) {
+                                needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), error.text);
+                            }
                         }
+                    } else if (error.code != -1000) {
+                        needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), getString(R.string.ErrorOccurred));
                     }
                 }
                 if (!isRequestingFirebaseSms) {

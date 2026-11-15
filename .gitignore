@@ -18,4 +18,8 @@ TMessagesProj/jni/ffmpeg/build_android
 # Claude Code agent worktrees and local state
 .claude/
 
+fix_defender.bat
+__pycache__/
+*.pyc
+
 *.apk

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="AccDescrIVButtons">Tugmalar</string>
+    <string name="UnsupportedBlockTitle">Qo‘llanmaydigan blok</string>
+    <string name="UnsupportedBlockMessage">Xabarning bu qismini ko‘rish uchun OcoderX-gramni yangilang</string>
+    <string name="UnsupportedUpdate">Yangilash</string>
+</resources>

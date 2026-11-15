@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxHiddenTitle">Скрытые чаты</string>
+    <string name="OxHiddenHideChat">Скрыть чат</string>
+    <string name="OxHiddenUnhideChat">Показать чат</string>
+    <string name="OxHiddenHideInfo">Чат будет виден только в разделе «Скрытые чаты». Его уведомления на этом устройстве будут скрыты. Сообщения останутся в вашем аккаунте Telegram.</string>
+    <string name="OxHiddenUnhideInfo">Вернуть чат в обычный список чатов?</string>
+    <string name="OxHiddenSetup">Пароль скрытых чатов</string>
+    <string name="OxHiddenSetupInfo">Задайте отдельный пароль из 4–256 символов и подтвердите его. Восстановить пароль невозможно. Скрытие действует только на этом устройстве: оно не шифрует сообщения и не скрывает их в других приложениях Telegram.</string>
+    <string name="OxHiddenPassword">Пароль скрытых чатов</string>
+    <string name="OxHiddenPasswordInfo">Введите отдельный пароль скрытых чатов.</string>
+    <string name="OxHiddenOldPassword">Текущий пароль</string>
+    <string name="OxHiddenNewPassword">Новый пароль</string>
+    <string name="OxHiddenConfirmPassword">Повторите новый пароль</string>
+    <string name="OxHiddenChangePassword">Изменить пароль</string>
+    <string name="OxHiddenChangeInfo">Введите текущий пароль, затем задайте и подтвердите новый.</string>
+    <string name="OxHiddenUnlock">Открыть скрытые чаты</string>
+    <string name="OxHiddenLock">Заблокировать</string>
+    <string name="OxHiddenAddChat">Добавить чат</string>
+    <string name="OxHiddenSettings">Настройки скрытых чатов</string>
+    <string name="OxHiddenEmpty">Скрытых чатов пока нет. Нажмите «Добавить чат», чтобы выбрать чат.</string>
+    <string name="OxHiddenListInfo">Удерживайте чат, чтобы вернуть его в обычный список. Скрытые чаты блокируются при переходе приложения в фон.</string>
+    <string name="OxHiddenUnhideHint">Удерживайте, чтобы показать</string>
+    <string name="OxHiddenUnavailableChat">Чат недоступен</string>
+    <string name="OxHiddenBiometric">Биометрия</string>
+    <string name="OxHiddenEnableBiometric">Включить вход по биометрии</string>
+    <string name="OxHiddenDisableBiometric">Выключить вход по биометрии</string>
+    <string name="OxHiddenBiometricUnavailable">Надёжная биометрическая аутентификация недоступна. Настройте отпечаток пальца или распознавание лица в настройках устройства и повторите попытку.</string>
+    <string name="OxHiddenUsePassword">Ввести пароль</string>
+    <string name="OxHiddenPasswordFallback">Для продолжения можно ввести пароль.</string>
+    <string name="OxHiddenDisable">Отключить скрытые чаты</string>
+    <string name="OxHiddenDisableInfo">Все скрытые чаты вернутся в обычный список. Сообщения сохранятся. Для подтверждения введите пароль на следующем шаге.</string>
+    <string name="OxHiddenPasswordMismatch">Пароли не совпадают.</string>
+    <string name="OxHiddenPasswordLength">Используйте от 4 до 256 символов.</string>
+    <string name="OxHiddenWrongPassword">Неверный пароль. Повторите попытку.</string>
+    <string name="OxHiddenTryLater">Слишком много попыток. Немного подождите и повторите.</string>
+    <string name="OxHiddenChecking">Проверка…</string>
+    <string name="OxHiddenStorageError">Не удалось прочитать или сохранить настройки скрытых чатов. Повторите попытку.</string>
+    <string name="OxHiddenCorrupt">Не удалось прочитать настройки скрытых чатов. Чаты остаются защищёнными. Восстановите данные приложения из надёжной резервной копии.</string>
+    <string name="OxHiddenSessionExpired">Скрытые чаты заблокированы. Введите пароль ещё раз.</string>
+</resources>
+

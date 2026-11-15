@@ -90,8 +90,8 @@ public class ScreenLightActivity extends BaseFragment {
         fragmentView = root;
 
         applyColor(currentColor);
-        updateSeekBarFromBrightness(currentBrightness);
         applyWindowFlags();
+        updateSeekBarFromBrightness(currentBrightness);
 
         return fragmentView;
     }
@@ -249,15 +249,20 @@ public class ScreenLightActivity extends BaseFragment {
 
         WindowManager.LayoutParams params = window.getAttributes();
         previousBrightness = params.screenBrightness;
+        if (previousBrightness <= 0) {
+            previousBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        }
         previousKeepScreenOn = (params.flags & WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0;
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             try {
-                previousStatusBarColor = window.getStatusBarColor();
-                previousNavigationBarColor = window.getNavigationBarColor();
-                systemBarsCaptured = true;
+                if (!systemBarsCaptured) {
+                    previousStatusBarColor = window.getStatusBarColor();
+                    previousNavigationBarColor = window.getNavigationBarColor();
+                    systemBarsCaptured = true;
+                }
                 setSystemBarColors(currentColor);
             } catch (Exception ignored) {
                 systemBarsCaptured = false;
@@ -292,10 +297,8 @@ public class ScreenLightActivity extends BaseFragment {
             Window window = activity.getWindow();
             if (window != null) {
                 WindowManager.LayoutParams params = window.getAttributes();
-                params.screenBrightness = previousBrightness;
-                if (!previousKeepScreenOn) {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                }
+                params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 window.setAttributes(params);
                 if (systemBarsCaptured && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     try {
@@ -313,6 +316,13 @@ public class ScreenLightActivity extends BaseFragment {
     public void onResume() {
         super.onResume();
         applyWindowFlags();
+        applyBrightness(currentBrightness);
+    }
+
+    @Override
+    public void onPause() {
+        restoreWindowFlags();
+        super.onPause();
     }
 
     @Override

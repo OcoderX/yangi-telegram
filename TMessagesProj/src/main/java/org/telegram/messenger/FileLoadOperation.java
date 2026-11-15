@@ -1472,11 +1472,11 @@ public class FileLoadOperation {
     }
 
     public void setIsPreloadVideoOperation(boolean value) {
-        if (isPreloadVideoOperation == value || value && totalBytesCount <= preloadMaxBytes) {
+        if ((isPreloadVideoOperation == value && (!preloadFinished || value)) || value && totalBytesCount <= preloadMaxBytes) {
             return;
         }
         FileLog.e("setIsPreloadVideoOperation " + value + " file=" + fileName);
-        if (!value && isPreloadVideoOperation) {
+        if (!value && (isPreloadVideoOperation || preloadFinished)) {
             if (state == stateFinished) {
                 isPreloadVideoOperation = value;
                 state = stateIdle;
@@ -2548,8 +2548,13 @@ public class FileLoadOperation {
             if (useConnectionType == -1) {
                 connectionType = ConnectionsManager.ConnectionTypeDownload | ((requestsCount % downloadConnectionsCount) << 16);
                 //globalRequestPointer++;
-            } else {
+            } else if (a == 0) {
                 connectionType = useConnectionType;
+            } else {
+                // A CDN redirect or restart can refill the whole window. Reuse the completed
+                // connection for the first request, then spread the rest across the existing pool.
+                int connectionIndex = (useConnectionType >> 16) & 0xff;
+                connectionType = ConnectionsManager.ConnectionTypeDownload | (((connectionIndex + a) % downloadConnectionsCount) << 16);
             }
 
             int flags = (isForceRequest ? ConnectionsManager.RequestFlagForceDownload : 0);

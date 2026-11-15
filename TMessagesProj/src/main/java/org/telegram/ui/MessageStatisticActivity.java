@@ -19,6 +19,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.text.TextPaint;
 import android.util.TypedValue;
 import android.util.SparseArray;
 import android.view.Gravity;
@@ -53,6 +54,8 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.ayu.PostStatisticsMetrics;
+import org.telegram.messenger.ayu.PostStatisticsState;
+import org.telegram.messenger.ayu.PostStatisticsState.Graph;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.RequestDelegate;
 import org.telegram.tgnet.TLObject;
@@ -101,8 +104,8 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     private LinearLayoutManager layoutManager;
 
     private MessageObject messageObject;
-    private StatisticActivity.ChartViewData interactionsViewData;
-    private StatisticActivity.ChartViewData reactionsByEmotionData;
+    private PostGraph interactionsViewData;
+    private PostGraph reactionsByEmotionData;
     private LruCache<ChartData> childDataCache = new LruCache<>(15);
     private StatisticActivity.ZoomCancelable lastCancelable;
 
@@ -147,12 +150,19 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     private boolean needActionbarMenu;
     private StatisticActivity.RecentPostInfo recentPostInfo;
     private int detailsRow = -1;
+    private int sourceRow = -1;
+    private int reactionsRow = -1;
+    private int forwardsStatusRow = -1;
     private boolean destroyed;
     private boolean detailStarted;
     private boolean publicSharesKnown;
     private boolean basicLoading;
     private boolean forwardsFailed;
     private int requestGeneration;
+    private long accountOwnerId;
+    private boolean awaitingFullChat;
+    private boolean graphsLoading;
+    private int statisticsDc;
     private int basicStatus = R.string.OxPostStatsCached;
     private int detailStatus = R.string.OxPostStatsLoadingDetails;
     private long refreshedAt;
@@ -164,7 +174,23 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     private String metadataText = "";
     private String ratesText = "";
     private String reactionsText = "";
+    private CharSequence reactionsDisplayText = "";
     private String summaryText = "";
+
+    private static final class PostGraph extends StatisticActivity.ChartViewData {
+        Graph state = Graph.LOADING;
+
+        PostGraph(int title, int type) {
+            super(LocaleController.getString(title), type);
+        }
+
+        void setState(Graph state) {
+            this.state = state;
+            loading = state == Graph.LOADING;
+            isEmpty = state == Graph.EMPTY || state == Graph.LIMITED;
+            isError = state != Graph.READY && state != Graph.LOADING && !isEmpty;
+        }
+    }
 
     public MessageStatisticActivity(MessageObject message) {
         setCurrentAccount(message.currentAccount);
@@ -213,10 +239,11 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         overviewHeaderRow = -1;
         overviewRow = -1;
         detailsRow = -1;
+        sourceRow = reactionsRow = forwardsStatusRow = -1;
         emptyRow = -1;
 
         rowCount = 0;
-        if (!messageObject.isStory() || firstLoaded && statsLoaded) {
+        {
             AndroidUtilities.cancelRunOnUIThread(showProgressbar);
             if (listContainer != null && listContainer.getVisibility() == View.GONE) {
                 progressLayout.animate().alpha(0).setListener(new AnimatorListenerAdapter() {
@@ -244,10 +271,14 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             if (!messageObject.isStory()) {
                 detailsRow = rowCount++;
                 shadowDivideCells.add(rowCount++);
+                reactionsRow = rowCount++;
+                shadowDivideCells.add(rowCount++);
             }
-
+            sourceRow = rowCount++;
+            shadowDivideCells.add(rowCount++);
+            headerRow = rowCount++;
+            forwardsStatusRow = rowCount++;
             if (!messages.isEmpty()) {
-                headerRow = rowCount++;
                 startRow = rowCount;
                 rowCount += messages.size();
                 endRow = rowCount;
@@ -267,6 +298,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     @Override
     public boolean onFragmentCreate() {
         super.onFragmentCreate();
+        accountOwnerId = getUserConfig().getClientUserId();
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.chatInfoDidLoad);
         refreshStatistics();
         return true;
@@ -286,10 +318,14 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (!destroyed && id == NotificationCenter.chatInfoDidLoad && account == currentAccount) {
+        if (isCurrentSession() && id == NotificationCenter.chatInfoDidLoad && account == currentAccount) {
             TLRPC.ChatFull chatFull = (TLRPC.ChatFull) args[0];
             if (chatFull.id == chatId) {
+                // args[3] marks the server response; cache/local updates cannot settle a refresh.
+                boolean fromServer = args.length > 3 && Boolean.TRUE.equals(args[3]);
+                if (awaitingFullChat && !fromServer) return;
                 chat = chatFull;
+                awaitingFullChat = false;
                 if (fullChatTimeout != null) AndroidUtilities.cancelRunOnUIThread(fullChatTimeout);
                 if (avatarContainer != null) setAvatarAndTitle();
                 startDetailedStatistics();
@@ -360,6 +396,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         actionBar.setAdaptiveBackground(listView);
 
         listView.setOnItemClickListener((view, position) -> {
+            if (!isCurrentSession()) return;
             if (position >= startRow && position < endRow) {
                 MessageObject message = messages.get(position - startRow);
                 if (message.isStory()) {
@@ -384,6 +421,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             }
         });
         listView.setOnItemLongClickListener((view, position) -> {
+            if (!isCurrentSession()) return false;
             if (position >= startRow && position < endRow) {
                 try {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
@@ -568,12 +606,15 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(final int id) {
+                if (id != -1 && !isCurrentSession()) return;
                 if (id == -1) {
                     finishFragment();
                 } else if (id == 1) {
                     Bundle args = new Bundle();
                     args.putLong("chat_id", chatId);
-                    presentFragment(new StatisticActivity(args));
+                    StatisticActivity statistics = new StatisticActivity(args);
+                    statistics.setCurrentAccount(currentAccount);
+                    presentFragment(statistics);
                 } else if (id == 2) {
                     refreshStatistics();
                 } else if (id == 3) {
@@ -584,6 +625,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         });
 
         avatarContainer.setOnClickListener(view -> {
+            if (!isCurrentSession()) return;
             if (messageObject.isStory()) {
                 return;
             }
@@ -608,7 +650,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
 
     private void setAvatarAndTitle() {
         if (messageObject.isStory()) {
-            avatarContainer.setTitle(LocaleController.getString(R.string.StoryStatistics));
+            avatarContainer.setTitle(LocaleController.getString(R.string.OxStatsStoryTitle));
             avatarContainer.hideSubtitle();
             avatarContainer.allowDrawStories = true;
             avatarContainer.setStoriesForceState(StoriesUtilities.STATE_HAS_UNREAD);
@@ -623,7 +665,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                 avatarContainer.getAvatarImageView().setScaleY(0.96f);
             }
         } else {
-            avatarContainer.setTitle(LocaleController.getString(R.string.PostStatistics));
+            avatarContainer.setTitle(LocaleController.getString(R.string.OxStatsPostTitle));
             TLRPC.Chat chatLocal = getMessagesController().getChat(chatId);
             if (chatLocal != null && !hasThumb) {
                 avatarContainer.setChatAvatar(chatLocal);
@@ -654,19 +696,24 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         requestTimeouts.clear();
     }
 
+    private boolean isCurrentSession() {
+        return PostStatisticsState.isCurrent(destroyed, accountOwnerId, getUserConfig().getClientUserId(), requestGeneration, requestGeneration);
+    }
+
     /** Every request has a bounded lifetime and ignores callbacks from previous refreshes. */
     private void sendStatsRequest(TLObject request, int dc, RequestDelegate callback) {
+        if (!isCurrentSession()) return;
         final int generation = requestGeneration;
         final int[] requestId = new int[1];
         requestId[0] = getConnectionsManager().sendRequest(request, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
             Runnable timeout = requestTimeouts.get(requestId[0]);
-            if (destroyed || generation != requestGeneration || timeout == null) return;
+            if (!isCurrentSession() || generation != requestGeneration || timeout == null) return;
             requestTimeouts.remove(requestId[0]);
             AndroidUtilities.cancelRunOnUIThread(timeout);
             callback.run(response, error);
         }), null, null, 0, dc > 0 ? dc : ConnectionsManager.DEFAULT_DATACENTER_ID, ConnectionsManager.ConnectionTypeGeneric, true);
         Runnable timeout = () -> {
-            if (destroyed || generation != requestGeneration || requestTimeouts.get(requestId[0]) == null) return;
+            if (!isCurrentSession() || generation != requestGeneration || requestTimeouts.get(requestId[0]) == null) return;
             requestTimeouts.remove(requestId[0]);
             getConnectionsManager().cancelRequest(requestId[0], true);
             TLRPC.TL_error error = new TLRPC.TL_error();
@@ -680,7 +727,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     }
 
     private void refreshStatistics() {
-        if (destroyed) return;
+        if (!isCurrentSession()) return;
         requestGeneration++;
         cancelOutstandingRequests();
         if (fullChatTimeout != null) AndroidUtilities.cancelRunOnUIThread(fullChatTimeout);
@@ -699,16 +746,18 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         firstLoaded = false;
         statsLoaded = false;
         detailStarted = false;
+        graphsLoading = false;
+        awaitingFullChat = true;
         detailStatus = R.string.OxPostStatsLoadingDetails;
         updateMetrics();
         updateRows();
         if (!messageObject.isStory()) refreshBasicCounters();
-        startDetailedStatistics();
         // Shared controller request: do not cancel other screens' ChatFull loading.
         getMessagesController().loadFullChat(chatId, 0, true);
         final int generation = requestGeneration;
         fullChatTimeout = () -> {
-            if (!destroyed && generation == requestGeneration && chat == null) {
+            if (isCurrentSession() && generation == requestGeneration && awaitingFullChat) {
+                awaitingFullChat = false;
                 detailStatus = R.string.OxPostStatsDetailsFailed;
                 firstLoaded = statsLoaded = true;
                 updateRows();
@@ -748,7 +797,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     }
 
     private void startDetailedStatistics() {
-        if (detailStarted || chat == null) return;
+        if (!isCurrentSession() || awaitingFullChat || detailStarted || chat == null) return;
         if (!canRequestDetailedStats()) {
             detailStatus = R.string.OxPostStatsNoAccess;
             firstLoaded = statsLoaded = true;
@@ -756,13 +805,14 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             return;
         }
         detailStarted = true;
+        statisticsDc = chat.stats_dc;
         detailStatus = R.string.OxPostStatsLoadingDetails;
         loadStat();
         loadChats(100);
     }
 
     private void loadChats(int count) {
-        if (loading || destroyed || !canRequestDetailedStats() || endReached) return;
+        if (loading || !isCurrentSession() || !canRequestDetailedStats() || endReached) return;
         loading = true;
         forwardsFailed = false;
         final String requestedOffset = nextOffset == null ? "" : nextOffset;
@@ -782,7 +832,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             req.offset = requestedOffset;
             request = req;
         }
-        sendStatsRequest(request, chat.stats_dc, (response, error) -> {
+        sendStatsRequest(request, statisticsDc, (response, error) -> {
             loading = false;
             firstLoaded = true;
             if (error == null && response instanceof TL_stats.TL_publicForwards) {
@@ -820,6 +870,12 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     }
 
     private void loadStat() {
+        if (!isCurrentSession() || graphsLoading || !canRequestDetailedStats()) return;
+        graphsLoading = true;
+        interactionsViewData = new PostGraph(R.string.OxStatsViewsTitle, 1);
+        reactionsByEmotionData = new PostGraph(R.string.OxStatsReactionsTitle, 2);
+        detailStatus = R.string.OxPostStatsLoadingDetails;
+        updateRows();
         TLObject request;
         if (messageObject.isStory()) {
             TL_stories.TL_stats_getStoryStats req = new TL_stories.TL_stats_getStoryStats();
@@ -832,10 +888,14 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             req.channel = getMessagesController().getInputChannel(chatId);
             request = req;
         }
-        sendStatsRequest(request, chat.stats_dc, (response, error) -> {
+        sendStatsRequest(request, statisticsDc, (response, error) -> {
+            graphsLoading = false;
             statsLoaded = true;
             if (error != null || !(response instanceof TL_stats.TL_messageStats || response instanceof TL_stories.TL_stats_storyStats)) {
-                detailStatus = R.string.OxPostStatsDetailsFailed;
+                Graph state = error == null ? Graph.INVALID_DATA : PostStatisticsState.error(error.text, false);
+                interactionsViewData.setState(state);
+                reactionsByEmotionData.setState(state);
+                updateGraphStatus();
                 updateRows();
                 return;
             }
@@ -848,8 +908,8 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                 viewsGraph = ((TL_stats.TL_messageStats) response).views_graph;
                 reactionsGraph = ((TL_stats.TL_messageStats) response).reactions_by_emotion_graph;
             }
-            interactionsViewData = createGraph(viewsGraph, R.string.ViewsAndSharesChartTitle, 1);
-            reactionsByEmotionData = createGraph(reactionsGraph, R.string.ReactionsByEmotionChartTitle, 2);
+            interactionsViewData = createGraph(viewsGraph, R.string.OxStatsViewsTitle, 1);
+            reactionsByEmotionData = createGraph(reactionsGraph, R.string.OxStatsReactionsTitle, 2);
             updateGraphStatus();
             updateRows();
             // Resolve async graphs independently of RecyclerView binding/visibility.
@@ -858,59 +918,85 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         });
     }
 
-    private StatisticActivity.ChartViewData createGraph(TL_stats.StatsGraph graph, int title, int type) {
-        if (graph == null) return null;
-        StatisticActivity.ChartViewData data;
-        try {
-            data = StatisticActivity.createViewData(graph, LocaleController.getString(title), type, false);
-        } catch (RuntimeException exception) {
-            data = null;
-        }
-        if (data == null || data.isEmpty || data.chartData == null && TextUtils.isEmpty(data.token)) {
-            data = new StatisticActivity.ChartViewData(LocaleController.getString(title), type);
-            data.isError = true;
-            data.errorMessage = LocaleController.getString(graph instanceof TL_stats.TL_statsGraphError ? R.string.OxPostStatsGraphFailed : R.string.OxPostStatsNoGraphs);
+    private PostGraph createGraph(TL_stats.StatsGraph graph, int title, int type) {
+        PostGraph data = new PostGraph(title, type);
+        if (graph == null) {
+            data.setState(Graph.UNAVAILABLE);
+        } else if (graph instanceof TL_stats.TL_statsGraphError) {
+            data.setState(PostStatisticsState.error(((TL_stats.TL_statsGraphError) graph).error, true));
+        } else if (graph instanceof TL_stats.TL_statsGraphAsync) {
+            data.token = ((TL_stats.TL_statsGraphAsync) graph).token;
+            data.setState(TextUtils.isEmpty(data.token) ? Graph.INVALID_DATA : Graph.LOADING);
+            // The explicit loader owns the request; a loading display is not an in-flight request.
+            data.loading = false;
+        } else if (graph instanceof TL_stats.TL_statsGraph) {
+            try {
+                TL_stats.TL_statsGraph value = (TL_stats.TL_statsGraph) graph;
+                data.chartData = StatisticActivity.createChartData(new JSONObject(value.json.data), type, false);
+                data.zoomToken = value.zoom_token;
+                data.chartData.yRate = graph.rate;
+                int samples = data.chartData.x == null ? 0 : data.chartData.x.length;
+                data.setState(samples == 0 || data.chartData.lines.isEmpty() ? Graph.EMPTY : samples < 2 ? Graph.LIMITED : Graph.READY);
+            } catch (JSONException | RuntimeException exception) {
+                data.chartData = null;
+                data.setState(Graph.INVALID_DATA);
+            }
+        } else {
+            data.setState(Graph.INVALID_DATA);
         }
         return data;
     }
 
-    private void loadAsyncGraph(StatisticActivity.ChartViewData data) {
-        if (data == null || data.loading || data.chartData != null || TextUtils.isEmpty(data.token) || data.isError || destroyed) return;
-        data.loading = true;
+    private void loadAsyncGraph(PostGraph data) {
+        if (data == null || data.loading || data.chartData != null || TextUtils.isEmpty(data.token) || !isCurrentSession()) return;
+        data.setState(Graph.LOADING);
         TL_stats.TL_loadAsyncGraph request = new TL_stats.TL_loadAsyncGraph();
         request.token = data.token;
-        sendStatsRequest(request, chat.stats_dc, (response, error) -> {
-            data.loading = false;
-            StatisticActivity.ChartViewData result = response instanceof TL_stats.TL_statsGraph
-                    ? createGraph((TL_stats.StatsGraph) response, data.graphType == 1 ? R.string.ViewsAndSharesChartTitle : R.string.ReactionsByEmotionChartTitle, data.graphType) : null;
-            if (error == null && result != null && result.chartData != null && !result.isError) {
+        updateGraphStatus();
+        updateRows();
+        sendStatsRequest(request, statisticsDc, (response, error) -> {
+            if (data != interactionsViewData && data != reactionsByEmotionData) return;
+            PostGraph result = response instanceof TL_stats.StatsGraph
+                    ? createGraph((TL_stats.StatsGraph) response, data.graphType == 1 ? R.string.OxStatsViewsTitle : R.string.OxStatsReactionsTitle, data.graphType) : null;
+            if (error != null) {
+                data.setState(PostStatisticsState.error(error.text, false));
+            } else if (result != null && result.state != Graph.LOADING) {
                 data.chartData = result.chartData;
                 data.zoomToken = result.zoomToken;
-                data.isEmpty = result.isEmpty;
+                data.setState(result.state);
             } else {
-                data.isError = true;
-                data.errorMessage = LocaleController.getString(R.string.OxPostStatsGraphFailed);
+                // A repeated async response must not cause an automatic retry loop.
+                if (result != null && !TextUtils.isEmpty(result.token)) data.token = result.token;
+                data.setState(Graph.UNAVAILABLE);
             }
-            data.token = null;
+            if (!PostStatisticsState.canRetry(data.state)) data.token = null;
             updateGraphStatus();
             updateRows();
         });
     }
 
+    private void retryGraph(PostGraph data) {
+        if (!isCurrentSession() || data == null || !PostStatisticsState.canRetry(data.state)) return;
+        if (!TextUtils.isEmpty(data.token)) {
+            data.chartData = null;
+            loadAsyncGraph(data);
+        } else {
+            loadStat();
+        }
+    }
+
     private void updateGraphStatus() {
         boolean pending = false;
         boolean available = false;
-        for (StatisticActivity.ChartViewData data : new StatisticActivity.ChartViewData[]{interactionsViewData, reactionsByEmotionData}) {
+        boolean failed = false;
+        for (PostGraph data : new PostGraph[]{interactionsViewData, reactionsByEmotionData}) {
             if (data == null) continue;
-            if (data.isError) {
-                detailStatus = R.string.OxPostStatsDetailsFailed;
-                return;
-            }
-            pending |= data.loading || !TextUtils.isEmpty(data.token);
-            available |= data.chartData != null && !data.isEmpty;
+            failed |= data.isError;
+            pending |= data.state == Graph.LOADING;
+            available |= data.state == Graph.READY;
         }
         detailStatus = pending ? R.string.OxPostStatsLoadingDetails
-                : available ? R.string.OxPostStatsDetailsReady : R.string.OxPostStatsNoGraphs;
+                : available ? R.string.OxPostStatsDetailsReady : failed ? R.string.OxPostStatsDetailsFailed : R.string.OxPostStatsNoGraphs;
     }
 
     private String count(long value) {
@@ -953,8 +1039,8 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         overviewValues = messageObject.isStory()
                 ? new String[]{count(metrics.views), count(metrics.publicShares), count(metrics.reactions), count(metrics.privateShares)}
                 : new String[]{count(metrics.views), count(metrics.shares), count(metrics.reactions), count(metrics.comments), count(metrics.publicShares), count(metrics.privateShares)};
+        metadataText = LocaleController.formatString(R.string.OxPostStatsPublished, sourceMatches ? LocaleController.formatDateTime(messageObject.isStory() ? messageObject.storyItem.date : messageObject.messageOwner.date, false) : "—");
         if (messageObject.isStory()) return;
-        metadataText = LocaleController.formatString(R.string.OxPostStatsPublished, sourceMatches ? LocaleController.formatDateTime(messageObject.messageOwner.date, false) : "—");
         if (refreshedAt != 0) metadataText += "\n" + LocaleController.formatString(R.string.OxPostStatsUpdated, LocaleController.formatDateTime(refreshedAt, false));
         ratesText = LocaleController.getString(R.string.OxPostStatsReactionRate) + "  " + percent(PostStatisticsMetrics.rate(metrics.reactions, metrics.views))
                 + "\n" + LocaleController.getString(R.string.OxPostStatsShareRate) + "  " + percent(PostStatisticsMetrics.rate(metrics.shares, metrics.views))
@@ -982,8 +1068,12 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                         .append("  ·  ").append(percent(PostStatisticsMetrics.rate(customReactions, metrics.reactions)));
             }
         }
-        reactionsText = reactionSummary.length() == 0 ? LocaleController.getString(R.string.OxPostStatsNoReactions) : reactionSummary.toString();
-        StringBuilder summary = new StringBuilder(LocaleController.getString(R.string.PostStatistics));
+        reactionsText = !sourceMatches ? LocaleController.getString(R.string.OxStatsUnknown)
+                : reactionSummary.length() == 0 ? LocaleController.getString(R.string.OxPostStatsNoReactions) : reactionSummary.toString();
+        TextPaint reactionPaint = new TextPaint();
+        reactionPaint.setTextSize(AndroidUtilities.dp(15));
+        reactionsDisplayText = Emoji.replaceEmoji(reactionsText, reactionPaint.getFontMetricsInt(), false);
+        StringBuilder summary = new StringBuilder(LocaleController.getString(R.string.OxStatsPostTitle));
         TLRPC.Chat source = getMessagesController().getChat(chatId);
         if (source != null) summary.append(" — ").append(source.title);
         summary.append("\n").append(metadataText);
@@ -997,8 +1087,8 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
 
     private int[] overviewLabels() {
         return messageObject.isStory()
-                ? new int[]{R.string.StatisticViews, R.string.PublicShares, R.string.Reactions, R.string.PrivateShares}
-                : new int[]{R.string.StatisticViews, R.string.OxPostStatsTotalShares, R.string.Reactions, R.string.OxPostStatsComments, R.string.PublicShares, R.string.OxPostStatsPrivateEstimate};
+                ? new int[]{R.string.OxStatsViews, R.string.OxStatsPublicShares, R.string.OxStatsReactions, R.string.OxPostStatsPrivateEstimate}
+                : new int[]{R.string.OxStatsViews, R.string.OxPostStatsTotalShares, R.string.OxStatsReactions, R.string.OxPostStatsComments, R.string.OxStatsPublicShares, R.string.OxPostStatsPrivateEstimate};
     }
 
     private String statusText() {
@@ -1013,6 +1103,10 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
     @Override
     public void onResume() {
         super.onResume();
+        if (!isCurrentSession()) {
+            finishFragment();
+            return;
+        }
         AndroidUtilities.requestAdjustResize(getParentActivity(), classGuid);
         if (listViewAdapter != null) {
             listViewAdapter.notifyDataSetChanged();
@@ -1065,7 +1159,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
 
                         @Override
                         public void onZoomed() {
-                            if (data == null || data.chartData == null || data.activeZoom > 0 || destroyed
+                            if (data == null || data.chartData == null || data.activeZoom > 0 || !isCurrentSession()
                                     || !chartView.legendSignatureView.canGoZoom || TextUtils.isEmpty(data.zoomToken)) return;
                             final long x = chartView.getSelectedDate();
                             final StatisticActivity.ChartViewData selectedData = data;
@@ -1086,7 +1180,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                             final StatisticActivity.ZoomCancelable cancelable = new StatisticActivity.ZoomCancelable();
                             lastCancelable = cancelable;
                             chartView.legendSignatureView.showProgress(true, false);
-                            sendStatsRequest(request, chat.stats_dc, (response, error) -> {
+                            sendStatsRequest(request, statisticsDc, (response, error) -> {
                                 ChartData child = null;
                                 if (error == null && response instanceof TL_stats.TL_statsGraph) {
                                     try {
@@ -1095,7 +1189,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                                 }
                                 if (cancelable.canceled || data != selectedData) return;
                                 chartView.legendSignatureView.showProgress(false, false);
-                                if (child != null && child.x != null && child.x.length > 0) {
+                                if (child != null && child.x != null && child.x.length >= 2 && !child.lines.isEmpty()) {
                                     childDataCache.put(cacheKey, child);
                                     selectedData.childChartData = child;
                                     zoomChart(false);
@@ -1134,7 +1228,11 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                     view.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 16));
                     break;
                 case 8:
-                    view = new PostDetailsCell(mContext);
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                    view = new StatisticsInfoCell(mContext);
                     view.setLayoutParams(new RecyclerView.LayoutParams(MATCH_PARENT, WRAP_CONTENT));
                     break;
                 case 3:
@@ -1192,11 +1290,11 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                     if (position == overviewHeaderRow) {
                         headerCell.setTopMargin(9);
                         headerCell.setPadding(0, 0, 0, AndroidUtilities.dp(8));
-                        headerCell.setText(LocaleController.formatString("StatisticOverview", R.string.StatisticOverview));
+                        headerCell.setText(LocaleController.getString(R.string.OxStatsOverview));
                     } else {
                         headerCell.setTopMargin(11);
                         headerCell.setPadding(0, 0, 0, 0);
-                        headerCell.setText(LocaleController.formatString("PublicShares", R.string.PublicShares));
+                        headerCell.setText(LocaleController.getString(R.string.OxStatsPublicShares));
                     }
                     break;
                 case 4:
@@ -1214,7 +1312,11 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                     chartCell2.setLayoutParams(new RecyclerView.LayoutParams(MATCH_PARENT, WRAP_CONTENT));
                     break;
                 case 8:
-                    ((PostDetailsCell) holder.itemView).setData();
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                    ((StatisticsInfoCell) holder.itemView).setData(position);
                     break;
             }
         }
@@ -1235,15 +1337,21 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             } else if (position == loadingRow) {
                 return 3;
             } else if (position == interactionsChartRow) {
-                return 4;
+                return interactionsViewData.state == Graph.READY ? 4 : 9;
             } else if (position == overviewRow) {
                 return 5;
             } else if (position == emptyRow) {
                 return 6;
             } else if (position == reactionsByEmotionChartRow) {
-                return 7;
+                return reactionsByEmotionData.state == Graph.READY ? 7 : 9;
             } else if (position == detailsRow) {
                 return 8;
+            } else if (position == sourceRow) {
+                return 10;
+            } else if (position == reactionsRow) {
+                return 11;
+            } else if (position == forwardsStatusRow) {
+                return 12;
             }
             return 0;
         }
@@ -1266,6 +1374,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             primary = new TextView[cells];
             title = new TextView[cells];
             setOrientation(VERTICAL);
+            setLayoutDirection(LocaleController.isRTL ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
             setPadding(AndroidUtilities.dp(16), 0, AndroidUtilities.dp(16), AndroidUtilities.dp(16));
             for (int i = 0; i < cells / 2; i++) {
                 LinearLayout row = new LinearLayout(context);
@@ -1278,6 +1387,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                     primary[index] = new TextView(context);
                     primary[index].setTypeface(AndroidUtilities.bold());
                     primary[index].setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+                    primary[index].setMaxLines(2);
                     primary[index].setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
                     title[index] = new TextView(context);
                     title[index].setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
@@ -1295,8 +1405,33 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             for (int i = 0; i < primary.length; i++) {
                 primary[i].setText(overviewValues == null ? "—" : overviewValues[i]);
                 title[i].setText(LocaleController.getString(labels[i]));
+                ((View) primary[i].getParent()).setContentDescription(title[i].getText() + ": " + primary[i].getText());
+                ((View) primary[i].getParent()).setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+                primary[i].setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                title[i].setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             }
             updateColors();
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            boolean narrow = MeasureSpec.getSize(widthMeasureSpec) < AndroidUtilities.dp(320)
+                    || getResources().getConfiguration().fontScale > 1.4f;
+            for (int i = 0; i < getChildCount(); i++) {
+                LinearLayout row = (LinearLayout) getChildAt(i);
+                int orientation = narrow ? VERTICAL : HORIZONTAL;
+                if (row.getOrientation() != orientation) {
+                    row.setOrientation(orientation);
+                    for (int j = 0; j < row.getChildCount(); j++) {
+                        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) row.getChildAt(j).getLayoutParams();
+                        params.width = narrow ? MATCH_PARENT : 0;
+                        params.weight = narrow ? 0 : 1;
+                        params.topMargin = narrow && j > 0 ? AndroidUtilities.dp(16) : 0;
+                        row.getChildAt(j).setLayoutParams(params);
+                    }
+                }
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
 
         private void updateColors() {
@@ -1308,30 +1443,23 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         }
     }
 
-    private class PostDetailsCell extends LinearLayout {
-        private final TextView metadata, status, ratesTitle, rates, explanation, reactionsTitle, reactions, reactionNote, refresh;
+    /** Text-only states never instantiate the 380dp chart canvas. */
+    private class StatisticsInfoCell extends LinearLayout {
+        private final TextView title, body, note, action;
 
-        PostDetailsCell(Context context) {
+        StatisticsInfoCell(Context context) {
             super(context);
             setOrientation(VERTICAL);
-            setPadding(AndroidUtilities.dp(16), 0, AndroidUtilities.dp(16), AndroidUtilities.dp(18));
-            metadata = text(context, 13, false, 0);
-            status = text(context, 13, false, 10);
-            refresh = text(context, 14, true, 6);
-            refresh.setText(LocaleController.getString(R.string.OxPostStatsRefresh));
-            refresh.setPadding(0, AndroidUtilities.dp(8), 0, AndroidUtilities.dp(8));
-            refresh.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), 2));
-            refresh.setOnClickListener(v -> refreshStatistics());
-            ratesTitle = text(context, 16, true, 14);
-            ratesTitle.setText(LocaleController.getString(R.string.OxPostStatsRates));
-            rates = text(context, 15, false, 8);
-            explanation = text(context, 13, false, 10);
-            explanation.setText(LocaleController.getString(R.string.OxPostStatsRateExplanation) + "\n\n" + LocaleController.getString(R.string.OxPostStatsPrivateExplanation));
-            reactionsTitle = text(context, 16, true, 18);
-            reactionsTitle.setText(LocaleController.getString(R.string.OxPostStatsReactionBreakdown));
-            reactions = text(context, 16, false, 10);
-            reactionNote = text(context, 13, false, 8);
-            reactionNote.setText(LocaleController.getString(R.string.OxPostStatsReactionExplanation));
+            setLayoutDirection(LocaleController.isRTL ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
+            setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(12), AndroidUtilities.dp(16), AndroidUtilities.dp(12));
+            title = text(context, 16, true, 0);
+            body = text(context, 15, false, 8);
+            note = text(context, 13, false, 8);
+            action = text(context, 14, true, 4);
+            action.setMinHeight(AndroidUtilities.dp(48));
+            action.setGravity(Gravity.CENTER_VERTICAL | (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT));
+            action.setPadding(0, AndroidUtilities.dp(8), 0, AndroidUtilities.dp(8));
+            action.setFocusable(true);
         }
 
         private TextView text(Context context, int size, boolean bold, int marginTop) {
@@ -1344,21 +1472,78 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             return view;
         }
 
-        void setData() {
-            metadata.setText(metadataText);
-            status.setText(statusText());
-            rates.setText(ratesText);
-            reactions.setText(Emoji.replaceEmoji(reactionsText, reactions.getPaint().getFontMetricsInt(), false));
-            refresh.setEnabled(!basicLoading);
-            refresh.setAlpha(basicLoading ? 0.5f : 1f);
+        void setData(int position) {
+            title.setVisibility(VISIBLE);
+            body.setVisibility(VISIBLE);
+            note.setVisibility(GONE);
+            action.setVisibility(GONE);
+            action.setEnabled(true);
+            action.setAlpha(1f);
+            action.setOnClickListener(null);
+            if (position == sourceRow) {
+                title.setVisibility(GONE);
+                body.setText(metadataText);
+                note.setVisibility(VISIBLE);
+                note.setText(messageObject.isStory() ? LocaleController.getString(R.string.OxStatsStorySource)
+                        : LocaleController.getString(basicStatus));
+                if (interactionsViewData == null) note.append("\n" + LocaleController.getString(detailStatus));
+                showAction(R.string.OxPostStatsRefresh, () -> refreshStatistics());
+                boolean pending = basicLoading || awaitingFullChat || graphsLoading;
+                action.setEnabled(!pending);
+                action.setAlpha(pending ? .5f : 1f);
+            } else if (position == detailsRow) {
+                title.setText(LocaleController.getString(R.string.OxPostStatsRates));
+                body.setText(ratesText);
+                showAction(R.string.OxStatsHowCalculated, () -> showDialog(new AlertDialog.Builder(getContext(), getResourceProvider())
+                        .setTitle(LocaleController.getString(R.string.OxPostStatsRates))
+                        .setMessage(LocaleController.getString(R.string.OxStatsRatesHint) + "\n\n" + LocaleController.getString(R.string.OxPostStatsRateExplanation) + "\n\n" + LocaleController.getString(R.string.OxPostStatsPrivateExplanation) + "\n\n" + LocaleController.getString(R.string.OxPostStatsReactionExplanation))
+                        .setPositiveButton(LocaleController.getString(R.string.OK), null).create()));
+            } else if (position == reactionsRow) {
+                title.setText(LocaleController.getString(R.string.OxPostStatsReactionBreakdown));
+                body.setText(reactionsDisplayText);
+            } else if (position == forwardsStatusRow) {
+                title.setVisibility(GONE);
+                body.setText(LocaleController.getString(forwardsFailed ? R.string.OxStatsForwardsRetry
+                        : loading || awaitingFullChat ? R.string.OxStatsForwardsLoading
+                        : !canRequestDetailedStats() ? R.string.OxPostStatsNoAccess
+                        : !publicSharesKnown ? R.string.OxStatsForwardsUnavailable
+                        : messages.isEmpty() ? R.string.OxStatsForwardsEmpty : R.string.OxStatsForwardsHint));
+                if (forwardsFailed) showAction(R.string.OxStatsRetry, () -> { loadChats(100); updateRows(); });
+            } else {
+                final PostGraph graph = position == interactionsChartRow ? interactionsViewData : reactionsByEmotionData;
+                title.setText(graph.title);
+                body.setText(LocaleController.getString(graphStateText(graph.state)));
+                if (PostStatisticsState.canRetry(graph.state)) showAction(R.string.OxStatsRetry, () -> retryGraph(graph));
+            }
             updateColors();
+        }
+
+        private void showAction(int label, Runnable callback) {
+            action.setVisibility(VISIBLE);
+            action.setText(LocaleController.getString(label));
+            action.setOnClickListener(v -> { if (isCurrentSession()) callback.run(); });
         }
 
         void updateColors() {
             setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, getResourceProvider()));
-            for (TextView view : new TextView[]{metadata, status, explanation, reactionNote}) view.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, getResourceProvider()));
-            for (TextView view : new TextView[]{ratesTitle, rates, reactionsTitle, reactions}) view.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, getResourceProvider()));
-            refresh.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, getResourceProvider()));
+            title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, getResourceProvider()));
+            body.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, getResourceProvider()));
+            note.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, getResourceProvider()));
+            action.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, getResourceProvider()));
+            action.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, getResourceProvider()), 2));
+        }
+    }
+
+    private static int graphStateText(Graph state) {
+        switch (state) {
+            case LOADING: return R.string.OxStatsGraphLoading;
+            case EMPTY: return R.string.OxPostStatsNoGraphs;
+            case LIMITED: return R.string.OxStatsGraphLimited;
+            case ACCESS_REQUIRED: return R.string.OxPostStatsNoAccess;
+            case UNSUPPORTED: return R.string.OxStatsUnsupported;
+            case NETWORK_ERROR: return R.string.OxStatsGraphRetry;
+            case INVALID_DATA: return R.string.OxStatsGraphInvalid;
+            default: return R.string.OxStatsUnavailable;
         }
     }
     @Override
@@ -1449,8 +1634,8 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         } else if (child instanceof OverviewCell) {
             ((OverviewCell) child).updateColors();
             child.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, getResourceProvider()));
-        } else if (child instanceof PostDetailsCell) {
-            ((PostDetailsCell) child).updateColors();
+        } else if (child instanceof StatisticsInfoCell) {
+            ((StatisticsInfoCell) child).updateColors();
         }
         if (child instanceof EmptyCell) {
             child.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, getResourceProvider()));

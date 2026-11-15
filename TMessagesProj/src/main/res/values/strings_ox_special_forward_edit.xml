@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxSpecialForwardApply">Apply</string>
+    <string name="OxSpecialForwardEdit">Edit before forwarding</string>
+    <string name="OxSpecialForwardEditApplied">Edit applied · review</string>
+    <string name="OxSpecialForwardCopyInfo">Changes will be sent as new copies under your selected sender identity, without the original forward header. Applying edits shows captions; Hide caption can suppress them afterwards. Formatting follows the edited text.</string>
+    <string name="OxSpecialForwardUnsupported">This selection contains content that cannot be edited safely (such as polls, buttons, rich posts or expiring media), or more than 100 messages. You can still forward it unchanged.</string>
+    <string name="OxSpecialForwardPrevious">Previous</string>
+    <string name="OxSpecialForwardNext">Next</string>
+    <string name="OxSpecialForwardItem">Message %1$d of %2$d</string>
+    <string name="OxSpecialForwardCaption">Caption</string>
+    <string name="OxSpecialForwardText">Text</string>
+    <string name="OxSpecialForwardLength">Enter text within %1$d characters. A text message cannot be empty.</string>
+</resources>

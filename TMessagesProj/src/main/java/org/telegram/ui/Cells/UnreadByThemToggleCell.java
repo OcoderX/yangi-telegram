@@ -8,6 +8,7 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -26,6 +27,7 @@ public class UnreadByThemToggleCell extends View {
     private final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF pillRect = new RectF();
     private String text = "";
+    private CharSequence drawText = "";
     private float textWidth;
     private boolean active;
     private boolean pressed;
@@ -36,6 +38,9 @@ public class UnreadByThemToggleCell extends View {
         textPaint.setTextSize(AndroidUtilities.dp(13));
         textPaint.setTypeface(AndroidUtilities.bold());
         setText(LocaleController.getString(R.string.AyuUnreadByThem));
+        setContentDescription(text);
+        setFocusable(true);
+        setClickable(true);
     }
 
     private void setText(String value) {
@@ -46,6 +51,7 @@ public class UnreadByThemToggleCell extends View {
     public void setActive(boolean value) {
         if (active != value) {
             active = value;
+            setSelected(value);
             invalidate();
         }
     }
@@ -56,21 +62,22 @@ public class UnreadByThemToggleCell extends View {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), AndroidUtilities.dp(40));
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), AndroidUtilities.dp(48));
+        updateRect();
+        drawText = TextUtils.ellipsize(text, textPaint, Math.max(0, pillRect.width() - AndroidUtilities.dp(24)), TextUtils.TruncateAt.END);
     }
 
     private void updateRect() {
-        int maxWidth = getMeasuredWidth() - AndroidUtilities.dp(32);
+        int maxWidth = Math.max(0, getMeasuredWidth() - AndroidUtilities.dp(32));
         float w = Math.min(textWidth + AndroidUtilities.dp(24), maxWidth);
         float h = AndroidUtilities.dp(28);
-        float left = AndroidUtilities.dp(16);
+        float left = LocaleController.isRTL ? getMeasuredWidth() - AndroidUtilities.dp(16) - w : AndroidUtilities.dp(16);
         float top = (getMeasuredHeight() - h) / 2f;
         pillRect.set(left, top, left + w, top + h);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
-        updateRect();
         int bg;
         int fg;
         if (active) {
@@ -87,11 +94,6 @@ public class UnreadByThemToggleCell extends View {
         float r = pillRect.height() / 2f;
         canvas.drawRoundRect(pillRect, r, r, pillPaint);
         textPaint.setColor(fg);
-        CharSequence drawText = text;
-        float avail = pillRect.width() - AndroidUtilities.dp(24);
-        if (textWidth > avail) {
-            drawText = TextUtils.ellipsize(text, textPaint, avail, TextUtils.TruncateAt.END);
-        }
         float tx = pillRect.left + AndroidUtilities.dp(12);
         float ty = pillRect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f;
         canvas.drawText(drawText, 0, drawText.length(), tx, ty, textPaint);
@@ -99,6 +101,21 @@ public class UnreadByThemToggleCell extends View {
 
     private boolean inPill(float x, float y) {
         return x >= pillRect.left - AndroidUtilities.dp(8) && x <= pillRect.right + AndroidUtilities.dp(8) && y >= 0 && y <= getMeasuredHeight();
+    }
+
+    @Override
+    public boolean performClick() {
+        super.performClick();
+        if (onToggle != null) onToggle.run();
+        return true;
+    }
+
+    @Override
+    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+        super.onInitializeAccessibilityNodeInfo(info);
+        info.setClassName("android.widget.Switch");
+        info.setCheckable(true);
+        info.setChecked(active);
     }
 
     @Override
@@ -121,9 +138,7 @@ public class UnreadByThemToggleCell extends View {
                 if (pressed) {
                     pressed = false;
                     invalidate();
-                    if (onToggle != null) {
-                        onToggle.run();
-                    }
+                    if (inPill(event.getX(), event.getY())) performClick();
                     return true;
                 }
                 return false;

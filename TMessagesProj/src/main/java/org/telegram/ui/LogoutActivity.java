@@ -8,7 +8,6 @@
 
 package org.telegram.ui;
 
-import static org.telegram.ui.Components.Premium.LimitReachedBottomSheet.TYPE_ACCOUNTS;
 
 import android.animation.AnimatorSet;
 import android.app.Dialog;
@@ -42,7 +41,6 @@ import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.LayoutHelper;
-import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.RecyclerListView;
 
 import java.util.ArrayList;
@@ -63,6 +61,14 @@ public class LogoutActivity extends BaseFragment {
     private int logoutRow;
     private int logoutSectionRow;
     private int rowCount;
+
+    private AlertDialog accountLimitDialog() {
+        return new AlertDialog.Builder(getContext())
+                .setTitle(LocaleController.getString(R.string.AppName))
+                .setMessage(AndroidUtilities.replaceTags(LocaleController.formatString(R.string.LimitReachedAccountsPremium, UserConfig.MAX_ACCOUNT_COUNT)))
+                .setPositiveButton(LocaleController.getString(R.string.OK), null)
+                .create();
+    }
 
     @Override
     public boolean onFragmentCreate() {
@@ -121,24 +127,11 @@ public class LogoutActivity extends BaseFragment {
         listView.setAdapter(listAdapter);
         listView.setOnItemClickListener((view, position, x, y) -> {
             if (position == addAccountRow) {
-                int freeAccounts = 0;
-                Integer availableAccount = null;
-                for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
-                    if (!UserConfig.getInstance(a).isClientActivated()) {
-                        freeAccounts++;
-                        if (availableAccount == null) {
-                            availableAccount = a;
-                        }
-                    }
-                }
-                if (!UserConfig.hasPremiumOnAccounts()) {
-                    freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-                }
-                if (freeAccounts > 0 && availableAccount != null) {
+                final int availableAccount = UserConfig.findFreeAccount();
+                if (availableAccount >= 0) {
                     presentFragment(new LoginActivity(availableAccount));
-                } else if (!UserConfig.hasPremiumOnAccounts()) {
-                    LimitReachedBottomSheet limitReachedBottomSheet = new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null);
-                    showDialog(limitReachedBottomSheet);
+                } else if (getContext() != null) {
+                    showDialog(accountLimitDialog());
                 }
             } else if (position == passcodeRow) {
                 presentFragment(PasscodeActivity.determineOpenFragment());

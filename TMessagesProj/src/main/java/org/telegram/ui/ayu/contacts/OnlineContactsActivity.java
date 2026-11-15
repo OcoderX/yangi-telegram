@@ -174,6 +174,10 @@ public class OnlineContactsActivity extends BaseFragment implements Notification
         totalContacts = contacts.size();
         for (int i = 0; i < contacts.size(); i++) {
             TLRPC.TL_contact contact = contacts.get(i);
+            if (contact != null && org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(contact.user_id)) {
+                totalContacts--;
+                continue;
+            }
             if (contact == null) {
                 continue;
             }

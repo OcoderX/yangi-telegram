@@ -93,6 +93,7 @@ public class ContactTrackerLogActivity extends BaseFragment implements Notificat
 
     @Override
     public boolean onFragmentCreate() {
+        if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(userId)) return false;
         getNotificationCenter().addObserver(this, NotificationCenter.updateInterfaces);
         ContactTracker.getInstance().addDelegate(this);
         return super.onFragmentCreate();

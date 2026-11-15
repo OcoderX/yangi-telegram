@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxTranslationAutoDetect">Auto detect</string>
+    <string name="OxTranslationBotUnsupported">Telegram translation is unavailable for bot accounts. You can select the alternative translation method in Settings.</string>
+</resources>

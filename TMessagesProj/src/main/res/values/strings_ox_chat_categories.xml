@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxChatsAll">All</string>
+    <string name="OxChatsPersonal">Personal</string>
+    <string name="OxChatsGroups">Groups</string>
+    <string name="OxChatsChannels">Channels</string>
+    <string name="OxChatsBots">Bots</string>
+    <string name="OxChatTabSettings">Tab settings</string>
+    <string name="OxChatCategoriesEnabled">Show chat categories</string>
+    <string name="OxChatCategoriesInfo">Choose where category tabs appear, then tap a category to set its visibility on the main page and when forwarding. Each page has its own switch. These settings apply to this account on this device.</string>
+    <string name="OxChatVisibleCategories">Visible categories</string>
+    <string name="OxChatAllAlwaysAvailable">All chats are always available. The choices above are saved even when categories are turned off. You can restore hidden categories here from Settings → Chat Folders → Tab settings.</string>
+    <string name="OxChatHideCategory">Hide</string>
+    <string name="OxChatHideCategories">Hide categories</string>
+    <string name="OxChatEditFolders">Edit folders</string>
+    <string name="OxChatCategoriesMain">Categories on main page</string>
+    <string name="OxChatCategoriesForward">Categories when forwarding</string>
+    <string name="OxChatShowInMain">Show on main page</string>
+    <string name="OxChatShowInForward">Show when forwarding</string>
+    <string name="OxChatVisibleBoth">Main and forward</string>
+    <string name="OxChatVisibleMain">Main page</string>
+    <string name="OxChatVisibleForward">Forward</string>
+    <string name="OxChatVisibleNowhere">Hidden</string>
+</resources>

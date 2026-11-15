@@ -53,6 +53,16 @@ Run `./gradlew :TMessagesProj_App:assembleAfatPerformance` to build an APK with 
 
 The library remains unminified until the application optimization pass. Resource shrinking stays disabled for Telegram's dynamic resource lookups, and TL class names are preserved for bot method guards and message details. Keep the generated R8 mapping file alongside each distributed APK for crash diagnosis.
 
+### Current release label
+
+The current Ox-gram version label is `13.0.3-ox.7`, following the latest upstream Telegram release label. This is a display/version-label update, not a full Telegram 13.0.3 or layer 231 migration; the rich-message compatibility work below remains based on the layer 229 backport, and the phone login fixes are retained.
+
+### Rich message compatibility
+
+Ox-gram `12.9.2-ox.1` backports rich-message compatibility from the official Android source at `f32ffeec763f0bdbf4bec25b52d654f77bff733d` (13.0.2). This includes buttons inside text, button rows, inline documents, compact tables and collapsible quotations. The protocol integration targets layer 229 and preserves the existing bot login and Ox-gram features. It is not a full migration to Telegram 13.0.2 or layer 231.
+
+The code before this update is saved at `f617f2a01f224392b1abb2b29fc4795e692f9fff` on `myfork/main`. Compatibility work is on `codex/message-compatibility`. The local test APK is delivered separately as `ox-gram-message-compatibility.apk`; `ox-gram-performance.apk` remains available as the earlier build.
+
 ### APK signing for distribution
 
 The bundled `TMessagesProj/config/release.keystore` is a public dummy key. APKs signed with it are suitable only for local development. The existing `debug`, `performance` and `release` signing configurations remain unchanged for compatibility; use the separate `distribution` variant for an APK signed with your private key.
@@ -73,6 +83,12 @@ The APK is written to `TMessagesProj_App/build/outputs/apk/afat/distribution/app
 An installation signed with the old public key cannot normally be updated by an APK signed with a new private key. Decide the account and local-data migration before distributing or installing it; uninstalling the old app can remove local data. Changing the package name also creates a separate app and requires reviewing its service configuration.
 
 A private signing key fixes the public-key distribution problem, but does not by itself establish why Google Play Protect blocked an APK or guarantee removal of the warning. If a reviewed APK is still classified as harmful, submit the exact signed APK through the [Google Play Protect appeal process](https://support.google.com/googleplay/android-developer/contact/protectappeals).
+
+### In-app updates
+
+Ox-gram checks its fixed public release feed at <https://github.com/OcoderX/yangi-telegram/releases/latest/download/ox-gram-update.json>. Publish the APK and `ox-gram-update.json` together as assets of a release in the verified `OcoderX/yangi-telegram` repository. Users can check under **Settings > App updates**; Android shows its native confirmation before installation. The update keeps the `org.telegram.messenger.beta` package and the existing performance signing certificate. A newly installed updater APK must be installed once to bootstrap this feature; older builds without the updater cannot receive that first update automatically. Afterward, users update in the app without manually downloading APKs, and Telegram channel announcements can remain text notices.
+
+For each release, build and sign the APK once, then use `Tools/publish_ox_update.py` to prepare and publish its verified APK and manifest assets. The helper supports `prepare` (local manifest), `draft` (upload and verify a draft), `publish` (publish that exact verified draft), and `verify-public` (check the public assets). Pass `--metadata <path>` and `--changelog <path>` when the verification pipeline's files are outside the defaults under `build/in-app-update-apk/`. Release metadata, its matching `verification-result.json`, and both `apk-mapping.txt` and `previous-apk-mapping.txt` must come from the build verification pipeline; the helper does not generate them from a fresh clone. The publisher reads GitHub credentials non-interactively from Git Credential Manager. Do not store tokens, credentials, or session files in the repository.
 
 ### Localization
 

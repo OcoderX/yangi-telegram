@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxCaptureScopeInfo">Shaxsiy yozishmalar, guruhlar va kanallarda o‘chirilgan xabarlar hamda tahrir tarixi avtomatik saqlanadi. Botlarda suhbat menyusidan yoqing. Alohida suhbat istisnolari va umumiy saqlash tugmalari ham amal qiladi. Faqat ushbu ilova qabul qilgan xabarlar saqlanadi; oldingi arxivlar qoladi.</string>
+    <string name="OxCaptureMediaInfo">Umumiy media saqlash yoqilgan bo‘lishi kerak. Alohida yoqilgan suhbatning media fayllari ham saqlanadi; quyidagi toifalar avtomatik yoqilgan suhbatlarda amal qiladi.</string>
+    <string name="OxCaptureEnable">O‘chirilgan va tahrirlanganlarni saqlash</string>
+    <string name="OxCaptureDisable">O‘chirilgan va tahrirlanganlarni saqlamaslik</string>
+    <string name="OxCaptureEnableWholeChat">Butun suhbatda o‘chirish/tahrir tarixini yoqish</string>
+    <string name="OxCaptureDisableWholeChat">Butun suhbatda o‘chirish/tahrir tarixini o‘chirish</string>
+    <string name="OxCaptureEnabledInfo">Bu butun suhbatdagi keyingi o‘chirilgan xabarlar va tahrir tarixi uchun saqlash yoqildi. Umumiy saqlash tugmalari ham amal qiladi. Oldingi arxivlar saqlanadi.</string>
+    <string name="OxCaptureDisabledInfo">Bu butun suhbatdagi keyingi o‘chirilgan xabarlar va tahrir tarixi saqlanmaydi. Oldingi arxivlar saqlanadi.</string>
+    <string name="OxCaptureEnabledChats">Bu hisobda yoqilgan</string>
+    <string name="OxCaptureDisabledChats">Bu hisobda o‘chirilgan</string>
+    <string name="OxCaptureEnabledChatsInfo">Bu hisobda keyingi o‘chirilgan xabarlar va tahrir tarixini saqlamaslik uchun suhbatni bosing. Umumiy saqlash tugmalari ham amal qiladi.</string>
+    <string name="OxCaptureDisabledChatsInfo">Bu hisobda keyingi o‘chirilgan xabarlar va tahrir tarixini saqlash uchun suhbatni bosing. Umumiy saqlash tugmalari ham amal qiladi.</string>
+    <string name="OxCaptureLegacyChats">Oldingi istisnolar</string>
+    <string name="OxCaptureLegacyInfo">Oldingi istisnolar barcha hisoblar uchun saqlangan. Yuqoridagi alohida tanlovlar bu hisobda ustun turadi. Bu hisobda keyingi o‘chirilgan xabarlar va tahrir tarixini saqlashni yoqish uchun suhbatni bosing.</string>
+</resources>

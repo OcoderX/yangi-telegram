@@ -39,6 +39,10 @@
     <string name="AyuDetailsFileId">File ID</string>
     <string name="AyuDetailsTtl">TTL</string>
     <string name="AyuDetailsDeleted">Deleted</string>
+    <string name="AyuDetailsDeletedDate">Deleted date</string>
+    <string name="AyuDetailsReadDate">Read date</string>
+    <string name="AyuDetailsUnread">Unread</string>
+    <string name="AyuDetailsRead">Read</string>
     <string name="AyuDetailsEntities">Entities</string>
     <string name="AyuDetailsRevisions">Saved revisions</string>
     <string name="AyuDetailsSectionGeneral">General</string>

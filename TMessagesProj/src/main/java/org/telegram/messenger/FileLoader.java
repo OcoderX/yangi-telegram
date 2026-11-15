@@ -29,6 +29,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -222,9 +224,21 @@ public class FileLoader extends BaseController {
 
         void fileDidLoaded(String location, File finalFile, Object parentObject, int type);
 
+        default void fileDidLoaded(String location, File finalFile, Object parentObject, int type, DownloadProgress event) {
+            fileDidLoaded(location, finalFile, parentObject, type);
+        }
+
         void fileDidFailedLoad(String location, int state);
 
+        default void fileDidFailedLoad(String location, int state, DownloadProgress event) {
+            fileDidFailedLoad(location, state);
+        }
+
         void fileLoadProgressChanged(FileLoadOperation operation, String location, long uploadedSize, long totalSize);
+    }
+
+    interface FileLoaderDelegateFactory {
+        FileLoaderDelegate create(int account);
     }
 
     public static final int MEDIA_DIR_IMAGE = 0;
@@ -266,10 +280,108 @@ public class FileLoader extends BaseController {
     private final ConcurrentHashMap<String, FileUploadOperation> uploadOperationPathsEnc = new ConcurrentHashMap<>();
     private int currentUploadOperationsCount = 0;
     private int currentUploadSmallOperationsCount = 0;
+    // Only fileLoaderQueue mutates slot ownership; queued cancellations never release an active slot.
+    private final HashMap<FileUploadOperation, UploadOperationState> uploadOperationStates = new HashMap<>();
+    private final ConcurrentHashMap<String, UploadEvent> uploadEvents = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, UploadEvent> encryptedUploadEvents = new ConcurrentHashMap<>();
+
+    public static final class UploadEvent {
+        private final FileUploadOperation operation;
+        private final String location;
+        private final boolean encrypted;
+        private final long ownerId;
+        private volatile boolean terminal;
+
+        private UploadEvent(FileUploadOperation operation, String location, boolean encrypted, long ownerId) {
+            this.operation = operation;
+            this.location = location;
+            this.encrypted = encrypted;
+            this.ownerId = ownerId;
+        }
+    }
+
+    public UploadEvent getUploadEvent(String location, boolean encrypted, FileUploadOperation operation) {
+        UploadEvent event = (encrypted ? encryptedUploadEvents : uploadEvents).get(location);
+        return event != null && (operation == null || event.operation == operation) ? event : null;
+    }
+
+    public boolean isCurrentUploadEvent(UploadEvent event) {
+        return event != null && event.ownerId != 0 && event.ownerId == getUserConfig().getClientUserId()
+                && (event.encrypted ? encryptedUploadEvents : uploadEvents).get(event.location) == event;
+    }
+
+    public void finishUploadEvent(UploadEvent event) {
+        if (event != null && event.terminal) (event.encrypted ? encryptedUploadEvents : uploadEvents).remove(event.location, event);
+    }
+
+    private static final class UploadOperationState {
+        final boolean small;
+        final long ownerId;
+        final UploadEvent event;
+        boolean active;
+        boolean cancelled;
+
+        UploadOperationState(boolean small, long ownerId, UploadEvent event) {
+            this.small = small;
+            this.ownerId = ownerId;
+            this.event = event;
+        }
+    }
 
 
     private final ConcurrentHashMap<String, FileLoadOperation> loadOperationPaths = new ConcurrentHashMap<>();
+    private static final AtomicLong nextDownloadTransferId = new AtomicLong();
+    private final ConcurrentHashMap<String, DownloadProgress> downloadProgresses = new ConcurrentHashMap<>();
+
+    /** Account- and operation-scoped bytes; the global image cache is not a transfer identity. */
+    public static final class DownloadProgress {
+        public final long transferId = nextDownloadTransferId.incrementAndGet();
+        public final long ownerId;
+        public volatile long loaded;
+        public volatile long total;
+        private final FileLoadOperation operation;
+        private final String fileName;
+        private volatile boolean terminal;
+
+        private DownloadProgress(FileLoadOperation operation, long ownerId) {
+            this.operation = operation;
+            fileName = operation.getFileName();
+            this.ownerId = ownerId;
+            total = Math.max(0, operation.totalBytesCount);
+        }
+    }
+
+    public DownloadProgress getDownloadProgress(String fileName) {
+        if (fileName == null) return null;
+        DownloadProgress progress = downloadProgresses.get(fileName);
+        return progress != null && progress.ownerId != 0 && progress.ownerId == getUserConfig().getClientUserId()
+                && !progress.terminal && loadOperationPaths.get(fileName) == progress.operation && !progress.operation.isPreloadVideoOperation() ? progress : null;
+    }
+
+    public DownloadProgress getDownloadEvent(String fileName, FileLoadOperation operation) {
+        DownloadProgress progress = downloadProgresses.get(fileName);
+        return progress != null && (operation == null || progress.operation == operation) ? progress : null;
+    }
+
+    public boolean isCurrentDownloadEvent(DownloadProgress progress) {
+        return progress != null && progress.ownerId == getUserConfig().getClientUserId()
+                && downloadProgresses.get(progress.fileName) == progress;
+    }
+
+    public void finishDownloadEvent(DownloadProgress progress) {
+        if (progress != null && progress.terminal) downloadProgresses.remove(progress.fileName, progress);
+    }
+
+    private void removeDownloadProgress(String fileName, FileLoadOperation operation) {
+        DownloadProgress progress = downloadProgresses.get(fileName);
+        if (progress != null && progress.operation == operation) downloadProgresses.remove(fileName, progress);
+    }
     private final ConcurrentHashMap<String, LoadOperationUIObject> loadOperationPathsUI = new ConcurrentHashMap<>(10, 1, 2);
+
+    private LoadOperationUIObject removeDownloadUi(String fileName, FileLoadOperation operation) {
+        LoadOperationUIObject ui = loadOperationPathsUI.get(fileName);
+        return ui != null && ui.operation == operation && loadOperationPathsUI.remove(fileName, ui) ? ui : null;
+    }
     private final HashMap<String, Long> uploadSizes = new HashMap<>();
 
     private final HashMap<String, Boolean> loadingVideos = new HashMap<>();
@@ -277,21 +389,52 @@ public class FileLoader extends BaseController {
     private String forceLoadingFile;
 
     private static SparseArray<File> mediaDirs = null;
-    private FileLoaderDelegate delegate = null;
+    private volatile FileLoaderDelegate delegate = null;
+    private volatile boolean delegateInitialized;
 
     private int lastReferenceId;
     private final ConcurrentHashMap<Integer, Object> parentObjectReferences = new ConcurrentHashMap<>();
 
-    private static final FileLoader[] Instance = new FileLoader[UserConfig.MAX_ACCOUNT_COUNT];
+    private static final AtomicReferenceArray<FileLoader> Instance = new AtomicReferenceArray<>(UserConfig.MAX_ACCOUNT_COUNT);
+    private static volatile FileLoaderDelegateFactory delegateFactory;
+
+    static void setDelegateFactory(FileLoaderDelegateFactory factory) {
+        synchronized (FileLoader.class) {
+            delegateFactory = factory;
+            // Attach to used accounts only; creating unused loaders also allocates their queues.
+            for (int account = 0; account < Instance.length(); account++) {
+                FileLoader loader = Instance.get(account);
+                if (loader != null) {
+                    loader.initDelegate();
+                }
+            }
+        }
+    }
+
+    private void initDelegate() {
+        // Called under FileLoader.class. The factory only creates a delegate and must not
+        // initialize controllers, so registration cannot recurse into ImageLoader startup.
+        if (!delegateInitialized && delegateFactory != null) {
+            delegate = delegateFactory.create(currentAccount);
+            delegateInitialized = true;
+        }
+    }
 
     public static FileLoader getInstance(int num) {
-        FileLoader localInstance = Instance[num];
+        FileLoader localInstance = Instance.get(num);
         if (localInstance == null) {
             synchronized (FileLoader.class) {
-                localInstance = Instance[num];
+                localInstance = Instance.get(num);
                 if (localInstance == null) {
-                    Instance[num] = localInstance = new FileLoader(num);
+                    localInstance = new FileLoader(num);
+                    localInstance.initDelegate();
+                    Instance.set(num, localInstance);
                 }
+            }
+        }
+        if (!localInstance.delegateInitialized && delegateFactory != null) {
+            synchronized (FileLoader.class) {
+                localInstance.initDelegate();
             }
         }
         return localInstance;
@@ -399,6 +542,10 @@ public class FileLoader extends BaseController {
     }
 
     public void cancelFileUpload(final String location, final boolean enc) {
+        cancelFileUpload(location, enc, null);
+    }
+
+    public void cancelFileUpload(final String location, final boolean enc, final FileUploadOperation expectedOperation) {
         if (location == null) {
             return;
         }
@@ -409,12 +556,12 @@ public class FileLoader extends BaseController {
             } else {
                 operation = uploadOperationPathsEnc.get(location);
             }
+            if (expectedOperation != null && operation != expectedOperation) return;
             uploadSizes.remove(location);
             if (operation != null) {
-                // AyuGram: the non-encrypted map was never cleared here, which made a later
-                // uploadFile() for the same path return early and never re-upload it
-                uploadOperationPaths.remove(location);
-                uploadOperationPathsEnc.remove(location);
+                (enc ? uploadOperationPathsEnc : uploadOperationPaths).remove(location, operation);
+                UploadOperationState slot = uploadOperationStates.get(operation);
+                if (slot != null) slot.cancelled = true;
                 uploadOperationQueue.remove(operation);
                 uploadSmallOperationQueue.remove(operation);
                 operation.cancel();
@@ -427,17 +574,23 @@ public class FileLoader extends BaseController {
         if (location == null) {
             return null;
         }
-        return encrypted ? uploadOperationPathsEnc.get(location) : uploadOperationPaths.get(location);
+        FileUploadOperation operation = (encrypted ? uploadOperationPathsEnc : uploadOperationPaths).get(location);
+        UploadEvent event = getUploadEvent(location, encrypted, operation);
+        return operation != null && isCurrentUploadEvent(event) && !event.terminal ? operation : null;
     }
 
     /** AyuGram upload queue: "move to top" — the operation becomes the next one to be started */
     public void moveUploadOperationToTop(final String location, final boolean encrypted) {
+        moveUploadOperationToTop(location, encrypted, null);
+    }
+
+    public void moveUploadOperationToTop(final String location, final boolean encrypted, final FileUploadOperation expectedOperation) {
         if (location == null) {
             return;
         }
         fileLoaderQueue.postRunnable(() -> {
             final FileUploadOperation operation = encrypted ? uploadOperationPathsEnc.get(location) : uploadOperationPaths.get(location);
-            if (operation == null) {
+            if (operation == null || expectedOperation != null && operation != expectedOperation) {
                 return;
             }
             if (uploadOperationQueue.remove(operation)) {
@@ -453,24 +606,62 @@ public class FileLoader extends BaseController {
      * changed and after an item was paused or resumed.
      */
     public void checkUploadQueue() {
-        fileLoaderQueue.postRunnable(() -> {
-            while (currentUploadOperationsCount < getMaxUploadOperations()) {
-                final FileUploadOperation operation = pollNextUploadOperation(uploadOperationQueue);
-                if (operation == null) {
-                    break;
-                }
-                currentUploadOperationsCount++;
-                operation.start();
-            }
-            while (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
-                final FileUploadOperation operation = pollNextUploadOperation(uploadSmallOperationQueue);
-                if (operation == null) {
-                    break;
-                }
-                currentUploadSmallOperationsCount++;
-                operation.start();
-            }
-        });
+        fileLoaderQueue.postRunnable(this::fillUploadSlots);
+    }
+
+    private void startUploadOperation(FileUploadOperation operation) {
+        UploadOperationState slot = uploadOperationStates.get(operation);
+        if (slot == null || slot.active || slot.cancelled) return;
+        if (slot.ownerId == 0 || getUserConfig().getClientUserId() != slot.ownerId) {
+            slot.cancelled = true;
+            operation.cancel();
+            return;
+        }
+        if (operation.isPausedByUser()) {
+            LinkedList<FileUploadOperation> queue = slot.small ? uploadSmallOperationQueue : uploadOperationQueue;
+            if (!queue.contains(operation)) queue.addFirst(operation);
+            return;
+        }
+        slot.active = true;
+        if (slot.small) currentUploadSmallOperationsCount++;
+        else currentUploadOperationsCount++;
+        operation.start();
+        AyuUploadManager.onUploadStarted(currentAccount, slot.event.location, slot.event.encrypted, operation, slot.ownerId);
+    }
+
+    private void fillUploadSlots() {
+        while (currentUploadOperationsCount < getMaxUploadOperations()) {
+            FileUploadOperation next = pollNextUploadOperation(uploadOperationQueue);
+            if (next == null) break;
+            startUploadOperation(next);
+        }
+        while (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
+            FileUploadOperation next = pollNextUploadOperation(uploadSmallOperationQueue);
+            if (next == null) break;
+            startUploadOperation(next);
+        }
+    }
+
+    private boolean releaseUploadOperation(FileUploadOperation operation, String location, boolean encrypted, boolean success) {
+        UploadOperationState slot = uploadOperationStates.remove(operation);
+        if (slot == null) return false;
+        ConcurrentHashMap<String, FileUploadOperation> paths = encrypted ? uploadOperationPathsEnc : uploadOperationPaths;
+        UploadEvent event = getUploadEvent(location, encrypted, operation);
+        if (event != null) event.terminal = true;
+        paths.remove(location, operation);
+        uploadOperationQueue.remove(operation);
+        uploadSmallOperationQueue.remove(operation);
+        AyuUploadManager.onUploadFinished(currentAccount, location, encrypted, operation, slot.ownerId, success && !slot.cancelled);
+        if (slot.active) {
+            if (slot.small) currentUploadSmallOperationsCount--;
+            else currentUploadOperationsCount--;
+        }
+        // An older operation must never complete/fail a replacement using the same path.
+        boolean notify = !paths.containsKey(location) && slot.ownerId != 0
+                && slot.ownerId == getUserConfig().getClientUserId() && (!success || !slot.cancelled);
+        if (!notify || delegate == null) finishUploadEvent(event);
+        fillUploadSlots();
+        return notify;
     }
 
     /** AyuGram upload queue: configurable upload concurrency, widened by every paused operation */
@@ -543,15 +734,20 @@ public class FileLoader extends BaseController {
         if (location == null) {
             return;
         }
+        final long uploadOwnerId = getUserConfig().getClientUserId();
         fileLoaderQueue.postRunnable(() -> {
-            if (encrypted) {
-                if (uploadOperationPathsEnc.containsKey(location)) {
-                    return;
-                }
-            } else {
-                if (uploadOperationPaths.containsKey(location)) {
-                    return;
-                }
+            if (uploadOwnerId == 0 || getUserConfig().getClientUserId() != uploadOwnerId) return;
+            ConcurrentHashMap<String, FileUploadOperation> paths = encrypted ? uploadOperationPathsEnc : uploadOperationPaths;
+            FileUploadOperation previous = paths.get(location);
+            if (previous != null) {
+                UploadEvent previousEvent = getUploadEvent(location, encrypted, previous);
+                if (previousEvent != null && previousEvent.ownerId == uploadOwnerId && !previousEvent.terminal) return;
+                paths.remove(location, previous);
+                UploadOperationState previousSlot = uploadOperationStates.get(previous);
+                if (previousSlot != null) previousSlot.cancelled = true;
+                uploadOperationQueue.remove(previous);
+                uploadSmallOperationQueue.remove(previous);
+                previous.cancel();
             }
             long esimated = estimatedSize;
             if (esimated != 0) {
@@ -562,15 +758,17 @@ public class FileLoader extends BaseController {
                 }
             }
             FileUploadOperation operation = new FileUploadOperation(currentAccount, location, encrypted, esimated, type);
-            // AyuGram upload queue: report every enqueued upload, started or not
-            AyuUploadManager.onUploadEnqueued(currentAccount, location, encrypted, small, type, esimated);
-            if (delegate != null && estimatedSize != 0) {
-                delegate.fileUploadProgressChanged(operation, location, 0, estimatedSize, encrypted);
-            }
+            UploadEvent event = new UploadEvent(operation, location, encrypted, uploadOwnerId);
+            uploadOperationStates.put(operation, new UploadOperationState(small, uploadOwnerId, event));
+            (encrypted ? encryptedUploadEvents : uploadEvents).put(location, event);
             if (encrypted) {
                 uploadOperationPathsEnc.put(location, operation);
             } else {
                 uploadOperationPaths.put(location, operation);
+            }
+            AyuUploadManager.onUploadEnqueued(currentAccount, location, encrypted, small, type, esimated, operation, uploadOwnerId);
+            if (delegate != null && estimatedSize != 0) {
+                delegate.fileUploadProgressChanged(operation, location, 0, estimatedSize, encrypted);
             }
             if (forceSmallFile) {
                 operation.setForceSmallFile();
@@ -579,31 +777,7 @@ public class FileLoader extends BaseController {
                 @Override
                 public void didFinishUploadingFile(final FileUploadOperation operation, final TLRPC.InputFile inputFile, final TLRPC.InputEncryptedFile inputEncryptedFile, final byte[] key, final byte[] iv) {
                     fileLoaderQueue.postRunnable(() -> {
-                        if (encrypted) {
-                            uploadOperationPathsEnc.remove(location);
-                        } else {
-                            uploadOperationPaths.remove(location);
-                        }
-                        if (small) {
-                            currentUploadSmallOperationsCount--;
-                            if (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
-                                FileUploadOperation operation12 = pollNextUploadOperation(uploadSmallOperationQueue);
-                                if (operation12 != null) {
-                                    currentUploadSmallOperationsCount++;
-                                    operation12.start();
-                                }
-                            }
-                        } else {
-                            currentUploadOperationsCount--;
-                            if (currentUploadOperationsCount < getMaxUploadOperations()) {
-                                FileUploadOperation operation12 = pollNextUploadOperation(uploadOperationQueue);
-                                if (operation12 != null) {
-                                    currentUploadOperationsCount++;
-                                    operation12.start();
-                                }
-                            }
-                        }
-                        if (delegate != null) {
+                        if (releaseUploadOperation(operation, location, encrypted, true) && delegate != null) {
                             delegate.fileDidUploaded(location, inputFile, inputEncryptedFile, key, iv, operation.getTotalFileSize());
                         }
                     });
@@ -612,38 +786,16 @@ public class FileLoader extends BaseController {
                 @Override
                 public void didFailedUploadingFile(final FileUploadOperation operation) {
                     fileLoaderQueue.postRunnable(() -> {
-                        if (encrypted) {
-                            uploadOperationPathsEnc.remove(location);
-                        } else {
-                            uploadOperationPaths.remove(location);
-                        }
-                        if (delegate != null) {
+                        if (releaseUploadOperation(operation, location, encrypted, false) && delegate != null) {
                             delegate.fileDidFailedUpload(location, encrypted);
-                        }
-                        if (small) {
-                            currentUploadSmallOperationsCount--;
-                            if (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
-                                FileUploadOperation operation1 = pollNextUploadOperation(uploadSmallOperationQueue);
-                                if (operation1 != null) {
-                                    currentUploadSmallOperationsCount++;
-                                    operation1.start();
-                                }
-                            }
-                        } else {
-                            currentUploadOperationsCount--;
-                            if (currentUploadOperationsCount < getMaxUploadOperations()) {
-                                FileUploadOperation operation1 = pollNextUploadOperation(uploadOperationQueue);
-                                if (operation1 != null) {
-                                    currentUploadOperationsCount++;
-                                    operation1.start();
-                                }
-                            }
                         }
                     });
                 }
 
                 @Override
                 public void didChangedUploadProgress(FileUploadOperation operation, long uploadedSize, long totalSize) {
+                    if (uploadOwnerId != getUserConfig().getClientUserId()
+                            || (encrypted ? uploadOperationPathsEnc : uploadOperationPaths).get(location) != operation) return;
                     if (delegate != null) {
                         delegate.fileUploadProgressChanged(operation, location, uploadedSize, totalSize, encrypted);
                     }
@@ -651,15 +803,13 @@ public class FileLoader extends BaseController {
             });
             if (small) {
                 if (currentUploadSmallOperationsCount < getMaxSmallUploadOperations()) {
-                    currentUploadSmallOperationsCount++;
-                    operation.start();
+                    startUploadOperation(operation);
                 } else {
                     uploadSmallOperationQueue.add(operation);
                 }
             } else {
                 if (currentUploadOperationsCount < getMaxUploadOperations()) {
-                    currentUploadOperationsCount++;
-                    operation.start();
+                    startUploadOperation(operation);
                 } else {
                     uploadOperationQueue.add(operation);
                 }
@@ -749,12 +899,14 @@ public class FileLoader extends BaseController {
         LoadOperationUIObject uiObject = loadOperationPathsUI.remove(fileName);
         Runnable runnable = uiObject != null ? uiObject.loadInternalRunnable : null;
         boolean removed = uiObject != null;
+        final FileLoadOperation targetOperation = uiObject != null ? uiObject.operation : null;
         if (runnable != null) {
             fileLoaderQueue.cancelRunnable(runnable);
         }
         fileLoaderQueue.postRunnable(() -> {
-            FileLoadOperation operation = loadOperationPaths.remove(fileName);
-            if (operation != null) {
+            FileLoadOperation operation = loadOperationPaths.get(fileName);
+            if (operation != null && (targetOperation == null || operation == targetOperation)) {
+                loadOperationPaths.remove(fileName);
                 FileLoaderPriorityQueue queue = operation.getQueue();
                 queue.cancel(operation);
             }
@@ -769,23 +921,15 @@ public class FileLoader extends BaseController {
     public void cancel(FileLoadOperation operation) {
         if (operation == null) return;
         final String fileName = operation.getFileName();
-        LoadOperationUIObject uiObject = loadOperationPathsUI.remove(fileName);
-        Runnable runnable = uiObject != null ? uiObject.loadInternalRunnable : null;
-        boolean removed = uiObject != null;
-        if (runnable != null) {
-            fileLoaderQueue.cancelRunnable(runnable);
-        }
         fileLoaderQueue.postRunnable(() -> {
-            FileLoadOperation operation2 = loadOperationPaths.remove(fileName);
-            if (operation2 != null) {
-                operation2.getQueue().cancel(operation2);
+            if (loadOperationPaths.remove(fileName, operation)) {
+                LoadOperationUIObject uiObject = removeDownloadUi(fileName, operation);
+                if (uiObject != null && uiObject.loadInternalRunnable != null)
+                    fileLoaderQueue.cancelRunnable(uiObject.loadInternalRunnable);
+                operation.getQueue().cancel(operation);
+                AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.onDownloadingFilesChanged));
             }
         });
-        if (removed) {
-            AndroidUtilities.runOnUIThread(() -> {
-                getNotificationCenter().postNotificationName(NotificationCenter.onDownloadingFilesChanged);
-            });
-        }
     }
 
     public void changePriority(int priority, final TLRPC.Document document, final SecureDocument secureDocument, final WebFile webDocument, final TLRPC.FileLocation location, final String locationExt, String name) {
@@ -982,8 +1126,10 @@ public class FileLoader extends BaseController {
             FileLog.e(new RuntimeException("cant get hash from " + document));
             return null;
         }
+        LoadOperationUIObject operationUi = null;
         if (cacheType != 10 && !TextUtils.isEmpty(fileName) && !fileName.contains("" + Integer.MIN_VALUE)) {
-            loadOperationPathsUI.put(fileName, new LoadOperationUIObject());
+            operationUi = new LoadOperationUIObject();
+            loadOperationPathsUI.put(fileName, operationUi);
         }
 
         if (document != null && parentObject instanceof MessageObject && ((MessageObject) parentObject).putInDownloadsStore && !((MessageObject) parentObject).isAnyKindOfSticker()) {
@@ -992,12 +1138,20 @@ public class FileLoader extends BaseController {
 
         final String finalFileName = fileName;
         FileLoadOperation operation = loadOperationPaths.get(finalFileName);
+        DownloadProgress previousProgress = downloadProgresses.get(finalFileName);
+        if (operation != null && previousProgress != null && previousProgress.ownerId != getUserConfig().getClientUserId()) {
+            loadOperationPaths.remove(finalFileName, operation);
+            removeDownloadProgress(finalFileName, operation);
+            operation.getQueue().cancel(operation);
+            operation = null;
+        }
 
         final int turboPriorityScale = getTurboPriorityScale(priority);
         priority = getPriorityValue(priority);
 
         if (operation != null) {
-            if (cacheType != 10 && operation.isPreloadVideoOperation()) {
+            if (operationUi != null) operationUi.operation = operation;
+            if (cacheType != 10 && (operation.isPreloadVideoOperation() || operation.isPreloadFinished())) {
                 operation.setIsPreloadVideoOperation(false);
             }
             operation.setTurboPriority(turboPriorityScale);
@@ -1133,6 +1287,7 @@ public class FileLoader extends BaseController {
         }
 
         final int finalType = type;
+        final DownloadProgress downloadProgress = new DownloadProgress(operation, getUserConfig().getClientUserId());
 
         FileLoadOperation.FileLoadOperationDelegate fileLoadOperationDelegate = new FileLoadOperation.FileLoadOperationDelegate() {
 
@@ -1147,7 +1302,14 @@ public class FileLoader extends BaseController {
 
             @Override
             public void didFinishLoadingFile(FileLoadOperation operation, File finalFile) {
+                if (!isCurrentDownloadEvent(downloadProgress)) {
+                    removeDownloadProgress(fileName, operation);
+                    checkDownloadQueue(operation, operation.getQueue(), 0);
+                    return;
+                }
+                if (downloadProgress.terminal) return;
                 if (!operation.isPreloadVideoOperation() && operation.isPreloadFinished()) {
+                    removeDownloadProgress(fileName, operation);
                     checkDownloadQueue(operation, operation.getQueue(), 0);
                     return;
                 }
@@ -1163,10 +1325,18 @@ public class FileLoader extends BaseController {
                 }
 
                 if (!operation.isPreloadVideoOperation()) {
-                    loadOperationPathsUI.remove(fileName);
-                    if (delegate != null) {
-                        delegate.fileDidLoaded(fileName, finalFile, parentObject, finalType);
+                    downloadProgress.terminal = true;
+                    try {
+                        org.telegram.messenger.ayu.AyuTTLMediaCapture.onSelfDestructPhotoFileLoaded(currentAccount, parentObject, fileName, finalFile);
+                    } catch (Throwable e) {
+                        FileLog.e(e);
                     }
+                    removeDownloadUi(fileName, operation);
+                    if (delegate != null) {
+                        delegate.fileDidLoaded(fileName, finalFile, parentObject, finalType, downloadProgress);
+                    } else finishDownloadEvent(downloadProgress);
+                } else {
+                    removeDownloadProgress(fileName, operation);
                 }
 
                 checkDownloadQueue(operation, operation.getQueue(), 0);
@@ -1174,11 +1344,23 @@ public class FileLoader extends BaseController {
 
             @Override
             public void didFailedLoadingFile(FileLoadOperation operation, int reason) {
-                loadOperationPathsUI.remove(fileName);
+                if (!isCurrentDownloadEvent(downloadProgress)) {
+                    removeDownloadProgress(fileName, operation);
+                    checkDownloadQueue(operation, operation.getQueue());
+                    return;
+                }
+                if (downloadProgress.terminal) return;
+                try {
+                    org.telegram.messenger.ayu.AyuTTLMediaCapture.onSelfDestructPhotoFileFailed(currentAccount, fileName);
+                } catch (Throwable e) {
+                    FileLog.e(e);
+                }
+                removeDownloadUi(fileName, operation);
+                downloadProgress.terminal = true;
                 checkDownloadQueue(operation, operation.getQueue());
                 if (delegate != null) {
-                    delegate.fileDidFailedLoad(fileName, reason);
-                }
+                    delegate.fileDidFailedLoad(fileName, reason, downloadProgress);
+                } else finishDownloadEvent(downloadProgress);
 
                 if (document != null && parentObject instanceof MessageObject && reason == 0) {
                     getDownloadController().onDownloadFail((MessageObject) parentObject, reason);
@@ -1189,6 +1371,10 @@ public class FileLoader extends BaseController {
 
             @Override
             public void didChangedLoadProgress(FileLoadOperation operation, long uploadedSize, long totalSize) {
+                if (downloadProgress.terminal || downloadProgresses.get(fileName) != downloadProgress || loadOperationPaths.get(fileName) != operation
+                        || downloadProgress.ownerId != getUserConfig().getClientUserId()) return;
+                downloadProgress.total = Math.max(0, totalSize);
+                downloadProgress.loaded = Math.max(0, uploadedSize);
                 if (delegate != null) {
                     delegate.fileLoadProgressChanged(operation, fileName, uploadedSize, totalSize);
                 }
@@ -1211,7 +1397,13 @@ public class FileLoader extends BaseController {
         };
         operation.setDelegate(fileLoadOperationDelegate);
 
+        if (operationUi != null) operationUi.operation = operation;
+        downloadProgresses.put(finalFileName, downloadProgress);
         loadOperationPaths.put(finalFileName, operation);
+        if (document != null) AndroidUtilities.runOnUIThread(() -> {
+            if (downloadProgress.ownerId == getUserConfig().getClientUserId())
+                getNotificationCenter().postNotificationName(NotificationCenter.onDownloadingFilesChanged);
+        });
         operation.setTurboPriority(turboPriorityScale);
         operation.setPriority(priority);
         if (stream == null) {
@@ -1308,9 +1500,16 @@ public class FileLoader extends BaseController {
         } else {
             fileName = null;
         }
-        Runnable runnable = () -> loadFileInternal(document, secureDocument, webDocument, location, imageLocation, parentObject, locationExt, locationSize, priority, null, 0, false, cacheType);
+        final long downloadOwnerId = getUserConfig().getClientUserId();
+        final LoadOperationUIObject uiObject = new LoadOperationUIObject();
+        Runnable runnable = () -> {
+            if (downloadOwnerId == getUserConfig().getClientUserId()) {
+                loadFileInternal(document, secureDocument, webDocument, location, imageLocation, parentObject, locationExt, locationSize, priority, null, 0, false, cacheType);
+            } else if (fileName != null) {
+                loadOperationPathsUI.remove(fileName, uiObject);
+            }
+        };
         if (cacheType != 10 && !TextUtils.isEmpty(fileName) && !fileName.contains("" + Integer.MIN_VALUE)) {
-            LoadOperationUIObject uiObject = new FileLoader.LoadOperationUIObject();
             uiObject.loadInternalRunnable = runnable;
             loadOperationPathsUI.put(fileName, uiObject);
         }
@@ -1324,8 +1523,10 @@ public class FileLoader extends BaseController {
     protected FileLoadOperation loadStreamFile(final FileLoadOperationStream stream, final TLRPC.Document document, final ImageLocation location, final Object parentObject, final long offset, final boolean priority, int loadingPriority, int cacheType) {
         final CountDownLatch semaphore = new CountDownLatch(1);
         final FileLoadOperation[] result = new FileLoadOperation[1];
+        final long downloadOwnerId = getUserConfig().getClientUserId();
         fileLoaderQueue.postRunnable(() -> {
-            result[0] = loadFileInternal(document, null, null, document == null && location != null ? location.location : null, location, parentObject, document == null && location != null ? "mp4" : null, document == null && location != null ? location.currentSize : 0, loadingPriority, stream, offset, priority, cacheType);
+            if (downloadOwnerId == getUserConfig().getClientUserId())
+                result[0] = loadFileInternal(document, null, null, document == null && location != null ? location.location : null, location, parentObject, document == null && location != null ? "mp4" : null, document == null && location != null ? location.currentSize : 0, loadingPriority, stream, offset, priority, cacheType);
             semaphore.countDown();
         });
         awaitFileLoadOperation(semaphore, true);
@@ -1354,14 +1555,19 @@ public class FileLoader extends BaseController {
     private void checkDownloadQueue(FileLoadOperation operation, FileLoaderPriorityQueue queue, long delay) {
         fileLoaderQueue.postRunnable(() -> {
             if (queue.remove(operation)) {
-                loadOperationPaths.remove(operation.getFileName());
-                queue.checkLoadingOperations(operation.isStory);
+                loadOperationPaths.remove(operation.getFileName(), operation);
             }
+            // Explicit cancel removes the queue entry before its terminal callback arrives.
+            queue.checkLoadingOperations(operation.isStory);
         }, delay);
     }
 
     public void setDelegate(FileLoaderDelegate fileLoaderDelegate) {
-        delegate = fileLoaderDelegate;
+        synchronized (FileLoader.class) {
+            delegate = fileLoaderDelegate;
+            // An explicit delegate, including null, takes precedence over the default factory.
+            delegateInitialized = true;
+        }
     }
 
     public static String getMessageFileName(TLRPC.Message message) {
@@ -1867,6 +2073,11 @@ public class FileLoader extends BaseController {
             return;
         }
         fileLoaderQueue.postRunnable(() -> {
+            try {
+                org.telegram.messenger.ayu.AyuTTLMediaCapture.beforeFilesDeleted(currentAccount, files);
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
             for (int a = 0; a < files.size(); a++) {
                 File file = files.get(a);
                 File encrypted = new File(file.getAbsolutePath() + ".enc");
@@ -2049,6 +2260,7 @@ public class FileLoader extends BaseController {
 
     private static class LoadOperationUIObject {
         Runnable loadInternalRunnable;
+        volatile FileLoadOperation operation;
     }
 
     public static byte[] longToBytes(long x) {

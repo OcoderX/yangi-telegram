@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxChatsAll">Hammasi</string>
+    <string name="OxChatsPersonal">Shaxsiy</string>
+    <string name="OxChatsGroups">Guruhlar</string>
+    <string name="OxChatsChannels">Kanallar</string>
+    <string name="OxChatsBots">Botlar</string>
+    <string name="OxChatTabSettings">Bo‘limlar sozlamalari</string>
+    <string name="OxChatCategoriesEnabled">Chat kategoriyalarini ko‘rsatish</string>
+    <string name="OxChatCategoriesInfo">Kategoriyalar qayerda chiqishini tanlang. Har bir kategoriya ustiga bosib, asosiy sahifa va xabar yuborish oynasidagi ko‘rinishini alohida sozlang. Har bir oynaning umumiy tugmasi alohida. Sozlamalar ushbu qurilmadagi shu akkaunt uchun saqlanadi.</string>
+    <string name="OxChatVisibleCategories">Ko‘rinadigan kategoriyalar</string>
+    <string name="OxChatAllAlwaysAvailable">Hammasi bo‘limi doim mavjud. Kategoriyalar o‘chirilsa ham yuqoridagi tanlovlar saqlanadi. Yashirilgan kategoriyalarni Sozlamalar → Chat papkalari → Bo‘limlar sozlamalari orqali qayta yoqishingiz mumkin.</string>
+    <string name="OxChatHideCategory">Yashirish</string>
+    <string name="OxChatHideCategories">Kategoriyalarni yashirish</string>
+    <string name="OxChatEditFolders">Papkalarni tahrirlash</string>
+    <string name="OxChatCategoriesMain">Asosiy sahifada kategoriyalar</string>
+    <string name="OxChatCategoriesForward">Xabar yuborishda kategoriyalar</string>
+    <string name="OxChatShowInMain">Asosiy sahifada ko‘rsatish</string>
+    <string name="OxChatShowInForward">Xabar yuborishda ko‘rsatish</string>
+    <string name="OxChatVisibleBoth">Asosiy va yuborish</string>
+    <string name="OxChatVisibleMain">Asosiy sahifa</string>
+    <string name="OxChatVisibleForward">Yuborish</string>
+    <string name="OxChatVisibleNowhere">Yashirilgan</string>
+</resources>
