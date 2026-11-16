@@ -8,8 +8,6 @@
 
 package org.telegram.ui.Adapters;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
@@ -148,12 +146,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     public int localMessagesLoadingRow = -1;
     private String lastMessagesSearchString;
     private int lastMessagesSearchFilterFlags;
-    private TLRPC.Message lastRawSearchMessage;
-    private int hiddenEmptyMessagePages;
-
-    private boolean hasMoreHiddenMessageResults() {
-        return hiddenEmptyMessagePages > 4 && !messagesSearchEndReached && lastRawSearchMessage != null && searchResultMessages.isEmpty();
-    }
     private String currentMessagesQuery;
     private int nextSearchRate;
     private int lastSearchId;
@@ -290,29 +282,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         }
     }
 
-    @Override
-    public void notifyDataSetChanged() {
-        for (int i = searchResult.size() - 1; i >= 0; i--) {
-            if (!filter(searchResult.get(i))) {
-                searchResult.remove(i);
-                if (i < searchResultNames.size()) searchResultNames.remove(i);
-            }
-        }
-        searchResultMessages.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
-        searchForumResultMessages.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
-        publicPosts.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
-        sponsoredPeers.removeIf(peer -> HiddenChatsController.getInstance(currentAccount).isHidden(DialogObject.getPeerDialogId(peer.peer)));
-        if (delegate != null && HiddenChatsController.getInstance(currentAccount).isHidden(delegate.getSearchForumDialogId())) searchTopics.clear();
-        filteredRecentSearchObjects.removeIf(recent -> HiddenChatsController.getInstance(currentAccount).isHidden(recent.did));
-        filtered2RecentSearchObjects.removeIf(recent -> HiddenChatsController.getInstance(currentAccount).isHidden(recent.did));
-        if (searchAdapterHelper != null) searchAdapterHelper.removeHiddenResults();
-        if (messagesEmptyLayout != null) messagesEmptyLayout.setRetry(hasMoreHiddenMessageResults());
-        super.notifyDataSetChanged();
-    }
-
     private boolean filter(Object obj) {
-        long did = obj instanceof TLRPC.User ? ((TLRPC.User) obj).id : obj instanceof TLRPC.Chat ? -((TLRPC.Chat) obj).id : obj instanceof TLRPC.EncryptedChat ? DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) obj).id) : 0;
-        if (did != 0 && HiddenChatsController.getInstance(currentAccount).isHidden(did)) return false;
         if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {
             return true;
         }
@@ -559,8 +529,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             searchForumResultMessages.clear();
             lastReqId = 0;
             lastMessagesSearchString = null;
-            lastRawSearchMessage = null;
-            hiddenEmptyMessagePages = 0;
             lastMessagesSearchFilterFlags = 0;
             searchWas = false;
             notifyDataSetChanged();
@@ -591,14 +559,13 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         if (!query.equals(lastMessagesSearchString)) {
             forceLoadingMessages = false;
         }
-        if (query.equals(lastMessagesSearchString) && lastMessagesSearchFilterFlags == currentMessagesFilter.flags && lastRawSearchMessage != null && lastMessagesSearchId == lastSearchId) {
-            TLRPC.Message lastMessage = lastRawSearchMessage;
-            req.offset_id = lastMessage.id;
+        if (query.equals(lastMessagesSearchString) && lastMessagesSearchFilterFlags == currentMessagesFilter.flags && !searchResultMessages.isEmpty() && lastMessagesSearchId == lastSearchId) {
+            MessageObject lastMessage = searchResultMessages.get(searchResultMessages.size() - 1);
+            req.offset_id = lastMessage.getId();
             req.offset_rate = nextSearchRate;
-            long id = MessageObject.getPeerId(lastMessage.peer_id);
+            long id = MessageObject.getPeerId(lastMessage.messageOwner.peer_id);
             req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(id);
         } else {
-            hiddenEmptyMessagePages = 0;
             req.offset_rate = 0;
             req.offset_id = 0;
             req.offset_peer = new TLRPC.TL_inputPeerEmpty();
@@ -654,7 +621,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                             searchResultMessages.clear();
                         }
                         nextSearchRate = res.next_rate;
-                        lastRawSearchMessage = res.messages.isEmpty() ? null : res.messages.get(res.messages.size() - 1);
                         for (int a = 0; a < res.messages.size(); a++) {
                             TLRPC.Message message = res.messages.get(a);
                             long did = MessageObject.getDialogId(message);
@@ -676,7 +642,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                                     continue;
                                 }
                             }
-                            if (!HiddenChatsController.getInstance(currentAccount).isHidden(msg.getDialogId())) searchResultMessages.add(msg);
+                            searchResultMessages.add(msg);
                             long dialog_id = MessageObject.getDialogId(message);
                             ConcurrentHashMap<Long, Integer> read_max = message.out ? MessagesController.getInstance(currentAccount).dialogs_read_outbox_max : MessagesController.getInstance(currentAccount).dialogs_read_inbox_max;
                             Integer value = read_max.get(dialog_id);
@@ -705,18 +671,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                         forceLoadingMessages = false;
                         if (messagesEmptyLayout != null) {
                             messagesEmptyLayout.setQuery(lastMessagesSearchString);
-                messagesEmptyLayout.setRetry(hasMoreHiddenMessageResults());
                         }
-                        boolean continueHiddenPage = !messagesSearchEndReached && searchResultMessages.isEmpty() && hiddenEmptyMessagePages++ < 4;
                         notifyDataSetChanged();
-                        if (continueHiddenPage) {
-                            AndroidUtilities.runOnUIThread(() -> {
-                                if (currentReqId == lastReqId && reqId == 0 && searchId == lastSearchId) {
-                                    waitingResponseCount++;
-                                    searchMessagesInternal(query, searchId);
-                                }
-                            }, 1);
-                        }
                     }
                 }
                 reqId = 0;
@@ -1036,7 +992,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             for (int i = 0; i < result.size(); ++i) {
                 if (!filter(result.get(i))) {
                     result.remove(i);
-                    if (i < names.size()) names.remove(i);
                     i--;
                 }
             }
@@ -1439,7 +1394,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             localMessagesLoadingRow = count;
         }
         int messagesCount = searchResultMessages.size();
-        if ((currentMessagesFilter != Filter.All || forceLoadingMessages || hasMoreHiddenMessageResults()) && searchResultMessages.isEmpty()) {
+        if ((currentMessagesFilter != Filter.All || forceLoadingMessages) && searchResultMessages.isEmpty()) {
             messagesCount = forceLoadingMessages ? 3 : 1;
         }
         if (!searchForumResultMessages.isEmpty() && !localMessagesSearchEndReached) {
@@ -1625,7 +1580,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         }
         i -= localMessagesCount;
         int messagesCount = searchResultMessages.isEmpty() ? 0 : searchResultMessages.size() + 1;
-        if ((currentMessagesFilter != Filter.All || forceLoadingMessages || hasMoreHiddenMessageResults()) && searchResultMessages.isEmpty()) {
+        if ((currentMessagesFilter != Filter.All || forceLoadingMessages) && searchResultMessages.isEmpty()) {
             messagesCount = forceLoadingMessages ? 4 : 2;
         }
         if (i > 0 && i < messagesCount) {
@@ -1727,13 +1682,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 break;
             case VIEW_TYPE_EMPTY_RESULT:
                 view = messagesEmptyLayout = new EmptyLayout(mContext, resourcesProvider, () -> {
-                    if (hasMoreHiddenMessageResults()) {
-                        if (reqId != 0) return;
-                        hiddenEmptyMessagePages = 0;
-                        waitingResponseCount++;
-                        loadMoreSearchMessages();
-                        return;
-                    }
                     currentMessagesFilter = Filter.All;
                     searchResultMessages.clear();
                     if (messagesSectionPosition >= 0 && messagesSectionPosition < getItemCount()) {
@@ -1742,7 +1690,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                     loadMoreSearchMessages();
                 });
                 messagesEmptyLayout.setQuery(lastMessagesSearchString);
-                messagesEmptyLayout.setRetry(hasMoreHiddenMessageResults());
                 break;
             case VIEW_TYPE_ADD_BY_PHONE:
             default:
@@ -2033,7 +1980,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                     int globalCount = globalSearch.isEmpty() && sponsoredPeers.isEmpty() ? 0 : globalSearchCount + sponsoredPeers.size() + 1;
                     int localMessagesCount = searchForumResultMessages.isEmpty() ? 0 : searchForumResultMessages.size() + 1;
                     int messagesCount = searchResultMessages.isEmpty() ? 0 : searchResultMessages.size() + 1;
-                    if ((currentMessagesFilter != Filter.All || forceLoadingMessages || hasMoreHiddenMessageResults()) && searchResultMessages.isEmpty()) {
+                    if ((currentMessagesFilter != Filter.All || forceLoadingMessages) && searchResultMessages.isEmpty()) {
                         messagesCount = forceLoadingMessages ? 4 : 2;
                     }
                     String title = null;
@@ -2303,7 +2250,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         }
         int globalCount = sponsoredPeers.isEmpty() && globalSearch.isEmpty() ? 0 : globalSearchCount + sponsoredPeers.size() + 1;
         int messagesCount = searchResultMessages.isEmpty() ? 0 : searchResultMessages.size() + 1;
-        if ((currentMessagesFilter != Filter.All || forceLoadingMessages || hasMoreHiddenMessageResults()) && searchResultMessages.isEmpty()) {
+        if ((currentMessagesFilter != Filter.All || forceLoadingMessages) && searchResultMessages.isEmpty()) {
             messagesCount = forceLoadingMessages ? 4 : 2;
         }
         if (!searchForumResultMessages.isEmpty() && !localMessagesSearchEndReached) {
@@ -2357,7 +2304,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 return VIEW_TYPE_GRAY_SECTION;
             } else if (forceLoadingMessages && searchResultMessages.isEmpty()) {
                 return VIEW_TYPE_LOADING;
-            } else if ((currentMessagesFilter != Filter.All || hasMoreHiddenMessageResults()) && searchResultMessages.isEmpty()) {
+            } else if (currentMessagesFilter != Filter.All && searchResultMessages.isEmpty()) {
                 return VIEW_TYPE_EMPTY_RESULT;
             } else {
                 return VIEW_TYPE_DIALOG_CELL;
@@ -2462,7 +2409,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     private static class EmptyLayout extends LinearLayout {
 
         private TextView textView;
-        private TextView button;
         public EmptyLayout(Context context, Theme.ResourcesProvider resourcesProvider, Runnable onClickAll) {
             super(context);
 
@@ -2487,7 +2433,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             textView.setGravity(Gravity.CENTER);
             addView(textView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 14));
 
-            button = new TextView(context);
+            TextView button = new TextView(context);
             button.setPadding(dp(12), dp(4), dp(12), dp(4));
             button.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             button.setText(LocaleController.getString(R.string.SearchMessagesFilterEmptySearchAll));
@@ -2495,10 +2441,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             button.setBackground(Theme.createSimpleSelectorRoundRectDrawable(6, 0, Theme.multAlpha(Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider), .15f)));
             button.setOnClickListener(v -> onClickAll.run());
             addView(button, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 38));
-        }
-
-        public void setRetry(boolean retry) {
-            button.setText(LocaleController.getString(retry ? R.string.Retry : R.string.SearchMessagesFilterEmptySearchAll));
         }
 
         public void setQuery(String query) {

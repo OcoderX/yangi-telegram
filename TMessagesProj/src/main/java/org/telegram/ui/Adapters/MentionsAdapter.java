@@ -8,8 +8,6 @@
 
 package org.telegram.ui.Adapters;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.ui.PremiumPreviewFragment.applyNewSpan;
 
@@ -232,7 +230,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
             NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.fileLoadFailed);
         }
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.recentDocumentsDidLoad);
-        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.stickersDidLoad);
     }
 
@@ -242,10 +239,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
 
     @Override
     public void didReceivedNotification(int id, int account, final Object... args) {
-        if (id == NotificationCenter.dialogsNeedReload) {
-            notifyDataSetChanged();
-            return;
-        }
         if (id == NotificationCenter.fileLoaded || id == NotificationCenter.fileLoadFailed) {
             if (stickers != null && !stickers.isEmpty() && !stickersToLoad.isEmpty() && visibleByStickersSearch) {
                 String fileName = (String) args[0];
@@ -379,41 +372,10 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
         }));
     }
 
-    private boolean isHiddenPeer(TLObject object) {
-        long did = object instanceof TLRPC.User ? ((TLRPC.User) object).id : object instanceof TLRPC.Chat ? -((TLRPC.Chat) object).id : 0;
-        return HiddenChatsController.getInstance(currentAccount).isHidden(did);
-    }
-
-    private void removeHiddenSuggestions() {
-        if (searchResultUsernames != null) searchResultUsernames.removeIf(this::isHiddenPeer);
-        if (searchResultUsernamesMap != null) {
-            for (int i = searchResultUsernamesMap.size() - 1; i >= 0; i--) {
-                if (isHiddenPeer(searchResultUsernamesMap.valueAt(i))) searchResultUsernamesMap.removeAt(i);
-            }
-        }
-        if (searchResultCommandsUsers != null) {
-            for (int i = searchResultCommandsUsers.size() - 1; i >= 0; i--) {
-                if (isHiddenPeer(searchResultCommandsUsers.get(i))) {
-                    searchResultCommandsUsers.remove(i);
-                    if (searchResultCommands != null && i < searchResultCommands.size()) searchResultCommands.remove(i);
-                    if (searchResultCommandsHelp != null && i < searchResultCommandsHelp.size()) searchResultCommandsHelp.remove(i);
-                    if (searchResultCommandsEphemeral != null && i < searchResultCommandsEphemeral.size()) searchResultCommandsEphemeral.remove(i);
-                }
-            }
-        }
-        if (foundContextBot != null && isHiddenPeer(foundContextBot)) {
-            foundContextBot = null;
-            searchResultBotContext = null;
-            searchResultBotContextSwitch = null;
-            searchResultBotWebViewSwitch = null;
-        }
-    }
-
     private Object[] lastData;
 
     @Override
     public void notifyDataSetChanged() {
-        removeHiddenSuggestions();
         if (lastItemCount == -1 || lastData == null) {
             if (delegate != null) {
                 delegate.onItemCountUpdate(0, getItemCount());
@@ -518,7 +480,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.fileLoadFailed);
         }
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.recentDocumentsDidLoad);
-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.dialogsNeedReload);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.stickersDidLoad);
     }
 
@@ -595,10 +556,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     }
 
     private void processFoundUser(TLRPC.User user) {
-        if (user != null && isHiddenPeer(user)) {
-            processFoundUser(null);
-            return;
-        }
         contextUsernameReqid = 0;
         locationProvider.stop();
         if (user != null && user.bot && user.bot_inline_placeholder != null) {
@@ -1689,7 +1646,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     }
 
     private void showUsersResult(ArrayList<TLObject> newResult, LongSparseArray<TLObject> newMap, boolean notify) {
-        newResult.removeIf(this::isHiddenPeer);
         searchResultUsernames = newResult;
         if ((!allowBots || !allowChats) && searchResultUsernames != null) {
             Iterator<TLObject> i = searchResultUsernames.iterator();

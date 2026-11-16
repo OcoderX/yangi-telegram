@@ -905,7 +905,7 @@ public class EmojiAnimationsOverlay implements NotificationCenter.NotificationCe
         }
         interaction.interaction.data = jsonObject.toString();
 
-        if (!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress) {
+        if (!org.telegram.messenger.ayu.AyuConfig.sendUploadProgress) {
             clearSendingInfo();
             return;
         }

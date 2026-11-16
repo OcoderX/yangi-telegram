@@ -13,7 +13,7 @@ import org.telegram.messenger.R;
  * below so that every call site can read plain static fields without touching SharedPreferences.
  * <p>
  * Ghost mode semantics (AyuGram): the "send*" flags are TRUE in normal mode, FALSE in ghost mode.
- * {@link #isGhostModeActive(int)} is true when all core flags are in ghost state.
+ * {@link #isGhostModeActive()} is true when all core flags are in ghost state.
  */
 public class AyuConfig {
 
@@ -27,6 +27,26 @@ public class AyuConfig {
     public static final int STATUS_COLOR_SENT = 0xFFFF3B30;
     /** sending (clock) */
     public static final int STATUS_COLOR_PENDING = 0xFFFFC107;
+
+    // ---------------- Ghost mode ----------------
+    /** false = do not send read receipts (messages_readHistory, readMessageContents, readDiscussion, readReactions) */
+    public static boolean sendReadPackets = true;
+    /** false = do not mark stories as read (stories_readStories, incrementStoryViews) */
+    public static boolean sendReadStories = true;
+    /** false = do not send online status (account_updateStatus offline=false / network resume) */
+    public static boolean sendOnlinePackets = true;
+    /** false = do not send typing / upload progress (messages_setTyping, incl. upload progress actions) */
+    public static boolean sendUploadProgress = true;
+    /** true = send an offline packet right after going online */
+    public static boolean sendOfflinePacketAfterOnline = false;
+    /** true = mark chat as read after sending a message (even in ghost mode) */
+    public static boolean markReadAfterSend = true;
+    /** true = mark chat as read on interaction (reaction, reply, etc.) even in ghost mode */
+    public static boolean markReadAfterAction = false;
+    /** true = send messages via scheduled messages so no online status leaks */
+    public static boolean useScheduledMessages = false;
+    /** true = show an alert suggesting ghost mode before opening a story */
+    public static boolean alertBeforeOpeningStory = false;
 
     // ---------------- Message history / "spy" ----------------
     public static boolean saveDeletedMessages = true;
@@ -44,7 +64,7 @@ public class AyuConfig {
     public static boolean saveSelfDestructingMedia = true;
 
     // ---------------- Quality of life ----------------
-    public static boolean keepAliveService = true;
+    public static boolean keepAliveService = false;
     public static boolean disableAds = true;
     public static boolean disableProxySponsor = true;
     public static boolean localPremium = false;
@@ -114,7 +134,7 @@ public class AyuConfig {
 
     // ---------------- Message context menu ----------------
     /** true = a single tap on a message bubble opens the context menu */
-    public static boolean contextMenuOnTap = true;
+    public static boolean contextMenuOnTap = false;
     /** true = show the "Marking message" bookmark entry and the bookmark badge */
     public static boolean markedMessagesEnabled = true;
 
@@ -133,6 +153,16 @@ public class AyuConfig {
         }
         preferences = ApplicationLoader.applicationContext.getSharedPreferences(AyuConstants.PREFS_NAME, Context.MODE_PRIVATE);
 
+        sendReadPackets = preferences.getBoolean("sendReadPackets", true);
+        sendReadStories = preferences.getBoolean("sendReadStories", true);
+        sendOnlinePackets = preferences.getBoolean("sendOnlinePackets", true);
+        sendUploadProgress = preferences.getBoolean("sendUploadProgress", true);
+        sendOfflinePacketAfterOnline = preferences.getBoolean("sendOfflinePacketAfterOnline", false);
+        markReadAfterSend = preferences.getBoolean("markReadAfterSend", true);
+        markReadAfterAction = preferences.getBoolean("markReadAfterAction", false);
+        useScheduledMessages = preferences.getBoolean("useScheduledMessages", false);
+        alertBeforeOpeningStory = preferences.getBoolean("alertBeforeOpeningStory", false);
+
         saveDeletedMessages = preferences.getBoolean("saveDeletedMessages", true);
         saveMessagesHistory = preferences.getBoolean("saveMessagesHistory", true);
         saveMedia = preferences.getBoolean("saveMedia", true);
@@ -146,7 +176,7 @@ public class AyuConfig {
         saveReactions = preferences.getBoolean("saveReactions", true);
         saveSelfDestructingMedia = preferences.getBoolean("saveSelfDestructingMedia", true);
 
-        keepAliveService = preferences.getBoolean("keepAliveService", true);
+        keepAliveService = preferences.getBoolean("keepAliveService", false);
         disableAds = preferences.getBoolean("disableAds", true);
         disableProxySponsor = preferences.getBoolean("disableProxySponsor", true);
         localPremium = preferences.getBoolean("localPremium", false);
@@ -192,7 +222,7 @@ public class AyuConfig {
         aiModel = preferences.getString("aiModel", "");
         aiBaseUrl = preferences.getString("aiBaseUrl", "");
 
-        contextMenuOnTap = preferences.getBoolean("contextMenuOnTap", true);
+        contextMenuOnTap = preferences.getBoolean("contextMenuOnTap", false);
         markedMessagesEnabled = preferences.getBoolean("markedMessagesEnabled", true);
 
         // The old server client has no settings UI and must not resume after an upgrade.
@@ -232,20 +262,54 @@ public class AyuConfig {
     }
 
     // ---------------- ghost mode helpers ----------------
-    public static boolean isGhostModeActive(int account) { return AyuGhostConfig.get(account).isActive(); }
-    public static int getGhostModeSelectedCount(int account) { return AyuGhostConfig.get(account).selectedCount(); }
-    public static void setGhostMode(int account, boolean enabled) { AyuGhostConfig.setGhostMode(account, enabled); }
-    public static void toggleGhostMode(int account) { setGhostMode(account, !isGhostModeActive(account)); }
+    public static boolean isGhostModeActive() {
+        ensureLoaded();
+        return !sendReadPackets && !sendOnlinePackets;
+    }
 
-    public static void setSendReadPackets(int account, boolean value) { AyuGhostConfig.setOption(account, 0, value); }
-    public static void setSendReadStories(int account, boolean value) { AyuGhostConfig.setOption(account, 1, value); }
-    public static void setSendOnlinePackets(int account, boolean value) { AyuGhostConfig.setOption(account, 2, value); }
-    public static void setSendUploadProgress(int account, boolean value) { AyuGhostConfig.setOption(account, 3, value); }
-    public static void setSendOfflinePacketAfterOnline(int account, boolean value) { AyuGhostConfig.setOption(account, 4, value); }
-    public static void setMarkReadAfterSend(int account, boolean value) { AyuGhostConfig.setOption(account, 5, value); }
-    public static void setMarkReadAfterAction(int account, boolean value) { AyuGhostConfig.setOption(account, 6, value); }
-    public static void setUseScheduledMessages(int account, boolean value) { AyuGhostConfig.setOption(account, 7, value); }
-    public static void setAlertBeforeOpeningStory(int account, boolean value) { AyuGhostConfig.setOption(account, 8, value); }
+    /** number of enabled ghost sub-options, 0..5 */
+    public static int getGhostModeSelectedCount() {
+        ensureLoaded();
+        int c = 0;
+        if (!sendReadPackets) c++;
+        if (!sendReadStories) c++;
+        if (!sendOnlinePackets) c++;
+        if (!sendUploadProgress) c++;
+        if (sendOfflinePacketAfterOnline) c++;
+        return c;
+    }
+
+    public static void setGhostMode(boolean enabled) {
+        ensureLoaded();
+        sendReadPackets = !enabled;
+        sendReadStories = !enabled;
+        sendOnlinePackets = !enabled;
+        sendUploadProgress = !enabled;
+        sendOfflinePacketAfterOnline = enabled;
+        preferences.edit()
+                .putBoolean("sendReadPackets", sendReadPackets)
+                .putBoolean("sendReadStories", sendReadStories)
+                .putBoolean("sendOnlinePackets", sendOnlinePackets)
+                .putBoolean("sendUploadProgress", sendUploadProgress)
+                .putBoolean("sendOfflinePacketAfterOnline", sendOfflinePacketAfterOnline)
+                .apply();
+        AyuGhostHelper.onOnlineSettingsChanged();
+        AyuState.onGhostModeChanged();
+    }
+
+    public static void toggleGhostMode() {
+        setGhostMode(!isGhostModeActive());
+    }
+
+    public static void setSendReadPackets(boolean v) { sendReadPackets = v; putBoolean("sendReadPackets", v); AyuState.onGhostModeChanged(); }
+    public static void setSendReadStories(boolean v) { sendReadStories = v; putBoolean("sendReadStories", v); AyuState.onGhostModeChanged(); }
+    public static void setSendOnlinePackets(boolean v) { sendOnlinePackets = v; putBoolean("sendOnlinePackets", v); AyuGhostHelper.onOnlineSettingsChanged(); AyuState.onGhostModeChanged(); }
+    public static void setSendUploadProgress(boolean v) { sendUploadProgress = v; putBoolean("sendUploadProgress", v); AyuState.onGhostModeChanged(); }
+    public static void setSendOfflinePacketAfterOnline(boolean v) { sendOfflinePacketAfterOnline = v; putBoolean("sendOfflinePacketAfterOnline", v); AyuGhostHelper.onOnlineSettingsChanged(); AyuState.onGhostModeChanged(); }
+    public static void setMarkReadAfterSend(boolean v) { markReadAfterSend = v; putBoolean("markReadAfterSend", v); }
+    public static void setMarkReadAfterAction(boolean v) { markReadAfterAction = v; putBoolean("markReadAfterAction", v); }
+    public static void setUseScheduledMessages(boolean v) { useScheduledMessages = v; putBoolean("useScheduledMessages", v); }
+    public static void setAlertBeforeOpeningStory(boolean v) { alertBeforeOpeningStory = v; putBoolean("alertBeforeOpeningStory", v); }
 
     public static void setSaveDeletedMessages(boolean v) { saveDeletedMessages = v; putBoolean("saveDeletedMessages", v); }
     public static void setSaveMessagesHistory(boolean v) { saveMessagesHistory = v; putBoolean("saveMessagesHistory", v); }

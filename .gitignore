@@ -18,10 +18,7 @@ TMessagesProj/jni/ffmpeg/build_android
 # Claude Code agent worktrees and local state
 .claude/
 
-fix_defender.bat
-__pycache__/
-*.pyc
-
 *.apk
 
-ox-gram-update.json
+/ox-gram-update.json
+/build/in-app-update-apk/ox-gram-update.json

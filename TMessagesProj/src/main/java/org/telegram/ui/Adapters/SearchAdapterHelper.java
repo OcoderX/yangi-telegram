@@ -8,8 +8,6 @@
 
 package org.telegram.ui.Adapters;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import android.util.Pair;
 
 import androidx.collection.LongSparseArray;
@@ -225,13 +223,13 @@ public class SearchAdapterHelper {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
                                     if (chat != null) {
-                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || !allowGlobalResults && ChatObject.isNotInChat(chat) || HiddenChatsController.getInstance(currentAccount).isHidden(-chat.id) || !filter(chat)) {
+                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || !allowGlobalResults && ChatObject.isNotInChat(chat) || !filter(chat)) {
                                             continue;
                                         }
                                         globalSearch.add(chat);
                                         globalSearchMap.put(-chat.id, chat);
                                     } else if (user != null) {
-                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || !allowGlobalResults && b == 1 && !user.contact || HiddenChatsController.getInstance(currentAccount).isHidden(user.id) || !filter(user)) {
+                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || !allowGlobalResults && b == 1 && !user.contact || !filter(user)) {
                                             continue;
                                         }
                                         globalSearch.add(user);
@@ -252,13 +250,13 @@ public class SearchAdapterHelper {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
                                     if (chat != null) {
-                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || -chat.id == exceptDialogId || HiddenChatsController.getInstance(currentAccount).isHidden(-chat.id) || !filter(chat)) {
+                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || -chat.id == exceptDialogId || !filter(chat)) {
                                             continue;
                                         }
                                         localServerSearch.add(chat);
                                         globalSearchMap.put(-chat.id, chat);
                                     } else if (user != null) {
-                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || user.id == exceptDialogId || HiddenChatsController.getInstance(currentAccount).isHidden(user.id) || !filter(user)) {
+                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || user.id == exceptDialogId || !filter(user)) {
                                             continue;
                                         }
                                         localServerSearch.add(user);
@@ -286,7 +284,7 @@ public class SearchAdapterHelper {
             for (int a = 0, N = arrayList.size(); a < N; a++) {
                 TLRPC.TL_contact contact = arrayList.get(a);
                 TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(contact.user_id);
-                if (user == null || HiddenChatsController.getInstance(currentAccount).isHidden(user.id)) {
+                if (user == null) {
                     continue;
                 }
                 if (user.phone != null && user.phone.startsWith(phone)) {
@@ -626,23 +624,6 @@ public class SearchAdapterHelper {
         hashtagsByText = hashMap;
         hashtagsLoadedFromDb = true;
         delegate.onSetHashtags(arrayList, hashMap);
-    }
-
-    public void removeHiddenResults() {
-        globalSearch.removeIf(this::isHiddenResult);
-        localServerSearch.removeIf(this::isHiddenResult);
-        phonesSearch.removeIf(this::isHiddenResult);
-        for (int i = globalSearchMap.size() - 1; i >= 0; i--) {
-            if (HiddenChatsController.getInstance(currentAccount).isHidden(globalSearchMap.keyAt(i))) globalSearchMap.removeAt(i);
-        }
-        for (int i = phoneSearchMap.size() - 1; i >= 0; i--) {
-            if (HiddenChatsController.getInstance(currentAccount).isHidden(phoneSearchMap.keyAt(i))) phoneSearchMap.removeAt(i);
-        }
-    }
-
-    private boolean isHiddenResult(Object obj) {
-        long did = obj instanceof TLRPC.User ? ((TLRPC.User) obj).id : obj instanceof TLRPC.Chat ? -((TLRPC.Chat) obj).id : 0;
-        return did != 0 && HiddenChatsController.getInstance(currentAccount).isHidden(did);
     }
 
     protected boolean filter(TLObject obj) {

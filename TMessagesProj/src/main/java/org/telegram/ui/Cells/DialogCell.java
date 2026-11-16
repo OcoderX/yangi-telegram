@@ -189,8 +189,6 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private float cardPathLeft = Float.NaN, cardPathTop, cardPathRight, cardPathBottom;
     private Paint cardPaint;
     private int cardPaintBaseColor;
-    private Paint cardStrokePaint;
-    private int cardStrokeBaseColor;
     public int heightDefault = 70;
     public int heightThreeLines = 76;
     public int addHeightForTags = 3;
@@ -1115,28 +1113,10 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             cardPaintBaseColor = base;
             final boolean dark = AndroidUtilities.computePerceivedBrightness(base) < 0.721f;
             cardPaint.setColor(dark
-                ? ColorUtils.blendARGB(base, Color.WHITE, 0.14f)
-                : ColorUtils.blendARGB(base, Color.BLACK, 0.06f));
+                ? ColorUtils.blendARGB(base, Color.WHITE, 0.07f)
+                : ColorUtils.blendARGB(base, Color.BLACK, 0.05f));
         }
         return cardPaint;
-    }
-
-    private Paint getCardStrokePaint() {
-        final int base = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
-        if (cardStrokePaint == null) {
-            cardStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            cardStrokePaint.setStyle(Paint.Style.STROKE);
-            cardStrokePaint.setStrokeWidth(dp(1));
-            cardStrokeBaseColor = 0;
-        }
-        if (cardStrokeBaseColor != base) {
-            cardStrokeBaseColor = base;
-            final boolean dark = AndroidUtilities.computePerceivedBrightness(base) < 0.721f;
-            cardStrokePaint.setColor(dark
-                ? ColorUtils.blendARGB(base, Color.WHITE, 0.10f)
-                : ColorUtils.blendARGB(base, Color.BLACK, 0.08f));
-        }
-        return cardStrokePaint;
     }
 
     @Override
@@ -3384,7 +3364,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                             hasUnmutedTopics = counts[3] != 0;
                             pollVotesMentionCount = counts[4];
                         } else if (dialog instanceof TLRPC.TL_dialogFolder) {
-                            unreadCount = MessagesController.getInstance(currentAccount).getVisibleUnreadCount(1);
+                            unreadCount = MessagesStorage.getInstance(currentAccount).getArchiveUnreadCount();
                             mentionCount = 0;
                             reactionMentionCount = 0;
                             pollVotesMentionCount = 0;
@@ -3564,7 +3544,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                             hasUnmutedTopics = counts[3] != 0;
                             newPollVotesCount = counts[4];
                         } else if (dialog instanceof TLRPC.TL_dialogFolder) {
-                            newCount = MessagesController.getInstance(currentAccount).getVisibleUnreadCount(1);
+                            newCount = MessagesStorage.getInstance(currentAccount).getArchiveUnreadCount();
                             newMentionCount = 0;
                         } else if (dialog instanceof TLRPC.TL_dialogCommunity) {
                             MessagesController.UnreadCounts unreadCounts = MessagesController.getInstance(currentAccount).getCommunityUnreadCount(-dialog.id);
@@ -3906,8 +3886,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
         boolean needInvalidate = false;
 
-        // A disabled or completed pull drawable no longer replaces the normal archive content.
-        if (drawArchive && (currentDialogFolderId != 0 || isTopic && forumTopic != null && forumTopic.id == 1) && archivedChatsDrawable != null && archivedChatsDrawable.isDraw() && archivedChatsDrawable.outProgress == 0.0f && translationX == 0.0f) {
+        if (drawArchive && (currentDialogFolderId != 0 || isTopic && forumTopic != null && forumTopic.id == 1) && archivedChatsDrawable != null && archivedChatsDrawable.outProgress == 0.0f && translationX == 0.0f) {
             canvas.save();
             canvas.translate(0, -translateY - rightFragmentOffset);
             canvas.clipRect(0, getMeasuredHeight() * (1f - archivedChatsDrawable.getPullProgress()), getMeasuredWidth(), getMeasuredHeight());
@@ -3947,6 +3926,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 // uses rounded shapes (pinned/selected overlays go through drawRoundRect)
                 canvas.clipRect(cardRect);
             }
+            canvas.drawRoundRect(cardRect, cardRadius, cardRadius, getCardPaint());
         }
 
         final boolean clipArchive = drawArchive && (currentDialogFolderId != 0 || isTopic && forumTopic != null && forumTopic.id == 1) && archivedChatsDrawable != null && translationX == 0.0f && parentFragment != null && parentFragment.hasHiddenArchive()
@@ -3963,14 +3943,6 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         if (clipProgress != 0.0f && Build.VERSION.SDK_INT != 24) {
             canvas.save();
             canvas.clipRect(0, topClip * clipProgress, getMeasuredWidth(), getMeasuredHeight() - (int) (bottomClip * clipProgress));
-        }
-
-        // The card shares the archive reveal and row-animation clips with its content.
-        // Painting it before these clips leaves an empty card when the archive is hidden.
-        if (cardRestoreCount >= 0) {
-            final float cardRadius = dp(CARD_RADIUS_DP);
-            canvas.drawRoundRect(cardRect, cardRadius, cardRadius, getCardPaint());
-            canvas.drawRoundRect(cardRect, cardRadius, cardRadius, getCardStrokePaint());
         }
 
         int backgroundColor = 0;

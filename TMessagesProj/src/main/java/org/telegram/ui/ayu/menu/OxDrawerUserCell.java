@@ -33,21 +33,12 @@ public class OxDrawerUserCell extends FrameLayout {
     private final BackupImageView avatarImageView;
     private final TextView nameTextView;
     private final ImageView checkView;
-    private final AvatarDrawable avatarDrawable;
-    private final Theme.ResourcesProvider resourcesProvider;
-    private PorterDuffColorFilter checkColorFilter;
-    private int checkColor;
+    private final AvatarDrawable avatarDrawable = new AvatarDrawable();
 
     private int accountNumber;
 
     public OxDrawerUserCell(Context context) {
-        this(context, null);
-    }
-
-    public OxDrawerUserCell(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
-        this.resourcesProvider = resourcesProvider;
-        avatarDrawable = new AvatarDrawable(resourcesProvider);
 
         avatarImageView = new BackupImageView(context);
         avatarImageView.setRoundRadius(dp(18));
@@ -67,24 +58,12 @@ public class OxDrawerUserCell extends FrameLayout {
         checkView.setScaleType(ImageView.ScaleType.CENTER);
         checkView.setImageResource(R.drawable.account_check);
         addView(checkView, LayoutHelper.createFrame(24, 24, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 0, 0, 18, 0));
-
-        updateColors();
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(dp(56), MeasureSpec.EXACTLY));
-    }
-
-    public void updateColors() {
-        setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
-        nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
-        final int color = Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider);
-        if (checkColorFilter == null || checkColor != color) {
-            checkColor = color;
-            checkView.setColorFilter(checkColorFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
-        }
     }
 
     public void setAccount(int account, boolean selected) {
@@ -101,9 +80,11 @@ public class OxDrawerUserCell extends FrameLayout {
 
         final CharSequence name = user != null ? UserObject.getUserName(user) : "";
         nameTextView.setText(Emoji.replaceEmoji(name, nameTextView.getPaint().getFontMetricsInt(), false));
+        nameTextView.setTextColor(Theme.getColor(Theme.key_chats_menuItemText));
 
         checkView.setVisibility(selected ? VISIBLE : GONE);
-        updateColors();
+        checkView.setColorFilter(new PorterDuffColorFilter(
+                Theme.getColor(Theme.key_chats_menuItemIcon), PorterDuff.Mode.SRC_IN));
     }
 
     public int getAccountNumber() {

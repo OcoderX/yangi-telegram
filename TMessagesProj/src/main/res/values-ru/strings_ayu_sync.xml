@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- OcoderX-gram: экран сервиса OcoderX-sync -->
+    <!-- Ox-gram: экран сервиса OcoderX-sync -->
     <string name="OxSyncHeroTitle">Что такое OcoderX-sync?</string>
     <string name="OxSyncHeroText">Это платный сервис на сервере OcoderX. Он работает для вас круглосуточно и сохраняет копию того, что Telegram обычно удаляет, — чтобы ничего не терялось.</string>
     <string name="OxSyncWhatHeader">Что сохраняется</string>

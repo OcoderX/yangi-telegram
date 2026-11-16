@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="OxTranslationAutoDetect">Avtomatik aniqlash</string>
-    <string name="OxTranslationBotUnsupported">Bot akkauntlarida Telegram tarjimasi ishlamaydi. Sozlamalarda muqobil tarjima usulini tanlashingiz mumkin.</string>
-</resources>

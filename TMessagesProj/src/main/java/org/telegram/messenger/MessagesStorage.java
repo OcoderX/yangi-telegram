@@ -2425,6 +2425,11 @@ public class MessagesStorage extends BaseController {
                         data.reuse();
                     }
                 }
+                if (!DialogObject.isEncryptedDialog(dialogId)) {
+                    if (dialog.read_inbox_max_id > dialog.top_message) {
+                        dialog.read_inbox_max_id = 0;
+                    }
+                }
                 if (DialogObject.isEncryptedDialog(dialogId)) {
                     int encryptedChatId = DialogObject.getEncryptedChatId(dialogId);
                     if (!encryptedToLoad.contains(encryptedChatId)) {
@@ -4612,9 +4617,6 @@ public class MessagesStorage extends BaseController {
                 String ids = "(" + TextUtils.join(",", dids) + ")";
 
                 database.beginTransaction();
-                for (int a = 0; a < dialogsRes.dialogs.size(); a++) {
-                    reconcileDialogReadStateInternal(dialogsRes.dialogs.get(a));
-                }
                 database.executeFast("DELETE FROM chat_pinned_count WHERE uid IN " + ids).stepThis().dispose();
                 database.executeFast("DELETE FROM chat_pinned_v2 WHERE uid IN " + ids).stepThis().dispose();
                 database.executeFast("DELETE FROM dialogs WHERE did IN " + ids).stepThis().dispose();
@@ -4728,7 +4730,6 @@ public class MessagesStorage extends BaseController {
     }
 
     public void emptyMessagesMedia(long dialogId, ArrayList<Integer> mids) {
-        final long ttlCaptureOwner = getUserConfig().getClientUserId();
         storageQueue.postRunnable(() -> {
             SQLiteCursor cursor = null;
             SQLitePreparedStatement state = null;
@@ -4747,15 +4748,10 @@ public class MessagesStorage extends BaseController {
                         message.readAttachPath(data, getUserConfig().clientUserId);
                         data.reuse();
                         //ayu: keep a permanent copy of the self-destructing media before the file is wiped
-                        if (org.telegram.messenger.ayu.AyuConfig.saveSelfDestructingMedia && message.media != null
-                                && ttlCaptureOwner != 0 && ttlCaptureOwner == getUserConfig().getClientUserId()) {
+                        if (org.telegram.messenger.ayu.AyuConfig.saveSelfDestructingMedia && message.media != null) {
                             message.id = cursor.intValue(1);
                             message.dialog_id = cursor.longValue(3);
-                            try {
-                                org.telegram.messenger.ayu.AyuTTLMediaCapture.captureBeforeMediaDeletion(currentAccount, message, ttlCaptureOwner);
-                            } catch (Throwable e) {
-                                FileLog.e(e);
-                            }
+                            org.telegram.messenger.ayu.AyuMessagesController.getInstance().onSelfDestructMediaOpened(currentAccount, message, true);
                         }
                         if (message.media != null) {
                             if (!addFilesToDelete(message, filesToDelete, idsToDelete, namesToDelete, true)) {
@@ -6758,20 +6754,7 @@ public class MessagesStorage extends BaseController {
                         long key = inbox.keyAt(b);
                         int messageId = inbox.get(key);
                         int stillUnread = stillUnreadMessagesCount == null ? -2 : stillUnreadMessagesCount.get(key, -2);
-                        int oldMaxId = 0;
-                        int localUnread = 0;
-                        SQLiteCursor readCursor = database.queryFinalized("SELECT inbox_max, unread_count FROM dialogs WHERE did = " + key);
-                        if (readCursor.next()) {
-                            oldMaxId = readCursor.intValue(0);
-                            localUnread = readCursor.intValue(1);
-                        }
-                        readCursor.dispose();
 
-                        if (messageId < oldMaxId) {
-                            // The server count describes an older boundary, not the local Ghost read.
-                            dialogsToUpdate.put(key, localUnread);
-                            continue;
-                        }
                         if (stillUnread >= 0) {
                             dialogsToUpdate.put(key, stillUnread);
                             if (BuildVars.DEBUG_VERSION) {
@@ -6808,6 +6791,14 @@ public class MessagesStorage extends BaseController {
                                 }
                             }
                         }
+
+                        int oldMaxId = 0;
+                        SQLiteCursor cursor = database.queryFinalized("SELECT inbox_max FROM dialogs WHERE did = " + key);
+                        if (cursor.next()) {
+                            oldMaxId = cursor.intValue(0);
+                        }
+                        cursor.dispose();
+                        cursor = null;
 
                         FileLog.d(key + " set inbox max " + messageId);
                         SQLitePreparedStatement state = database.executeFast("UPDATE dialogs SET inbox_max = max((SELECT inbox_max FROM dialogs WHERE did = ?), ?) WHERE did = ?");
@@ -8105,10 +8096,8 @@ public class MessagesStorage extends BaseController {
 
 
     public void processPendingRead(long dialogId, int maxPositiveId, int maxNegativeId, int scheduledCount) {
-        final long ownerId = getUserConfig().getClientUserId();
         int maxDate = lastSavedDate;
         storageQueue.postRunnable(() -> {
-            if (ownerId == 0 || ownerId != getUserConfig().getClientUserId()) return;
             SQLiteCursor cursor = null;
             SQLitePreparedStatement state = null;
             try {
@@ -8129,8 +8118,7 @@ public class MessagesStorage extends BaseController {
                 database.beginTransaction();
 
                 if (!DialogObject.isEncryptedDialog(dialogId)) {
-                    currentMaxId = Math.max(DialogReadState.cloudReadMax(currentMaxId, (int) last_mid),
-                            DialogReadState.cloudReadMax(maxPositiveId, (int) last_mid));
+                    currentMaxId = Math.max(currentMaxId, maxPositiveId);
 
                     state = database.executeFast("UPDATE messages_v2 SET read_state = read_state | 1 WHERE uid = ? AND mid <= ? AND read_state IN(0,2) AND out = 0");
                     state.requery();
@@ -11758,7 +11746,7 @@ public class MessagesStorage extends BaseController {
 
     }
 
-    private void putMessagesInternal(ArrayList<TLRPC.Message> messages, boolean withTransaction, boolean doNotUpdateDialogDate, int downloadMask, boolean ifNoLastMessage, int mode, long threadMessageId, long ttlCaptureOwner) {
+    private void putMessagesInternal(ArrayList<TLRPC.Message> messages, boolean withTransaction, boolean doNotUpdateDialogDate, int downloadMask, boolean ifNoLastMessage, int mode, long threadMessageId) {
         boolean databaseInTransaction = false;
         SQLitePreparedStatement state_messages = null;
         SQLitePreparedStatement state_messages_topic = null;
@@ -12001,16 +11989,6 @@ public class MessagesStorage extends BaseController {
 
                     int messageId = message.id;
                     MessageObject.getDialogId(message);
-                    if (mode == ChatActivity.MODE_DEFAULT && message.id > 0 && !message.out && message.media != null
-                            && message.media.ttl_seconds > 0 && (message.media.photo != null || message.media.document != null)
-                            && org.telegram.messenger.ayu.AyuConfig.saveSelfDestructingMedia && getUserConfig().isClientActivated()
-                            && ttlCaptureOwner != 0 && ttlCaptureOwner == getUserConfig().getClientUserId()) {
-                        try {
-                            org.telegram.messenger.ayu.AyuTTLMediaCapture.onIncomingSelfDestructPhoto(currentAccount, message, ttlCaptureOwner);
-                        } catch (Throwable e) {
-                            FileLog.e(e);
-                        }
-                    }
                     long topicId = MessageObject.getTopicId(currentAccount, message, getForumTypeFlags(message.dialog_id));
 
                     if (message.mentioned && message.media_unread) {
@@ -13181,14 +13159,13 @@ public class MessagesStorage extends BaseController {
     }
 
     public void putMessages(ArrayList<TLRPC.Message> messages, boolean withTransaction, boolean useQueue, boolean doNotUpdateDialogDate, int downloadMask, boolean ifNoLastMessage, int mode, long threadMessageId) {
-        final long ttlCaptureOwner = getUserConfig().getClientUserId();
         if (messages.size() == 0) {
             return;
         }
         if (useQueue) {
-            storageQueue.postRunnable(() -> putMessagesInternal(messages, withTransaction, doNotUpdateDialogDate, downloadMask, ifNoLastMessage, mode, threadMessageId, ttlCaptureOwner));
+            storageQueue.postRunnable(() -> putMessagesInternal(messages, withTransaction, doNotUpdateDialogDate, downloadMask, ifNoLastMessage, mode, threadMessageId));
         } else {
-            putMessagesInternal(messages, withTransaction, doNotUpdateDialogDate, downloadMask, ifNoLastMessage, mode, threadMessageId, ttlCaptureOwner);
+            putMessagesInternal(messages, withTransaction, doNotUpdateDialogDate, downloadMask, ifNoLastMessage, mode, threadMessageId);
         }
     }
 
@@ -14113,10 +14090,6 @@ public class MessagesStorage extends BaseController {
         if (DialogObject.isEncryptedDialog(dialogId)) {
             return;
         }
-        org.telegram.messenger.ayu.AyuChatCapturePolicy.load();
-        if (dialogId != 0 && !org.telegram.messenger.ayu.AyuChatCapturePolicy.isEnabled(currentAccount, dialogId)) {
-            return;
-        }
         //ayu: deletions the user started on this device (delete for me / for everyone / delete locally)
         //must vanish for good - only what somebody else deleted is worth archiving.
         messages = org.telegram.messenger.ayu.antidelete.AyuAntiDelete.filterLocalDeletions(currentAccount, dialogId, messages);
@@ -14134,10 +14107,6 @@ public class MessagesStorage extends BaseController {
     //ayu: same as above, for the "delete everything up to mid" channel variant
     private void ayuSaveDeletedChannelMessages(long channelId, int maxMid) {
         if (!org.telegram.messenger.ayu.AyuConfig.saveDeletedMessages) {
-            return;
-        }
-        org.telegram.messenger.ayu.AyuChatCapturePolicy.load();
-        if (!org.telegram.messenger.ayu.AyuChatCapturePolicy.isExplicitlyEnabled(currentAccount, -channelId)) {
             return;
         }
         // bounded: "delete history up to mid" can match the whole locally cached channel
@@ -14169,10 +14138,6 @@ public class MessagesStorage extends BaseController {
             org.telegram.messenger.ayu.AyuMessagesController.getInstance().forgetAllDeletedForDialog(currentAccount, did);
             return;
         }
-        org.telegram.messenger.ayu.AyuChatCapturePolicy.load();
-        if (!org.telegram.messenger.ayu.AyuChatCapturePolicy.isEnabled(currentAccount, did)) {
-            return;
-        }
         ayuArchiveQuery(String.format(Locale.US, "SELECT data, mid, uid FROM messages_v2 WHERE uid = %d ORDER BY mid DESC LIMIT %d", did, AYU_MAX_CLEAR_HISTORY_SAVE));
     }
 
@@ -14183,12 +14148,6 @@ public class MessagesStorage extends BaseController {
             ArrayList<TLRPC.Message> oldMessages = new ArrayList<>();
             ayuCursor = database.queryFinalized(query);
             while (ayuCursor.next()) {
-                final long captureDialog = ayuCursor.longValue(2);
-                // Mixed non-channel deletes have no dialog on the update. Filter each known
-                // dialog before allocating/deserializing its blob or reading attachment paths.
-                if (!org.telegram.messenger.ayu.AyuChatCapturePolicy.isEnabled(currentAccount, captureDialog)) {
-                    continue;
-                }
                 NativeByteBuffer data = ayuCursor.byteBufferValue(0);
                 if (data == null) {
                     continue;
@@ -14910,6 +14869,11 @@ public class MessagesStorage extends BaseController {
                     dialogs.messages.add(message);
 
                     addUsersAndChatsFromMessage(message, usersToLoad, chatsToLoad, null);
+                }
+                if (!DialogObject.isEncryptedDialog(dialogId)) {
+                    if (dialog.read_inbox_max_id > dialog.top_message) {
+                        dialog.read_inbox_max_id = 0;
+                    }
                 }
                 if (DialogObject.isEncryptedDialog(dialogId)) {
                     int encryptedChatId = DialogObject.getEncryptedChatId(dialogId);
@@ -15774,7 +15738,6 @@ public class MessagesStorage extends BaseController {
 
     // put messages in data base while load history
     public void putMessages(TLRPC.messages_Messages messages, long dialogId, int load_type, int max_id, boolean createDialog, int mode, long threadMessageId) {
-        final long ttlCaptureOwner = getUserConfig().getClientUserId();
         storageQueue.postRunnable(() -> {
             SQLitePreparedStatement state_messages = null;
             SQLitePreparedStatement state_messages_topics = null;
@@ -16019,7 +15982,7 @@ public class MessagesStorage extends BaseController {
                             cursor = null;
 
                             if (exist) {
-                                state3 = database.executeFast("UPDATE dialogs SET date = ?, last_mid = ?, last_mid_group = ?, inbox_max = MAX(inbox_max, ?), last_mid_i = ?, pts = ?, date_i = ? WHERE did = ?");
+                                state3 = database.executeFast("UPDATE dialogs SET date = ?, last_mid = ?, last_mid_group = ?, inbox_max = ?, last_mid_i = ?, pts = ?, date_i = ? WHERE did = ?");
                                 state3.bindInteger(1, message.date);
                                 state3.bindInteger(2, message.id);
                                 if (message != null && (message.flags & 131072) != 0) {
@@ -16061,18 +16024,6 @@ public class MessagesStorage extends BaseController {
                             state3.step();
                             state3.dispose();
                             state3 = null;
-                        }
-
-                        if (mode == ChatActivity.MODE_DEFAULT && message.id > 0 && !message.out && message.media != null
-                                && message.media.ttl_seconds > 0 && (message.media.photo != null || message.media.document != null)
-                                && org.telegram.messenger.ayu.AyuConfig.saveSelfDestructingMedia && getUserConfig().isClientActivated()
-                                && ttlCaptureOwner != 0 && ttlCaptureOwner == getUserConfig().getClientUserId()) {
-                            MessageObject.getDialogId(message);
-                            try {
-                                org.telegram.messenger.ayu.AyuTTLMediaCapture.onIncomingSelfDestructPhoto(currentAccount, message, ttlCaptureOwner);
-                            } catch (Throwable e) {
-                                FileLog.e(e);
-                            }
                         }
 
                         fixUnsupportedMedia(message);
@@ -16752,6 +16703,11 @@ public class MessagesStorage extends BaseController {
                             }
                         }
 
+                        if (!DialogObject.isEncryptedDialog(dialogId)) {
+                            if (dialog.read_inbox_max_id > dialog.top_message) {
+                                dialog.read_inbox_max_id = 0;
+                            }
+                        }
 
                         if (DialogObject.isEncryptedDialog(dialogId)) {
                             int encryptedChatId = DialogObject.getEncryptedChatId(dialogId);
@@ -16992,26 +16948,6 @@ public class MessagesStorage extends BaseController {
         });
     }
 
-    private void reconcileDialogReadStateInternal(TLRPC.Dialog dialog) throws Exception {
-        if (!(dialog instanceof TLRPC.TL_dialog) || DialogObject.isEncryptedDialog(dialog.id)) {
-            return;
-        }
-        SQLiteCursor readCursor = database.queryFinalized("SELECT inbox_max, last_mid, unread_count, outbox_max FROM dialogs WHERE did = " + dialog.id);
-        try {
-            if (readCursor.next()) {
-                int localMax = DialogReadState.cloudReadMax(readCursor.intValue(0), readCursor.intValue(1));
-                dialog.read_inbox_max_id = DialogReadState.cloudReadMax(dialog.read_inbox_max_id, dialog.top_message);
-                dialog.unread_count = DialogReadState.unreadCount(dialog.read_inbox_max_id,
-                        dialog.top_message, dialog.unread_count, localMax,
-                        readCursor.intValue(1), readCursor.intValue(2));
-                dialog.read_inbox_max_id = Math.max(dialog.read_inbox_max_id, localMax);
-                dialog.read_outbox_max_id = Math.max(dialog.read_outbox_max_id, readCursor.intValue(3));
-            }
-        } finally {
-            readCursor.dispose();
-        }
-    }
-
     private void putDialogsInternal(TLRPC.messages_Dialogs dialogs, int check) {
         SQLitePreparedStatement state_messages = null;
         SQLitePreparedStatement state_dialogs = null;
@@ -17048,7 +16984,6 @@ public class MessagesStorage extends BaseController {
                     TLRPC.Dialog dialog = dialogs.dialogs.get(a);
                     boolean exists = false;
                     DialogObject.initDialog(dialog);
-                    reconcileDialogReadStateInternal(dialog);
                     unknownDialogsIds.remove(dialog.id);
 
                     if (check == 1) {
@@ -17085,10 +17020,6 @@ public class MessagesStorage extends BaseController {
 
                     TLRPC.Message message = new_dialogMessage.get(dialog.id);
                     if (message != null) {
-                        if (!message.out && !DialogObject.isEncryptedDialog(dialog.id)
-                                && message.id > 0 && message.id <= dialog.read_inbox_max_id) {
-                            message.unread = false;
-                        }
                         messageDate = Math.max(message.date, messageDate);
 
                         if (isValidKeyboardToSave(message)) {
@@ -17700,9 +17631,13 @@ public class MessagesStorage extends BaseController {
             } else {
                 cursor = database.queryFinalized("SELECT last_mid, inbox_max FROM dialogs WHERE did = " + dialog_id);
                 if (cursor.next()) {
+                    int lastMid = cursor.intValue(0);
                     int inboxMax = cursor.intValue(1);
-                    max = DialogObject.isEncryptedDialog(dialog_id) ? inboxMax
-                            : DialogReadState.cloudReadMax(inboxMax, cursor.intValue(0));
+                    if (inboxMax > lastMid) {
+                        max = 0;
+                    } else {
+                        max = inboxMax;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -17729,9 +17664,13 @@ public class MessagesStorage extends BaseController {
                 } else {
                     cursor = database.queryFinalized("SELECT last_mid, inbox_max FROM dialogs WHERE did = " + dialog_id);
                     if (cursor.next()) {
+                        int lastMid = cursor.intValue(0);
                         int inboxMax = cursor.intValue(1);
-                        max[0] = DialogObject.isEncryptedDialog(dialog_id) ? inboxMax
-                                : DialogReadState.cloudReadMax(inboxMax, cursor.intValue(0));
+                        if (inboxMax > lastMid) {
+                            max[0] = 0;
+                        } else {
+                            max[0] = inboxMax;
+                        }
                     }
                 }
             } catch (Exception e) {

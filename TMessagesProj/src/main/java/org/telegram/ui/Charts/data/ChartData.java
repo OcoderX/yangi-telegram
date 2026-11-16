@@ -15,7 +15,6 @@ import org.telegram.ui.Stars.StarsController;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -48,14 +47,10 @@ public class ChartData {
     public ChartData(JSONObject jsonObject) throws JSONException {
         JSONArray columns = jsonObject.getJSONArray("columns");
 
-        HashSet<String> columnIds = new HashSet<>();
+        int n = columns.length();
         for (int i = 0; i < columns.length(); i++) {
             JSONArray a = columns.getJSONArray(i);
-            String id = a.getString(0);
-            if (TextUtils.isEmpty(id) || !columnIds.add(id)) {
-                throw new JSONException("Invalid or duplicate chart column");
-            }
-            if (id.equals("x")) {
+            if (a.getString(0).equals("x")) {
                 int len = a.length() - 1;
                 x = new long[len];
                 for (int j = 0; j < len; j++) {
@@ -65,7 +60,7 @@ public class ChartData {
                 Line l = new Line();
                 lines.add(l);
                 int len = a.length() - 1;
-                l.id = id;
+                l.id = a.getString(0);
                 l.y = new long[len];
                 for (int j = 0; j < len; j++) {
                     l.y[j] = a.getLong(j + 1);
@@ -73,27 +68,14 @@ public class ChartData {
                     if (l.y[j] < l.minValue) l.minValue = l.y[j];
                 }
             }
-        }
 
-        // Column order is not significant; measure only after every series is read.
-        if (x == null) {
-            if (columns.length() != 0) {
-                throw new JSONException("Missing chart x column");
+            if (x.length > 1) {
+                timeStep = x[1] - x[0];
+            } else {
+                timeStep = 86400000L;
             }
-            x = new long[0];
+            measure();
         }
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).y.length != x.length) {
-                throw new JSONException("Chart column lengths differ");
-            }
-        }
-        for (int i = 1; i < x.length; i++) {
-            if (x[i] <= x[i - 1] || x[i] - x[0] <= 0) {
-                throw new JSONException("Chart x values must increase");
-            }
-        }
-        timeStep = x.length > 1 ? x[1] - x[0] : 86400000L;
-        measure();
 
         JSONObject colors = jsonObject.optJSONObject("colors");
         JSONObject names = jsonObject.optJSONObject("names");
@@ -139,15 +121,13 @@ public class ChartData {
 
     protected void measure() {
         int n = x.length;
-        xPercentage = new float[n];
-        daysLookup = new String[n];
         if (n == 0) {
-            oneDayPercentage = 0f;
             return;
         }
         long start = x[0];
         long end = x[n - 1];
 
+        xPercentage = new float[n];
         if (n == 1) {
             xPercentage[0] = 1;
         } else {
@@ -164,6 +144,7 @@ public class ChartData {
         }
 
 
+        daysLookup = new String[(int) ((end - start) / timeStep) + 10];
         SimpleDateFormat formatter;
         if (timeStep == 1) {
             formatter = null;
@@ -175,17 +156,17 @@ public class ChartData {
 
         for (int i = 0; i < daysLookup.length; i++) {
             if (timeStep == 1) {
-                daysLookup[i] = String.format(Locale.ENGLISH, "%02d:00", x[i] - start);
+                daysLookup[i] = String.format(Locale.ENGLISH, "%02d:00", i);
             } else {
-                daysLookup[i] = formatter.format(new Date(x[i]));
+                daysLookup[i] = formatter.format(new Date(start + (i * timeStep)));
             }
         }
 
-        oneDayPercentage = n > 1 ? timeStep / (float) (end - start) : 1f;
+        oneDayPercentage = timeStep / (float) (x[x.length - 1] - x[0]);
     }
 
     public String getDayString(int i) {
-        return daysLookup[i];
+        return daysLookup[(int) ((x[i] - x[0]) / timeStep)];
     }
 
     public int findStartIndex(float v) {

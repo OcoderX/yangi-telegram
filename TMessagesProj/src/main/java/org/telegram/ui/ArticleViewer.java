@@ -2891,8 +2891,6 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
         }
         if (richText instanceof TL_iv.textFixed) {
             return getText(parent, page, parentView, parentRichText, ((TL_iv.textFixed) richText).text, parentBlock, maxWidth);
-        } else if (richText instanceof TL_iv.textButton || richText instanceof TL_iv.textTonAddress) {
-            return getText(parent, page, parentView, parentRichText, richText.text, parentBlock, maxWidth);
         } else if (richText instanceof TL_iv.textItalic) {
             return getText(parent, page, parentView, parentRichText, ((TL_iv.textItalic) richText).text, parentBlock, maxWidth);
         } else if (richText instanceof TL_iv.textBold) {
@@ -3085,8 +3083,6 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
         }
         if (richText instanceof TL_iv.textFixed) {
             return getPlainText(((TL_iv.textFixed) richText).text);
-        } else if (richText instanceof TL_iv.textButton || richText instanceof TL_iv.textTonAddress) {
-            return getPlainText(richText.text);
         } else if (richText instanceof TL_iv.textItalic) {
             return getPlainText(((TL_iv.textItalic) richText).text);
         } else if (richText instanceof TL_iv.textBold) {
@@ -6446,8 +6442,6 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
             richText.parentRichText = parentRichText;
             if (richText instanceof TL_iv.textFixed) {
                 setRichTextParents(richText, ((TL_iv.textFixed) richText).text);
-            } else if (richText instanceof TL_iv.textButton || richText instanceof TL_iv.textTonAddress) {
-                setRichTextParents(richText, richText.text);
             } else if (richText instanceof TL_iv.textItalic) {
                 setRichTextParents(richText, ((TL_iv.textItalic) richText).text);
             } else if (richText instanceof TL_iv.textBold) {

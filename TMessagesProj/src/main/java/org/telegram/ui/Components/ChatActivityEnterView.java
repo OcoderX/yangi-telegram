@@ -210,9 +210,6 @@ import org.telegram.ui.iv.BlockRow;
 import org.telegram.ui.iv.RichEditor;
 import org.telegram.ui.iv.RichHtml;
 import org.telegram.ui.iv.RichMessageConvert;
-import org.telegram.ui.iv.RichEditorListView;
-import org.telegram.ui.iv.RichMessageSimpleConversion;
-import org.telegram.ui.iv.SimpleConversionPreview;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -648,9 +645,6 @@ public class ChatActivityEnterView extends FrameLayout implements
     public RichMessageLayout.PreviewView richDraftPreview;
     private boolean richDraftActive;
     private TL_iv.RichMessage richDraftMessage;
-    private CharSequence richDraftSimpleText;
-    private boolean convertedSimpleDraft;
-    private long richDraftRevision;
     @Nullable
     private SendButton doneButton;
     private AnimatorSet doneButtonAnimation;
@@ -5864,7 +5858,6 @@ public class ChatActivityEnterView extends FrameLayout implements
                 if (ignorePrevTextChange) {
                     return;
                 }
-                if (TextUtils.isEmpty(charSequence)) convertedSimpleDraft = false;
 
                 boolean allowChangeToSmile = true;
                 int currentPage;
@@ -6633,11 +6626,6 @@ public class ChatActivityEnterView extends FrameLayout implements
             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.sendingMessagesChanged);
             currentAccount = account;
             accountInstance = AccountInstance.getInstance(currentAccount);
-            richDraftMessage = null;
-            richDraftSimpleText = null;
-            convertedSimpleDraft = false;
-            richDraftRevision++;
-            updateRichDraftPreview();
             NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.recordStarted);
             NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.recordPaused);
             NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.recordResumed);
@@ -7194,8 +7182,12 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public boolean sendMessage() {
-        if (isRichDraftSendLocked()) {
-            showRichDraftConversionSheet();
+        if (richDraftActive && !UserConfig.getInstance(currentAccount).isPremium()) {
+            RichEditor.openConversionSheet(getContext(), this::openRichEditorWithoutFormatting, () -> {
+                if (parentFragment != null) {
+                    parentFragment.showDialog(new PremiumFeatureBottomSheet(parentFragment, PremiumPreviewFragment.PREMIUM_FEATURE_RICH_EDITOR, true));
+                }
+            }, resourcesProvider);
             return true;
         }
         if (isInScheduleMode()) {
@@ -7216,13 +7208,7 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     protected boolean sendMessageInternal(boolean notify, int scheduleDate, int scheduleRepeatPeriod, long payStars, boolean allowConfirm) {
-        if (isRichDraftSendLocked()) {
-            showRichDraftConversionSheet();
-            return true;
-        }
         final boolean allowConfirmFinal = allowConfirm && !animatorEphemeralMessageVisibility.getValue();
-        final boolean parseMarkdown = !convertedSimpleDraft && !(richDraftActive && richDraftSimpleText != null
-            && !MessagesController.getInstance(currentAccount).richEditorAllowed());
 
         final Runnable send = () -> {
             if (slowModeTimer == Integer.MAX_VALUE && !isInScheduleMode()) {
@@ -7322,16 +7308,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                 millisecondsRecorded = 0;
                 return;
             } else if (richDraftActive && richDraftMessage != null) {
-                if (isRichDraftSendLocked()) {
-                    showRichDraftConversionSheet();
-                    return;
-                }
-                if (richDraftSimpleText != null && !MessagesController.getInstance(currentAccount).richEditorAllowed()) {
-                    applyConvertedSimpleDraft(richDraftSimpleText);
-                } else {
-                    sendRichDraft(notify, scheduleDate, scheduleRepeatPeriod, payStars);
-                    return;
-                }
+                sendRichDraft(notify, scheduleDate, scheduleRepeatPeriod, payStars);
+                return;
             }
             CharSequence message = messageEditText == null ? "" : messageEditText.getTextToUse();
             if (parentFragment != null) {
@@ -7349,7 +7327,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             if (checkPremiumAnimatedEmoji(currentAccount, dialog_id, parentFragment, null, message)) {
                 return;
             }
-            if (processSendingText(message, notify, scheduleDate, scheduleRepeatPeriod, payStars, parseMarkdown)) {
+            if (processSendingText(message, notify, scheduleDate, scheduleRepeatPeriod, payStars)) {
                 if (delegate.hasForwardingMessages() || (scheduleDate != 0 && !isInScheduleMode()) || isInScheduleMode()) {
                     if (messageEditText != null) {
                         messageEditText.setText("");
@@ -7724,10 +7702,6 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public boolean processSendingText(CharSequence text, boolean notify, int scheduleDate, int scheduleRepeatPeriod, long payStars) {
-        return processSendingText(text, notify, scheduleDate, scheduleRepeatPeriod, payStars, true);
-    }
-
-    private boolean processSendingText(CharSequence text, boolean notify, int scheduleDate, int scheduleRepeatPeriod, long payStars, boolean parseMarkdown) {
         if (replyingQuote != null && parentFragment != null && replyingQuote.outdated) {
             parentFragment.showQuoteMessageUpdate();
             return false;
@@ -7787,7 +7761,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     part = AndroidUtilities.getTrimmedString(part);
                 }
                 CharSequence[] message = new CharSequence[]{ part };
-                ArrayList<TLRPC.MessageEntity> entities = MediaDataController.getInstance(currentAccount).getEntities(message, supportsNewEntities, parseMarkdown);
+                ArrayList<TLRPC.MessageEntity> entities = MediaDataController.getInstance(currentAccount).getEntities(message, supportsNewEntities);
                 MessageObject.SendAnimationData sendAnimationData = null;
 
                 if (!delegate.hasForwardingMessages()) {
@@ -10396,7 +10370,6 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public void setFieldText(CharSequence text, boolean ignoreChange, boolean fromDraft) {
-        convertedSimpleDraft = false;
         if (messageEditText == null) {
             return;
         }
@@ -10664,7 +10637,7 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     private CharSequence parseFieldMarkdown(CharSequence text) {
-        if (convertedSimpleDraft || TextUtils.isEmpty(text) || TextUtils.indexOf(text, '`') < 0) {
+        if (TextUtils.isEmpty(text) || TextUtils.indexOf(text, '`') < 0) {
             return text;
         }
         try {
@@ -10687,47 +10660,11 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public void setRichDraftPreview(TL_iv.RichMessage rich) {
-        richDraftRevision++;
+        if (richDraftPreview == null) return;
+        if (!MessagesController.getInstance(currentAccount).richEditorAvailable())
+            rich = null;
         richDraftMessage = rich;
-        richDraftSimpleText = null;
-        if (rich != null) {
-            final java.util.HashMap<Long, TL_iv.RichText> authors = new java.util.HashMap<>();
-            final List<BlockRow> rows = RichEditorListView.flattenForCopy(rich, authors);
-            if (!RichMessageConvert.isLossy(rows, authors)) {
-                richDraftSimpleText = RichMessageConvert.rowsToSimpleMessage(rows);
-            }
-        }
         updateRichDraftPreview();
-    }
-
-    private boolean isRichDraftSendLocked() {
-        return richDraftActive && RichEditor.isRichSendLocked(currentAccount, richDraftSimpleText == null, false);
-    }
-
-    private void showRichDraftConversionSheet() {
-        final TL_iv.RichMessage rich = richDraftMessage;
-        if (rich == null || editingMessageObject != null) return;
-        final RichMessageSimpleConversion.Result conversion = RichMessageSimpleConversion.convert(rich, SimpleConversionPreview.localizedLabels());
-        final long revision = richDraftRevision;
-        final int account = currentAccount;
-        final long dialog = dialog_id;
-        final ChatActivity sourceChat = parentFragment;
-        final int chatAccount = sourceChat == null ? account : sourceChat.getCurrentAccount();
-        final long chatDialog = sourceChat == null ? dialog : sourceChat.getDialogId();
-        final long thread = sourceChat == null ? 0 : sourceChat.getDraftThreadId();
-        SimpleConversionPreview.show(getContext(), conversion, () -> {
-            if (conversion.blocked || conversion.isEmpty() || richDraftMessage != rich || richDraftRevision != revision
-                || currentAccount != account || dialog_id != dialog || editingMessageObject != null
-                || parentFragment != sourceChat || destroyed || !isAttachedToWindow() || !isShown()
-                || getWindowVisibility() != View.VISIBLE
-                || sourceChat != null && (sourceChat.isFinished || sourceChat.getCurrentAccount() != chatAccount
-                    || sourceChat.getDialogId() != chatDialog || sourceChat.getDraftThreadId() != thread)) return;
-            if (messageSendPreview != null) {
-                messageSendPreview.dismiss(false);
-                messageSendPreview = null;
-            }
-            applyConvertedSimpleDraft(RichEditor.ordinaryConversionText(conversion));
-        }, resourcesProvider);
     }
 
     private void updateRichDraftPreview() {
@@ -10743,7 +10680,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             }
             emojiButton.setVisibility(View.GONE);
             deleteRichDraftButton.setVisibility(View.VISIBLE);
-            sendButton.setLocked(false);
+            sendButton.setLocked(!UserConfig.getInstance(currentAccount).isPremium());
         } else {
             richDraftPreview.setVisibility(View.GONE);
             if (messageEditText != null) {
@@ -10796,7 +10733,6 @@ public class ChatActivityEnterView extends FrameLayout implements
         QuoteSpan.normalizeQuotes(simple);
         clearRichDraft();
         setFieldText(simple);
-        convertedSimpleDraft = true;
         sendMessageInternal(notify, scheduleDate, scheduleRepeatPeriod, 0, true);
     }
 
@@ -10860,7 +10796,6 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public void clearRichDraft() {
-        convertedSimpleDraft = false;
         if (parentFragment != null) {
             MediaDataController.getInstance(currentAccount).saveDraft(
                 parentFragment.getDialogId(),
@@ -10904,7 +10839,6 @@ public class ChatActivityEnterView extends FrameLayout implements
         }
         setRichDraftPreview(null);
         setFieldText(text);
-        convertedSimpleDraft = true;
     }
 
     public void updateGiftButton(boolean animated) {
@@ -11457,7 +11391,7 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public boolean didPressedBotButton(final TLRPC.KeyboardButton button, final MessageObject replyMessageObject, final MessageObject messageObject, final Browser.Progress progress) {
-        if (button == null || button.disabled || messageObject == null) {
+        if (button == null || messageObject == null) {
             return false;
         }
         if (parentFragment != null && parentFragment.getChatMode() == ChatActivity.MODE_QUICK_REPLIES) return false;
@@ -13541,7 +13475,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             updateGiftButton(true);
         } else if (id == NotificationCenter.currentUserPremiumStatusChanged) {
             if (richDraftActive && sendButton != null) {
-                sendButton.setLocked(false);
+                sendButton.setLocked(!UserConfig.getInstance(currentAccount).isPremium());
             }
         }
     }

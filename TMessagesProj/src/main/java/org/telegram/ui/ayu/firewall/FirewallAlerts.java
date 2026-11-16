@@ -8,7 +8,6 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 
 import org.telegram.messenger.LocaleController;
-import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.R;
 import org.telegram.messenger.ayu.firewall.Firewall;
@@ -21,7 +20,6 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.HashSet;
-import java.io.File;
 
 /**
  * The user facing half of the Personal Firewall: the red "this is a virus" alert, the amber warning
@@ -85,70 +83,9 @@ public class FirewallAlerts {
         return guardDocumentTap(context, resourcesProvider, currentAccount, messageObject, proceed, true);
     }
 
-    /** Guards one document inside a rich message without changing the original message. */
-    public static boolean guardDocumentTap(Context context, Theme.ResourcesProvider resourcesProvider,
-                                           int currentAccount, MessageObject source, TLRPC.Document document,
-                                           Runnable proceed) {
-        try {
-            if (context == null || source == null || source.messageOwner == null || document == null
-                || !Firewall.isEnabled()) {
-                return false;
-            }
-            final String key = "richdoc:" + currentAccount + ":" + source.getDialogId() + ":"
-                + source.getId() + ":" + document.id;
-            if (isAllowedOnce(key)) {
-                return false;
-            }
-            final MessageObject documentMessage = createDocumentMessage(currentAccount, source, document);
-            return guardDocumentTap(context, resourcesProvider, currentAccount, documentMessage, proceed, true, key);
-        } catch (Exception e) {
-            org.telegram.messenger.FileLog.e(e);
-            return false;
-        }
-    }
-
-    private static MessageObject createDocumentMessage(int currentAccount, MessageObject source, TLRPC.Document document) {
-        final TLRPC.TL_message message = new TLRPC.TL_message();
-        message.id = source.getId();
-        message.realId = source.getRealId();
-        message.dialog_id = source.getDialogId();
-        message.peer_id = source.messageOwner.peer_id;
-        message.from_id = source.messageOwner.from_id;
-        message.out = source.messageOwner.out;
-        message.date = source.messageOwner.date;
-        message.message = "";
-        message.media = new TLRPC.TL_messageMediaDocument();
-        message.media.flags = 1;
-        message.media.document = document;
-        message.flags |= TLRPC.MESSAGE_FLAG_HAS_MEDIA;
-        if (message.from_id != null) {
-            message.flags |= TLRPC.MESSAGE_FLAG_HAS_FROM_ID;
-        }
-        // A rich message's attachPath may belong to another attachment. Only reuse it when the
-        // source explicitly represents this selected document; otherwise resolve its own cache file.
-        if (source.messageOwner.rich_message == null && source.getDocument() == document) {
-            message.attachPath = source.messageOwner.attachPath;
-        } else {
-            File file = FileLoader.getInstance(currentAccount).getPathToAttach(document, false);
-            if (!file.exists()) {
-                file = FileLoader.getInstance(currentAccount).getPathToAttach(document, true);
-            }
-            if (file.exists()) {
-                message.attachPath = file.getAbsolutePath();
-            }
-        }
-        return new MessageObject(currentAccount, message, false, true);
-    }
-
     private static boolean guardDocumentTap(Context context, Theme.ResourcesProvider resourcesProvider,
                                             int currentAccount, MessageObject messageObject, Runnable proceed,
                                             boolean mayInspectArchive) {
-        return guardDocumentTap(context, resourcesProvider, currentAccount, messageObject, proceed, mayInspectArchive, null);
-    }
-
-    private static boolean guardDocumentTap(Context context, Theme.ResourcesProvider resourcesProvider,
-                                            int currentAccount, MessageObject messageObject, Runnable proceed,
-                                            boolean mayInspectArchive, String allowanceKey) {
         try {
             if (context == null || messageObject == null || messageObject.messageOwner == null) {
                 return false;
@@ -160,7 +97,7 @@ public class FirewallAlerts {
             if (document == null) {
                 return false;
             }
-            final String key = allowanceKey == null ? documentKey(messageObject) : allowanceKey;
+            final String key = documentKey(messageObject);
             if (isAllowedOnce(key)) {
                 return false;
             }
@@ -174,7 +111,7 @@ public class FirewallAlerts {
                         && (messageObject.mediaExists || messageObject.attachPathExists)
                         && FirewallArchiveInspector.getCachedResult(currentAccount, messageObject.messageOwner, document) == FirewallArchiveInspector.RESULT_UNKNOWN) {
                     boolean started = FirewallArchiveInspector.inspectAsync(currentAccount, messageObject.messageOwner, document, () -> {
-                        if (!guardDocumentTap(context, resourcesProvider, currentAccount, messageObject, proceed, false, key)) {
+                        if (!guardDocumentTap(context, resourcesProvider, currentAccount, messageObject, proceed, false)) {
                             // the archive came back clean: remember it so re-entering the caller
                             // cannot start another inspection pass
                             allowOnce(key);

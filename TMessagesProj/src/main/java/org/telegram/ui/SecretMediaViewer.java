@@ -1505,22 +1505,6 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.didCreatedNewDeleteTask);
         currentDialogId = MessageObject.getPeerId(messageObject.messageOwner.peer_id);
         currentMessageObject = messageObject;
-        final int openedAccount = messageObject.currentAccount;
-        final long openedOwner = UserConfig.getInstance(openedAccount).getClientUserId();
-        centerImage.setDelegate(messageObject.getDocument() == null ? new ImageReceiver.ImageReceiverDelegate() {
-            private boolean requested;
-
-            @Override
-            public void didSetImage(ImageReceiver receiver, boolean set, boolean thumb, boolean memCache) {
-                if (!requested && set && !thumb && currentMessageObject == messageObject
-                        && openedOwner != 0 && UserConfig.getInstance(openedAccount).isClientActivated()
-                        && UserConfig.getInstance(openedAccount).getClientUserId() == openedOwner) {
-                    requested = true;
-                    org.telegram.messenger.ayu.AyuMessagesController.getInstance()
-                            .onSelfDestructMediaOpened(openedAccount, messageObject);
-                }
-            }
-        } : null);
         TLRPC.Document document = messageObject.getDocument();
         if (currentThumb != null) {
             currentThumb.release();
@@ -1743,7 +1727,6 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
     }
 
     public void destroyPhotoViewer() {
-        centerImage.setDelegate(null);
         if (onClose != null) {
             onClose.run();
             onClose = null;
@@ -2031,7 +2014,7 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
                     messageObject.messageOwner.destroyTime = connectionsManager.getCurrentTime();
                     messageObject.messageOwner.destroyTimeMillis = connectionsManager.getCurrentTimeMillis();
                     // force the read receipt through even when ghost mode blocks read packets
-                    org.telegram.messenger.ayu.AyuState.setAllowReadPacket(currentAccount, dialogId, true, true);
+                    org.telegram.messenger.ayu.AyuState.setAllowReadPacket(dialogId, true, true);
                     if (org.telegram.messenger.DialogObject.isEncryptedDialog(dialogId)) {
                         MessagesController.getInstance(currentAccount).markMessageAsRead(dialogId, messageObject.messageOwner.random_id, 1);
                     } else if (messageObject.getId() > 0) {
@@ -2233,7 +2216,6 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
     }
 
     private void onPhotoClosed(PhotoViewer.PlaceProviderObject object) {
-        centerImage.setDelegate(null);
         isVisible = false;
         org.telegram.ui.ayu.DynamicIslandView.onMediaViewerVisibilityChanged(); // Ox-gram
         currentProvider = null;

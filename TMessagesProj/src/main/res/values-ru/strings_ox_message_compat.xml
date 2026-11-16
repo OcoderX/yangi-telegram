@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="AccDescrIVButtons">Кнопки</string>
-    <string name="UnsupportedBlockTitle">Неподдерживаемый блок</string>
-    <string name="UnsupportedBlockMessage">Обновите OcoderX-gram, чтобы увидеть эту часть сообщения</string>
-    <string name="UnsupportedUpdate">Обновить</string>
-</resources>

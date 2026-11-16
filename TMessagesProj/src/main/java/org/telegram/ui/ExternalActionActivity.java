@@ -32,7 +32,6 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
-import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
@@ -412,13 +411,12 @@ public class ExternalActionActivity extends Activity implements INavigationLayou
     }
 
     public void switchToAccount(int account) {
-        if (account == UserConfig.selectedAccount || !UserConfig.isValidAccount(account)) {
+        if (account == UserConfig.selectedAccount) {
             return;
         }
         ConnectionsManager.getInstance(UserConfig.selectedAccount).setAppPaused(true, false);
         UserConfig.selectedAccount = account;
         UserConfig.getInstance(0).saveConfig(false);
-        NotificationsController.refreshAccountNotifications();
         if (!ApplicationLoader.mainInterfacePaused) {
             ConnectionsManager.getInstance(UserConfig.selectedAccount).setAppPaused(false, false);
         }

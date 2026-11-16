@@ -42,7 +42,6 @@ public class ScreenshotOptionsSheet extends BottomSheetWithRecyclerListView {
     private static final int VIEW_TYPE_SLIDER = 3;
     private static final int VIEW_TYPE_INFO = 4;
     private static final int VIEW_TYPE_BUTTON = 5;
-    private static final String[] SCALE_OPTIONS = scaleOptions();
 
     // row ids
     private static final int ID_NONE = 0;
@@ -80,7 +79,6 @@ public class ScreenshotOptionsSheet extends BottomSheetWithRecyclerListView {
     // not final on purpose: the super constructor already asks for the adapter, so this field can
     // still be null while the sheet is being built (see the null guards in Adapter below)
     private ArrayList<Row> rows;
-    private Adapter optionsAdapter;
 
     {
         rows = new ArrayList<>();
@@ -88,7 +86,6 @@ public class ScreenshotOptionsSheet extends BottomSheetWithRecyclerListView {
 
     private final int messagesCount;
     private final Runnable onStart;
-    private boolean started;
 
     public ScreenshotOptionsSheet(BaseFragment fragment, int messagesCount, Runnable onStart) {
         super(fragment, false, false);
@@ -208,10 +205,6 @@ public class ScreenshotOptionsSheet extends BottomSheetWithRecyclerListView {
                 ScreenshotConfig.setBackground(ScreenshotConfig.BACKGROUND_DARK);
                 break;
             case ID_START:
-                if (started) {
-                    return;
-                }
-                started = true;
                 dismiss();
                 if (onStart != null) {
                     onStart.run();
@@ -231,16 +224,7 @@ public class ScreenshotOptionsSheet extends BottomSheetWithRecyclerListView {
 
     @Override
     protected RecyclerListView.SelectionAdapter createAdapter(RecyclerListView listView) {
-        return optionsAdapter = new Adapter();
-    }
-
-    @Override
-    public void notifyDataSetChanged() {
-        // The sheet's padding wrapper registers RecyclerView's observers on this inner adapter.
-        // Notifying the wrapper itself would leave both checked states and format rows unchanged.
-        if (optionsAdapter != null) {
-            optionsAdapter.notifyDataSetChanged();
-        }
+        return new Adapter();
     }
 
     private class Adapter extends RecyclerListView.SelectionAdapter {
@@ -273,7 +257,7 @@ public class ScreenshotOptionsSheet extends BottomSheetWithRecyclerListView {
                 case VIEW_TYPE_SLIDER: {
                     SlideChooseView slideChooseView = new SlideChooseView(context, resourcesProvider);
                     slideChooseView.setBackgroundColor(background);
-                    slideChooseView.setOptions(ScreenshotConfig.scaleIndex, SCALE_OPTIONS);
+                    slideChooseView.setOptions(ScreenshotConfig.scaleIndex, scaleOptions());
                     slideChooseView.setCallback(new SlideChooseView.Callback() {
                         @Override
                         public void onOptionSelected(int index) {
@@ -336,8 +320,7 @@ public class ScreenshotOptionsSheet extends BottomSheetWithRecyclerListView {
                     break;
                 }
                 case VIEW_TYPE_SLIDER:
-                    // The slider keeps its selection and updates ScreenshotConfig in its callback.
-                    // Options are installed once at creation, avoiding text measurement on rebind.
+                    ((SlideChooseView) holder.itemView).setOptions(ScreenshotConfig.scaleIndex, scaleOptions());
                     break;
                 default:
                     ((HeaderCell) holder.itemView).setText(row.text);

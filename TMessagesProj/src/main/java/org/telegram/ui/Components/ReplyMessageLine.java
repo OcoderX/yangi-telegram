@@ -118,15 +118,6 @@ public class ReplyMessageLine {
         this.backgroundColor = backgroundColor;
     }
 
-    /** Applies a flat color without changing the defaults used by {@link #check}. */
-    public void setSimpleColor(int color, boolean dark) {
-        reversedOut = false;
-        hasColor2 = hasColor3 = false;
-        color1 = color2 = color3 = color;
-        backgroundColor = Theme.multAlpha(color, dark ? 0.12f : 0.10f);
-        emojiColor = color;
-    }
-
     private int wasMessageId;
     private int wasColorId;
     private long wasCollectionId;

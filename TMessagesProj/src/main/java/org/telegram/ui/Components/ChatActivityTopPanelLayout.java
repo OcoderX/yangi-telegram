@@ -61,51 +61,21 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
 
     private final Path clipPath = new Path();
     private final RectF clipRectF = new RectF();
-    private View transparentLeadingSpacer;
-    private float leadingSpacerVisibility;
-    private boolean hasChrome;
-
-    /** Reserves layout/touch space without treating it as a rounded panel or divider row. */
-    public void setTransparentLeadingSpacer(View spacer) {
-        transparentLeadingSpacer = spacer;
-        if (spacer != null) setPriority(spacer, Integer.MIN_VALUE);
-        checkBoundsAndClipping();
-        invalidate();
-    }
 
     private void checkBoundsAndClipping() {
         final float bgHeight = getMetadata().getTotalHeight();
-        float spacerHeight = 0;
-        float bgAlpha = 0;
-        leadingSpacerVisibility = 0;
-        for (int i = 0, count = getEntriesCount(); i < count; i++) {
-            ListAnimator.Entry<AnimatedLinearLayout.Holder> entry = getEntry(i);
-            if (entry.item.view == transparentLeadingSpacer) {
-                leadingSpacerVisibility = entry.getVisibility();
-                spacerHeight = entry.getRectF().height() * leadingSpacerVisibility;
-            } else {
-                bgAlpha += entry.getVisibility();
-            }
-        }
-        bgAlpha = Math.min(1f, bgAlpha);
-        final float chromeHeight = Math.max(0, bgHeight - spacerHeight);
-        hasChrome = chromeHeight > 0 && bgAlpha > 0;
+        final float bgAlpha = getMetadata().getTotalVisibility();
 
-        clipRectF.set(getPaddingLeft(), getPaddingTop() + spacerHeight, getMeasuredWidth() - getPaddingRight(), getPaddingTop() + bgHeight);
+        clipRectF.set(getPaddingLeft(), getPaddingTop(), getMeasuredWidth() - getPaddingRight(), getPaddingTop() + bgHeight);
 
         final float r = Math.min(dp(18), Math.min(clipRectF.width(), clipRectF.height()) / 2f);
         clipPath.rewind();
         clipPath.addRoundRect(clipRectF, r, r, Path.Direction.CW);
 
         if (backgroundDrawable != null) {
-            backgroundDrawable.setAlpha(hasChrome ? (int) (bgAlpha * 255) : 0);
-            if (hasChrome) {
-                int backgroundTop = spacerHeight > 0 ? (int) (getPaddingTop() + spacerHeight) : 0;
-                backgroundDrawable.setBounds(getPaddingLeft() - dp(7), backgroundTop, getMeasuredWidth() - getPaddingRight() + dp(7), getPaddingTop() + getPaddingBottom() + (int) bgHeight);
-            } else {
-                backgroundDrawable.setBounds(0, 0, 0, 0);
-            }
-            backgroundDrawable.setRadius(Math.min(dp(18), chromeHeight / 2));
+            backgroundDrawable.setAlpha((int) (bgAlpha * 255));
+            backgroundDrawable.setBounds(getPaddingLeft() - dp(7), 0, getMeasuredWidth() - getPaddingRight() + dp(7), getPaddingTop() + getPaddingBottom() + (int) bgHeight);
+            backgroundDrawable.setRadius(Math.min(dp(18), bgHeight / 2));
         }
     }
 
@@ -134,7 +104,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
-        if (!hasChrome) return;
+        if (getMetadata().getTotalVisibility() == 0) return;
 
         if (backgroundDrawable != null) {
             backgroundDrawable.draw(canvas);
@@ -178,9 +148,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
             final float top = getPaddingTop() + entry.getRectF().top;
             final View view = entry.item.view;
 
-            if (view == transparentLeadingSpacer) continue;
-
-            final float position = Math.max(0, entry.getPosition() - leadingSpacerVisibility);
+            final float position = entry.getPosition();
             final float alpha = entry.getVisibility() * Math.min(1, position);
 
             if (alpha <= 0) {

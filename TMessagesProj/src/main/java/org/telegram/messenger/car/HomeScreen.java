@@ -86,7 +86,6 @@ public class HomeScreen extends Screen
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.pushMessagesUpdated);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.notificationsCountUpdated);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.activeAccountChanged);
-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.ayuConfigChanged);
     }
 
     @Override
@@ -94,7 +93,6 @@ public class HomeScreen extends Screen
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.pushMessagesUpdated);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.notificationsCountUpdated);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.activeAccountChanged);
-        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.ayuConfigChanged);
     }
 
     @Override
@@ -102,8 +100,6 @@ public class HomeScreen extends Screen
         if (id == NotificationCenter.activeAccountChanged) {
             currentAccount = UserConfig.selectedAccount;
             musicLoadKicked = false;
-            invalidate();
-        } else if (id == NotificationCenter.ayuConfigChanged) {
             invalidate();
         } else if ((id == NotificationCenter.pushMessagesUpdated || id == NotificationCenter.notificationsCountUpdated)
                 && TAB_NOTIFICATIONS.equals(activeTabId)) {
@@ -178,7 +174,6 @@ public class HomeScreen extends Screen
             if (mo == null || mo.messageOwner == null) continue;
             if (mo.messageOwner.date < sessionStartSec) continue;
             long dialogId = mo.getDialogId();
-            if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) continue;
             if (DialogObject.isEncryptedDialog(dialogId)) continue;
             if (UserObject.isReplyUser(dialogId)) continue;
             ArrayList<MessageObject> bucket = grouped.get(dialogId);
@@ -192,7 +187,6 @@ public class HomeScreen extends Screen
     }
 
     private ConversationItem buildConversationItem(long dialogId, ArrayList<MessageObject> messages) {
-        if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) return null;
         if (messages.isEmpty()) return null;
         Collections.reverse(messages);
         AccountInstance ai = AccountInstance.getInstance(currentAccount);
@@ -254,7 +248,6 @@ public class HomeScreen extends Screen
     }
 
     private CarMessage buildCarMessage(MessageObject mo, long dialogId, boolean isGroup, TLRPC.User user, TLRPC.Chat chat) {
-        if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) return null;
         String[] senderName = new String[1];
         boolean[] preview = new boolean[1];
         String body;
@@ -417,7 +410,6 @@ public class HomeScreen extends Screen
         @Override
         public void onMarkAsRead() {
             AndroidUtilities.runOnUIThread(() -> {
-                if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) return;
                 MessagesController.getInstance(currentAccount).markDialogAsRead(
                         dialogId, maxId, maxId, 0, false, 0, 0, true, 0);
                 MessagesController.getInstance(currentAccount).markReactionsAsRead(dialogId, 0);
@@ -427,7 +419,6 @@ public class HomeScreen extends Screen
         @Override
         public void onTextReply(@NonNull String text) {
             AndroidUtilities.runOnUIThread(() -> {
-                if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) return;
                 AccountInstance ai = AccountInstance.getInstance(currentAccount);
                 ai.getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of(
                         text, dialogId, null, null, null, true, null, null, null, true, 0, 0, null, false));

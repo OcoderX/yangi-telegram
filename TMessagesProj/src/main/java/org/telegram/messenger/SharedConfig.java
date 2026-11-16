@@ -304,7 +304,7 @@ public class SharedConfig {
     public static boolean shuffleMusic;
     public static boolean playOrderReversed;
     public static boolean hasCameraCache;
-    public static volatile boolean showNotificationsForAllAccounts = false;
+    public static boolean showNotificationsForAllAccounts = true;
     public static boolean debugVideoQualities = false;
     public static int repeatMode;
     public static boolean allowBigEmoji;
@@ -712,13 +712,7 @@ public class SharedConfig {
             loadDebugConfig(preferences);
 
             preferences = ApplicationLoader.applicationContext.getSharedPreferences("Notifications", Activity.MODE_PRIVATE);
-            if (!preferences.getBoolean("selectedAccountNotificationsDefaultApplied", false)) {
-                preferences.edit()
-                    .putBoolean("AllAccounts", false)
-                    .putBoolean("selectedAccountNotificationsDefaultApplied", true)
-                    .apply();
-            }
-            showNotificationsForAllAccounts = preferences.getBoolean("AllAccounts", false);
+            showNotificationsForAllAccounts = preferences.getBoolean("AllAccounts", true);
 
             configLoaded = true;
         }

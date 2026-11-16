@@ -74,18 +74,9 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
     private boolean loading;
     private boolean endReached;
     private boolean scanning;
-    private int sourceOffset;
 
     private MentionRadar radar() {
         return MentionRadar.getInstance(currentAccount);
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        hits.removeIf(hit -> org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(hit.dialogId));
-        if (adapter != null) adapter.notifyDataSetChanged();
-        if (fragmentView != null) loadPage(true);
     }
 
     @Override
@@ -278,7 +269,6 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
         loading = true;
         if (reset) {
             endReached = false;
-            sourceOffset = 0;
             hits.clear();
             if (adapter != null) {
                 adapter.notifyDataSetChanged();
@@ -288,7 +278,7 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
             }
         }
         final int kind = currentKind;
-        final int offset = sourceOffset;
+        final int offset = reset ? 0 : hits.size();
         radar().loadHits(kind, PAGE_SIZE, offset, result -> {
             loading = false;
             if (kind != currentKind) {
@@ -300,11 +290,7 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
                 if (offset == 0) {
                     hits.clear();
                 }
-                sourceOffset += result.size();
-                org.telegram.messenger.ayu.hidden.HiddenChatsController hidden = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount);
-                for (RadarHit hit : result) {
-                    if (hit != null && !hidden.isHidden(hit.dialogId)) hits.add(hit);
-                }
+                hits.addAll(result);
                 endReached = result.size() < PAGE_SIZE;
             }
             if (emptyView != null) {
@@ -314,9 +300,6 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
                 adapter.notifyDataSetChanged();
             }
             updateSubtitle();
-            if (!endReached && hits.isEmpty()) AndroidUtilities.runOnUIThread(() -> {
-                if (!isFinished) loadPage(false);
-            });
         });
     }
 
@@ -327,7 +310,7 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
         if (scanning) {
             return;
         }
-        int unread = org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).hasHiddenChats() ? 0 : radar().getUnreadCount();
+        int unread = radar().getUnreadCount();
         if (unread > 0) {
             actionBar.setSubtitle(LocaleController.formatString(R.string.RadarUnread, unread));
         } else {
@@ -397,7 +380,6 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
 
     private void deleteHit(RadarHit hit, int position) {
         radar().deleteHit(hit.rowId);
-        sourceOffset = Math.max(0, sourceOffset - 1);
         if (position >= 0 && position < hits.size() && hits.get(position) == hit) {
             hits.remove(position);
             if (adapter != null) {
@@ -424,8 +406,6 @@ public class MentionRadarActivity extends BaseFragment implements MentionRadar.R
         builder.setPositiveButton(getString(R.string.Delete), (dialog, which) -> {
             radar().clearAll();
             hits.clear();
-            sourceOffset = 0;
-            endReached = true;
             if (adapter != null) {
                 adapter.notifyDataSetChanged();
             }

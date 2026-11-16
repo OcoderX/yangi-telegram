@@ -1,7 +1,5 @@
 package org.telegram.ui.Components;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import static org.telegram.messenger.LocaleController.getString;
 import static org.telegram.ui.PremiumPreviewFragment.applyNewSpan;
 
@@ -1070,7 +1068,6 @@ public class SearchViewPager extends ViewPagerFixed implements FilteredSearchVie
     }
 
     public void toggleItemSelection(MessageObject message, View view, int a) {
-        if (message == null || HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId())) return;
         FilteredSearchView.MessageHashId hashId = new FilteredSearchView.MessageHashId(message.getId(), message.getDialogId());
         if (selectedFiles.containsKey(hashId)) {
             selectedFiles.remove(hashId);
@@ -1437,16 +1434,6 @@ public class SearchViewPager extends ViewPagerFixed implements FilteredSearchVie
             channelsSearchAdapter.updateMyChannels();
             channelsSearchAdapter.update(true);
         } else if (id == NotificationCenter.dialogDeleted || id == NotificationCenter.dialogsNeedReload) {
-            boolean hiddenSelection = selectedFiles.values().removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
-            if (hiddenSelection) showActionMode(false);
-            currentSearchFilters.removeIf(filter -> filter.chat instanceof TLRPC.User && HiddenChatsController.getInstance(currentAccount).isHidden(((TLRPC.User) filter.chat).id)
-                    || filter.chat instanceof TLRPC.Chat && HiddenChatsController.getInstance(currentAccount).isHidden(-((TLRPC.Chat) filter.chat).id));
-            if (noMediaFiltersSearchView != null) noMediaFiltersSearchView.removeHiddenSearchResults();
-            for (int i = 0; i < viewsByType.size(); i++) {
-                View page = viewsByType.valueAt(i);
-                if (page instanceof FilteredSearchView) ((FilteredSearchView) page).removeHiddenSearchResults();
-                if (page instanceof SearchDownloadsContainer) ((SearchDownloadsContainer) page).update(false);
-            }
             channelsSearchAdapter.updateMyChannels();
             channelsSearchAdapter.update(true);
         } else if (id == NotificationCenter.reloadWebappsHints) {

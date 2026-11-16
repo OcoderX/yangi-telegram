@@ -151,7 +151,7 @@ public class TelegramMediaSession {
     }
 
     public ArrayList<Long> getMusicDialogsSortedByVisibleOrder() {
-        ArrayList<Long> sorted = getMusicDialogs();
+        ArrayList<Long> sorted = new ArrayList<>(dialogs);
         ArrayList<TLRPC.Dialog> all = MessagesController.getInstance(currentAccount).getAllDialogs();
         final java.util.HashMap<Long, Integer> rank = new java.util.HashMap<>();
         for (int i = 0; i < all.size(); i++) {
@@ -213,9 +213,7 @@ public class TelegramMediaSession {
     }
 
     public ArrayList<Long> getMusicDialogs() {
-        ArrayList<Long> visible = new ArrayList<>(dialogs);
-        visible.removeIf(id -> org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(id));
-        return visible;
+        return dialogs;
     }
 
     public TLRPC.User getMusicUser(long userId) {
@@ -227,7 +225,6 @@ public class TelegramMediaSession {
     }
 
     public ArrayList<MessageObject> getMusicMessages(long dialogId) {
-        if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) return null;
         return musicObjects.get(dialogId);
     }
 
@@ -342,7 +339,6 @@ public class TelegramMediaSession {
         if (MEDIA_ID_ROOT.equals(parentMediaId)) {
             for (int a = 0; a < dialogs.size(); a++) {
                 long dialogId = dialogs.get(a);
-                if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) continue;
                 android.media.MediaDescription.Builder builder = new android.media.MediaDescription.Builder()
                         .setMediaId(MEDIA_ID_CHAT_PREFIX + dialogId);
                 TLRPC.FileLocation avatar = null;
@@ -386,7 +382,7 @@ public class TelegramMediaSession {
             } catch (Exception e) {
                 FileLog.e(e);
             }
-            ArrayList<MessageObject> arrayList = getMusicMessages(did);
+            ArrayList<MessageObject> arrayList = musicObjects.get(did);
             if (arrayList != null) {
                 for (int a = 0; a < arrayList.size(); a++) {
                     MessageObject messageObject = arrayList.get(a);
@@ -402,7 +398,7 @@ public class TelegramMediaSession {
     }
 
     private void applyQueueFor(long did) {
-        if (did == 0 || org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(did)) return;
+        if (did == 0) return;
         ArrayList<MessageObject> arrayList = musicObjects.get(did);
         ArrayList<MediaSessionCompat.QueueItem> queueList = musicQueues.get(did);
         if (arrayList == null || arrayList.isEmpty() || queueList == null) return;
@@ -619,7 +615,6 @@ public class TelegramMediaSession {
             if (args.length != 2) return;
             try {
                 long did = Long.parseLong(args[0]);
-                if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(did)) return;
                 int id = Integer.parseInt(args[1]);
                 ArrayList<MessageObject> arrayList = musicObjects.get(did);
                 ArrayList<MediaSessionCompat.QueueItem> queueList = musicQueues.get(did);
@@ -649,7 +644,6 @@ public class TelegramMediaSession {
             String q = query.toLowerCase();
             for (int a = 0; a < dialogs.size(); a++) {
                 long did = dialogs.get(a);
-                if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(did)) continue;
                 if (DialogObject.isUserDialog(did)) {
                     TLRPC.User user = users.get(did);
                     if (user == null) continue;

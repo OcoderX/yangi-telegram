@@ -11,7 +11,6 @@ import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_bots;
-import org.telegram.tgnet.tl.TL_ephemeral;
 
 import java.util.Collections;
 import java.util.List;
@@ -27,36 +26,18 @@ public class EphemeralMessagesHelper extends BaseController {
             message.flags |= TLObject.FLAG_8;
         }
         message.peer_id = ephemeralMessage.peer_id;
-        if (message.peer_id == null && ephemeralMessage.welcome
-            && (ephemeralMessage.from_id instanceof TLRPC.TL_peerChannel
-                || ephemeralMessage.from_id instanceof TLRPC.TL_peerChat)) {
-            message.peer_id = ephemeralMessage.from_id;
-        }
-        message.ephemeralAnchorMsgId = ephemeralMessage.anchor_msg_id;
-        message.ephemeralReceiverBotId = ephemeralMessage.welcome || ephemeralMessage.anchor_msg_id != 0
-            ? -1 : ephemeralMessage.receiver_id;
+
+        message.ephemeralReceiverBotId = ephemeralMessage.receiver_id;
+        // ephemeralMessage.top_msg_id;
 
         message.date = ephemeralMessage.date;
         message.message = ephemeralMessage.message;
-
-        message.invert_media = ephemeralMessage.invert_media;
-        message.noforwards = ephemeralMessage.noforwards;
-        if (message.invert_media) message.flags |= TLObject.FLAG_27;
-        if (message.noforwards) message.flags |= TLObject.FLAG_26;
-        if (ephemeralMessage.rich_message != null) {
-            message.rich_message = ephemeralMessage.rich_message;
-            message.flags2 |= TLObject.FLAG_13;
-        }
-        if (ephemeralMessage.via_bot_id != 0) {
-            message.via_bot_id = ephemeralMessage.via_bot_id;
-            message.flags |= TLObject.FLAG_11;
-        }
 
         if (ephemeralMessage.entities != null && !ephemeralMessage.entities.isEmpty()) {
             message.entities = ephemeralMessage.entities;
             message.flags |= TLObject.FLAG_7;
         }
-        if (ephemeralMessage.media != null && ephemeralMessage.rich_message == null) {
+        if (ephemeralMessage.media != null) {
             message.media = ephemeralMessage.media;
             message.flags |= TLObject.FLAG_9;
         }
@@ -72,19 +53,6 @@ public class EphemeralMessagesHelper extends BaseController {
                 }
             } else {
                 message.reply_to = ephemeralMessage.reply_to;
-            }
-            message.flags |= TLObject.FLAG_3;
-        }
-        if (ephemeralMessage.top_msg_id != 0) {
-            if (message.reply_to == null) {
-                message.reply_to = new TLRPC.TL_messageReplyHeader();
-            } else if (!ephemeralMessage.reply_to.reply_to_ephemeral) {
-                message.reply_to = TLObject.deepCopy(message.reply_to, TLRPC.MessageReplyHeader::TLdeserialize);
-            }
-            if (message.reply_to.reply_to_top_id == 0) {
-                message.reply_to.reply_to_top_id = ephemeralMessage.top_msg_id;
-                message.reply_to.forum_topic = true;
-                message.reply_to.flags |= TLObject.FLAG_1;
             }
             message.flags |= TLObject.FLAG_3;
         }
@@ -105,7 +73,7 @@ public class EphemeralMessagesHelper extends BaseController {
 
     public boolean beforeSendingFinalRequest(TLObject req, List<MessageObject> messages, Utilities.Callback<TLObject> send) {
         if (messages == null || messages.isEmpty()) return true;
-        if (req instanceof TLRPC.TL_ephemeral_sendMessage || req instanceof TL_ephemeral.TL_sendMessage) {
+        if (req instanceof TLRPC.TL_ephemeral_sendMessage) {
             return true;
         }
 
@@ -114,9 +82,7 @@ public class EphemeralMessagesHelper extends BaseController {
             if (request.ephemeralReceiverBotId != 0) {
                 TLRPC.TL_ephemeral_sendMessage newRequest = new TLRPC.TL_ephemeral_sendMessage();
                 newRequest.peer = request.peer;
-                newRequest.welcome = request.ephemeralReceiverBotId == -1;
-                newRequest.receiver_id = newRequest.welcome ? new TLRPC.TL_inputUserEmpty()
-                    : getMessagesController().getInputUser(request.ephemeralReceiverBotId);
+                newRequest.receiver_id = getMessagesController().getInputUser(request.ephemeralReceiverBotId);
                 newRequest.query_id = 0; // ?
                 newRequest.message = request.message;
                 newRequest.entities = request.entities;
@@ -125,7 +91,6 @@ public class EphemeralMessagesHelper extends BaseController {
                 newRequest.rich_message = request.rich_message;
                 newRequest.random_id = request.random_id;
                 newRequest.reply_to = applyReplyTo(request.reply_to);
-                newRequest.invert_media = request.invert_media;
 
                 send.run(newRequest);
                 return false;
@@ -151,9 +116,7 @@ public class EphemeralMessagesHelper extends BaseController {
             if (request.ephemeralReceiverBotId != 0) {
                 TLRPC.TL_ephemeral_sendMessage newRequest = new TLRPC.TL_ephemeral_sendMessage();
                 newRequest.peer = request.peer;
-                newRequest.welcome = request.ephemeralReceiverBotId == -1;
-                newRequest.receiver_id = newRequest.welcome ? new TLRPC.TL_inputUserEmpty()
-                    : getMessagesController().getInputUser(request.ephemeralReceiverBotId);
+                newRequest.receiver_id = getMessagesController().getInputUser(request.ephemeralReceiverBotId);
                 newRequest.query_id = 0; // ?
                 newRequest.message = request.message;
                 newRequest.entities = request.entities;
@@ -162,7 +125,6 @@ public class EphemeralMessagesHelper extends BaseController {
                 newRequest.rich_message = null;
                 newRequest.random_id = request.random_id;
                 newRequest.reply_to = applyReplyTo(request.reply_to);
-                newRequest.invert_media = request.invert_media;
 
                 send.run(newRequest);
                 return false;

@@ -18,13 +18,11 @@ import androidx.core.content.FileProvider;
 
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 public class FeedWidgetService extends RemoteViewsService {
     @Override
@@ -58,18 +56,11 @@ class FeedRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory, N
     }
 
     public void onDestroy() {
-        if (accountInstance != null) {
-            AndroidUtilities.runOnUIThread(() -> accountInstance.getNotificationCenter().removeObserver(this, NotificationCenter.messagesDidLoad));
-        }
-        countDownLatch.countDown();
+
     }
 
     public int getCount() {
-        return isHidden() ? 0 : messages.size();
-    }
-
-    private boolean isHidden() {
-        return accountInstance == null || HiddenChatsController.getInstance(accountInstance.getCurrentAccount()).isHidden(dialogId);
+        return messages.size();
     }
 
     protected void grantUriAccessToWidget(Context context, Uri uri) {
@@ -83,12 +74,6 @@ class FeedRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory, N
     }
 
     public RemoteViews getViewAt(int position) {
-        if (isHidden() || position < 0 || position >= messages.size()) {
-            RemoteViews empty = new RemoteViews(mContext.getPackageName(), R.layout.feed_widget_item);
-            empty.setTextViewText(R.id.feed_widget_item_text, "");
-            empty.setViewVisibility(R.id.feed_widget_item_image, View.GONE);
-            return empty;
-        }
         MessageObject messageObject = messages.get(position);
         String name;
 
@@ -149,17 +134,11 @@ class FeedRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory, N
     }
 
     public void onDataSetChanged() {
-        if (accountInstance == null || !accountInstance.getUserConfig().isClientActivated() || isHidden()) {
+        if (accountInstance == null || !accountInstance.getUserConfig().isClientActivated()) {
             messages.clear();
             return;
         }
-        countDownLatch = new CountDownLatch(1);
         AndroidUtilities.runOnUIThread(() -> {
-            if (isHidden()) {
-                messages.clear();
-                countDownLatch.countDown();
-                return;
-            }
             accountInstance.getNotificationCenter().addObserver(FeedRemoteViewsFactory.this, NotificationCenter.messagesDidLoad);
             if (classGuid == 0) {
                 classGuid = ConnectionsManager.generateClassGuid();
@@ -167,11 +146,9 @@ class FeedRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory, N
             accountInstance.getMessagesController().loadMessages(dialogId, 0, false, 20, 0, 0, true, 0, classGuid, 0, 0, 0, 0, 0, 1, false);
         });
         try {
-            countDownLatch.await(10, TimeUnit.SECONDS);
+            countDownLatch.await();
         } catch (Exception e) {
             FileLog.e(e);
-        } finally {
-            AndroidUtilities.runOnUIThread(() -> accountInstance.getNotificationCenter().removeObserver(this, NotificationCenter.messagesDidLoad));
         }
     }
 
@@ -183,7 +160,7 @@ class FeedRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory, N
             if (guid == classGuid) {
                 messages.clear();
                 ArrayList<MessageObject> messArr = (ArrayList<MessageObject>) args[2];
-                if (!isHidden()) messages.addAll(messArr);
+                messages.addAll(messArr);
                 countDownLatch.countDown();
             }
         }

@@ -16,7 +16,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
 
 public class UpdateLayoutWrapper extends ViewGroup {
-    public static final int HEIGHT = 48;
+    public static final int HEIGHT = 44;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private View updateLayout;
@@ -46,9 +46,8 @@ public class UpdateLayoutWrapper extends ViewGroup {
 
         setMeasuredDimension(width, height);
 
-        // The system navigation/cutout areas are painted by this wrapper, never clickable.
-        final int measureSpecW = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft() - getPaddingRight()), MeasureSpec.EXACTLY);
-        final int measureSpecH = MeasureSpec.makeMeasureSpec(layoutVisible ? dp(HEIGHT) : 0, MeasureSpec.EXACTLY);
+        final int measureSpecW = MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY);
+        final int measureSpecH = MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY);
         for (int a = 0, N = getChildCount(); a < N; a++) {
             final View child = getChildAt(a);
             child.measure(measureSpecW, measureSpecH);
@@ -64,7 +63,16 @@ public class UpdateLayoutWrapper extends ViewGroup {
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         for (int a = 0, N = getChildCount(); a < N; a++) {
             final View child = getChildAt(a);
-            child.layout(getPaddingLeft(), 0, getPaddingLeft() + child.getMeasuredWidth(), child.getMeasuredHeight());
+            child.layout(0, 0, child.getMeasuredWidth(), child.getMeasuredHeight());
+        }
+    }
+
+    @Override
+    public void setPadding(int left, int top, int right, int bottom) {
+        super.setPadding(left, top, right, bottom);
+        for (int a = 0, N = getChildCount(); a < N; a++) {
+            final View child = getChildAt(a);
+            child.setPadding(left, top, right, bottom);
         }
     }
 

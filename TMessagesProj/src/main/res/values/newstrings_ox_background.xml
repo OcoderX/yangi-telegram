@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="OxBackgroundReceiveInfo">Keeps signed-in accounts connected in the background with an ongoing notification. Only messages this device receives can be saved. Android may interrupt the connection; Android 15 and later limit background sync time. Open the app again to resume. Uses additional battery and data.</string>
-</resources>

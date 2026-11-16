@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- OcoderX-gram: OcoderX-sync xizmati ekrani -->
+    <!-- Ox-gram: OcoderX-sync xizmati ekrani -->
     <string name="OxSyncHeroTitle">OcoderX-sync nima?</string>
     <string name="OxSyncHeroText">Bu OcoderX serverida 24/7 ishlaydigan pullik xizmat: o\'chib ketadigan rasm va videolarni, bir marta ko\'riladigan (sekundli) medialarni, o\'chirilgan va tahrirlangan xabarlarni saqlab qoladi. Telefoningiz internetsiz yoki ilova yopiq bo\'lsa ham hech narsa yo\'qolmaydi.</string>
     <string name="OxSyncWhatHeader">Nimalarni saqlab qoladi</string>

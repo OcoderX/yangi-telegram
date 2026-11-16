@@ -28,7 +28,6 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.Layout;
 import android.text.SpannableStringBuilder;
@@ -83,11 +82,7 @@ public class FilterTabsView extends FrameLayout {
     }
 
     public int getStableId(int selectedType) {
-        return positionToStableId.get(idToPosition.get(selectedType, -1), -1);
-    }
-
-    public int getPositionForId(int id) {
-        return idToPosition.get(id, -1);
+        return positionToStableId.get(selectedType, -1);
     }
 
     public boolean selectTabWithStableId(int stableId) {
@@ -124,11 +119,9 @@ public class FilterTabsView extends FrameLayout {
     public class Tab {
         public int id;
         public CharSequence title;
-        public CharSequence accessibilityTitle;
         public int titleWidth;
         public int counter;
         public boolean isDefault;
-        public boolean isLocalCategory;
         public boolean isLocked;
         public boolean noanimate;
 
@@ -160,11 +153,11 @@ public class FilterTabsView extends FrameLayout {
                 int countWidth = Math.max(dp(TAB_COUNTER_HEIGHT - 10), counterWidth) + dp(10);
                 counterResultWidth = countWidth + dp(-2);
             } else {
-                counterResultWidth = !isDefault && !isLocalCategory && isEditing ? dp(TAB_COUNTER_HEIGHT - 5) : 0;
+                counterResultWidth = !isDefault && isEditing ? dp(TAB_COUNTER_HEIGHT - 5) : 0;
             }
             width += counterResultWidth;
 
-            return Math.max(dp(isLocalCategory ? 48 - TAB_PADDING_WIDTH : 16), width);
+            return Math.max(dp(16), width);
         }
 
         public boolean setTitle(String newTitle, ArrayList<TLRPC.MessageEntity> newEntities, boolean noanimate) {
@@ -185,8 +178,6 @@ public class FilterTabsView extends FrameLayout {
     private static final float TAB_COUNTER_HEIGHT = 17.333f;
 
     public class TabView extends View {
-        private ColorFilter emojiColorFilter;
-        private int emojiTintColor = Integer.MIN_VALUE;
 
         public ValueAnimator changeAnimator;
         private Tab currentTab;
@@ -249,17 +240,9 @@ public class FilterTabsView extends FrameLayout {
         }
 
         public void setTab(Tab tab, int position) {
-            if (tab.isLocalCategory && currentText != tab.title) {
-                animateTextChange = false;
-                AnimatedEmojiSpan.release(this, titleAnimateInLayoutEmojis);
-                AnimatedEmojiSpan.release(this, titleAnimateOutLayoutEmojis);
-                AnimatedEmojiSpan.release(this, titleAnimateStableLayoutEmojis);
-                titleAnimateInLayout = titleAnimateOutLayout = titleAnimateStableLayout = null;
-                titleAnimateInLayoutEmojis = titleAnimateOutLayoutEmojis = titleAnimateStableLayoutEmojis = null;
-            }
             currentTab = tab;
             currentPosition = position;
-            setContentDescription(tab.accessibilityTitle != null ? tab.accessibilityTitle : tab.title);
+            setContentDescription(tab.title);
             requestLayout();
 
             if (currentNoanimate != (currentTab != null && currentTab.noanimate)) {
@@ -313,7 +296,7 @@ public class FilterTabsView extends FrameLayout {
         @SuppressLint("DrawAllocation")
         @Override
         protected void onDraw(@NonNull Canvas canvas) {
-            boolean reorderEnabled = !currentTab.isLocalCategory;
+            boolean reorderEnabled = true;
             boolean showRemove = !currentTab.isDefault && reorderEnabled;
             if (reorderEnabled && editingAnimationProgress != 0) {
                 canvas.save();
@@ -373,10 +356,7 @@ public class FilterTabsView extends FrameLayout {
                     textPaint.setColor(ColorUtils.blendARGB(color1, color2, animationValue));
                 }
             }
-            if (emojiColorFilter == null || emojiTintColor != textPaint.getColor()) {
-                emojiTintColor = textPaint.getColor();
-                emojiColorFilter = new PorterDuffColorFilter(emojiTintColor, PorterDuff.Mode.SRC_IN);
-            }
+            emojiColorFilter = new PorterDuffColorFilter(textPaint.getColor(), PorterDuff.Mode.SRC_IN);
 
             float counterWidth;
             int countWidth;
@@ -412,7 +392,7 @@ public class FilterTabsView extends FrameLayout {
                 textX = textX * changeProgress + animateFromTextX * (1f - changeProgress);
             }
 
-            if (currentTab.isLocalCategory ? currentTab.title != currentText : !TextUtils.equals(currentTab.title, currentText)) {
+            if (!TextUtils.equals(currentTab.title, currentText)) {
                 currentText = currentTab.title;
                 textLayout = new StaticLayout(currentText, textPaint, dp(400), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0, false);
                 textLayoutEmojis = AnimatedEmojiSpan.update(currentTab.noanimate ? AnimatedEmojiDrawable.CACHE_TYPE_NOANIMATE_FOLDER : AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, textLayoutEmojis, textLayout);
@@ -421,13 +401,12 @@ public class FilterTabsView extends FrameLayout {
             }
 
 
-            float textY = (getMeasuredHeight() - textHeight) / 2f + (currentTab.isLocalCategory ? 0 : 1);
             float titleOffsetX = 0;
             if (animateTextChange) {
                 titleOffsetX = titleXOffset * (animateTextChangeOut ? changeProgress : 1f - changeProgress);
                 if (titleAnimateStableLayout != null) {
                     canvas.save();
-                    canvas.translate(textX + textOffsetX + titleOffsetX, textY);
+                    canvas.translate(textX + textOffsetX + titleOffsetX, (getMeasuredHeight() - textHeight) / 2f + 1);
                     titleAnimateStableLayout.draw(canvas);
                     AnimatedEmojiSpan.drawAnimatedEmojis(canvas, titleAnimateStableLayout, titleAnimateStableLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, 1.0f, emojiColorFilter);
                     canvas.restore();
@@ -436,7 +415,7 @@ public class FilterTabsView extends FrameLayout {
                     canvas.save();
                     int alpha = textPaint.getAlpha();
                     textPaint.setAlpha((int) (alpha * (animateTextChangeOut ? 1f - changeProgress : changeProgress)));
-                    canvas.translate(textX + textOffsetX + titleOffsetX, textY);
+                    canvas.translate(textX + textOffsetX + titleOffsetX, (getMeasuredHeight() - textHeight) / 2f + 1);
                     titleAnimateInLayout.draw(canvas);
                     AnimatedEmojiSpan.drawAnimatedEmojis(canvas, titleAnimateInLayout, titleAnimateInLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, (animateTextChangeOut ? 1f - changeProgress : changeProgress), emojiColorFilter);
                     canvas.restore();
@@ -446,7 +425,7 @@ public class FilterTabsView extends FrameLayout {
                     canvas.save();
                     int alpha = textPaint.getAlpha();
                     textPaint.setAlpha((int) (alpha * (animateTextChangeOut ? changeProgress : 1f - changeProgress)));
-                    canvas.translate(textX + textOffsetX + titleOffsetX, textY);
+                    canvas.translate(textX + textOffsetX + titleOffsetX, (getMeasuredHeight() - textHeight) / 2f + 1);
                     titleAnimateOutLayout.draw(canvas);
                     AnimatedEmojiSpan.drawAnimatedEmojis(canvas, titleAnimateOutLayout, titleAnimateOutLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, (animateTextChangeOut ? changeProgress : 1f - changeProgress), emojiColorFilter);
                     canvas.restore();
@@ -455,7 +434,7 @@ public class FilterTabsView extends FrameLayout {
             } else {
                 if (textLayout != null) {
                     canvas.save();
-                    canvas.translate(textX + textOffsetX, textY);
+                    canvas.translate(textX + textOffsetX, (getMeasuredHeight() - textHeight) / 2f + 1);
                     textLayout.draw(canvas);
                     AnimatedEmojiSpan.drawAnimatedEmojis(canvas, textLayout, textLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, 1.0f, emojiColorFilter);
                     canvas.restore();
@@ -685,7 +664,7 @@ public class FilterTabsView extends FrameLayout {
                 changed = true;
             }
 
-            if (!currentTab.isLocalCategory && lastTitle != null && !currentTab.title.equals(lastTitle)) {
+            if (lastTitle != null && !currentTab.title.equals(lastTitle)) {
                 boolean animateOut;
                 CharSequence maxStr;
                 CharSequence substring;
@@ -754,7 +733,7 @@ public class FilterTabsView extends FrameLayout {
             info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK, LocaleController.getString(R.string.AccDescrOpenMenu2)));
             if (currentTab != null) {
                 StringBuilder sb = new StringBuilder();
-                sb.append(currentTab.accessibilityTitle != null ? currentTab.accessibilityTitle : currentTab.title);
+                sb.append(currentTab.title);
                 int unread = currentTab != null ? currentTab.counter : 0;
                 if (unread > 0) {
                     sb.append("\n");
@@ -762,22 +741,6 @@ public class FilterTabsView extends FrameLayout {
                 }
                 info.setContentDescription(sb);
             }
-        }
-
-        @Override
-        public boolean performAccessibilityAction(int action, Bundle arguments) {
-            if (currentTab != null && currentTab.isLocalCategory && (action == AccessibilityNodeInfo.ACTION_CLICK || action == AccessibilityNodeInfo.ACTION_LONG_CLICK)) {
-                int position = idToPosition.get(currentTab.id, -1);
-                if (position < 0 || position >= tabs.size() || tabs.get(position) != currentTab || delegate == null || !delegate.canPerformActions() || isEditing) {
-                    return false;
-                }
-                if (action == AccessibilityNodeInfo.ACTION_LONG_CLICK) {
-                    return listView.longClickItem(this, position);
-                }
-                listView.clickItem(this, position);
-                return true;
-            }
-            return super.performAccessibilityAction(action, arguments);
         }
 
         public void clearTransitionParams() {
@@ -820,6 +783,7 @@ public class FilterTabsView extends FrameLayout {
     private final TextPaint textCounterPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint deletePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint counterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private ColorFilter emojiColorFilter = new PorterDuffColorFilter(0, PorterDuff.Mode.SRC_IN);
 
     private final ArrayList<Tab> tabs = new ArrayList<>();
 
@@ -1148,7 +1112,7 @@ public class FilterTabsView extends FrameLayout {
             }
             TabView tabView = (TabView) view;
             if (isEditing) {
-                if (position != 0 && !tabView.currentTab.isLocalCategory) {
+                if (position != 0) {
                     int side = dp(6);
                     if (tabView.rect.left - side < x && tabView.rect.right + side > x) {
                         delegate.onDeletePressed(tabView.currentTab.id);
@@ -1189,9 +1153,7 @@ public class FilterTabsView extends FrameLayout {
     }
 
     public void stopAnimatingIndicator() {
-        AndroidUtilities.cancelRunOnUIThread(animationRunnable);
         animatingIndicator = false;
-        setEnabled(true);
     }
 
     BlurredBackgroundDrawable blurredBackgroundDrawable;
@@ -1337,51 +1299,6 @@ public class FilterTabsView extends FrameLayout {
 
     public int getTabsCount() {
         return tabs.size();
-    }
-
-    public void addLocalCategoryTab(int id, String label, int iconRes, boolean all) {
-        SpannableStringBuilder title = new SpannableStringBuilder("\ufffc");
-        title.setSpan(new CategoryIconSpan(ContextCompat.getDrawable(getContext(), iconRes)), 0, 1, 0);
-        addTab(id, id, title, true, all, false);
-        Tab tab = tabs.get(tabs.size() - 1);
-        allTabsWidth -= tab.getWidth(true);
-        tab.isLocalCategory = true;
-        tab.accessibilityTitle = label;
-        allTabsWidth += tab.getWidth(true);
-    }
-
-    private static final class CategoryIconSpan extends android.text.style.ReplacementSpan {
-        private final Drawable icon;
-        private final int size = dp(26);
-        private int color = Integer.MIN_VALUE;
-
-        private CategoryIconSpan(Drawable drawable) {
-            icon = drawable == null ? null : drawable.mutate();
-            if (icon != null) icon.setBounds(0, 0, size, size);
-        }
-
-        @Override
-        public int getSize(@NonNull Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
-            if (fm != null) {
-                fm.top = fm.ascent = -size;
-                fm.bottom = fm.descent = 0;
-            }
-            return size;
-        }
-
-        @Override
-        public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom, @NonNull Paint paint) {
-            if (icon == null) return;
-            if (color != paint.getColor()) {
-                color = paint.getColor();
-                icon.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
-            }
-            icon.setAlpha(paint.getAlpha());
-            canvas.save();
-            canvas.translate(x, (top + bottom - size) / 2f);
-            icon.draw(canvas);
-            canvas.restore();
-        }
     }
 
     public Tab getTab(int i) {
@@ -1628,9 +1545,9 @@ public class FilterTabsView extends FrameLayout {
             final int width = MeasureSpec.getSize(widthMeasureSpec) - listViewPaddingH * 2;
             Tab firstTab = findDefaultTab();
             if (firstTab != null) {
-                if (!firstTab.isLocalCategory) firstTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
+                firstTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
                 int tabWidth = firstTab.getWidth(false);
-                if (!firstTab.isLocalCategory) firstTab.setTitle(allTabsWidth > width ? LocaleController.getString(R.string.FilterAllChatsShort) : LocaleController.getString(R.string.FilterAllChats), null, false);
+                firstTab.setTitle(allTabsWidth > width ? LocaleController.getString(R.string.FilterAllChatsShort) : LocaleController.getString(R.string.FilterAllChats), null, false);
                 int trueTabsWidth = allTabsWidth - tabWidth;
                 trueTabsWidth += firstTab.getWidth(false);
                 int prevWidth = additionalTabWidth;
@@ -1799,7 +1716,7 @@ public class FilterTabsView extends FrameLayout {
                 invalidated = true;
                 requestLayout();
                 allTabsWidth = 0;
-                if (!findDefaultTab().isLocalCategory) findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
+                findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
                 for (int b = 0; b < N; b++) {
                     allTabsWidth += tabs.get(b).getWidth(true) + dp(TAB_PADDING_WIDTH);
                 }
@@ -1830,7 +1747,7 @@ public class FilterTabsView extends FrameLayout {
             listView.setItemAnimator(itemAnimator);
             adapter.notifyDataSetChanged();
             allTabsWidth = 0;
-            if (!findDefaultTab().isLocalCategory) findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
+            findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
             for (int b = 0, N = tabs.size(); b < N; b++) {
                 allTabsWidth += tabs.get(b).getWidth(true) + dp(TAB_PADDING_WIDTH);
             }
@@ -1888,11 +1805,7 @@ public class FilterTabsView extends FrameLayout {
             if (idx1 < 0 || idx2 < 0 || idx1 >= count || idx2 >= count) {
                 return;
             }
-            if (tabs.get(idx1).isLocalCategory || tabs.get(idx2).isLocalCategory) return;
-            idx1 = tabs.get(fromIndex).id;
-            idx2 = tabs.get(toIndex).id;
             ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(UserConfig.selectedAccount).getDialogFilters();
-            if (idx1 < 0 || idx2 < 0 || idx1 >= filters.size() || idx2 >= filters.size()) return;
             MessagesController.DialogFilter filter1 = filters.get(idx1);
             MessagesController.DialogFilter filter2 = filters.get(idx2);
             int temp = filter1.order;
@@ -1942,7 +1855,6 @@ public class FilterTabsView extends FrameLayout {
         }
 
         public void moveElementToStart(int theIndex) {
-            if (!tabs.isEmpty() && tabs.get(0).isLocalCategory) return;
             int count = tabs.size();
             if (theIndex < 0 || theIndex >= count) {
                 return;
@@ -1992,8 +1904,6 @@ public class FilterTabsView extends FrameLayout {
 
         @Override
         public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            int position = viewHolder.getAdapterPosition();
-            if (position < 0 || position >= tabs.size() || tabs.get(position).isLocalCategory) return makeMovementFlags(0, 0);
             if (MessagesController.getInstance(UserConfig.selectedAccount).premiumFeaturesBlocked() && (!isEditing || (viewHolder.getAdapterPosition() == 0 && tabs.get(0).isDefault && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium()))) {
                 return makeMovementFlags(0, 0);
             }
@@ -2002,8 +1912,6 @@ public class FilterTabsView extends FrameLayout {
 
         @Override
         public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder source, @NonNull RecyclerView.ViewHolder target) {
-            int from = source.getAdapterPosition(), to = target.getAdapterPosition();
-            if (from < 0 || to < 0 || from >= tabs.size() || to >= tabs.size() || tabs.get(from).isLocalCategory || tabs.get(to).isLocalCategory) return false;
             if (MessagesController.getInstance(UserConfig.selectedAccount).premiumFeaturesBlocked() && ((source.getAdapterPosition() == 0 || target.getAdapterPosition() == 0) && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium())) {
                 return false;
             }

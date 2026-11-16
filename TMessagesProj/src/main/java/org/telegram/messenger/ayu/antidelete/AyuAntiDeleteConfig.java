@@ -165,7 +165,6 @@ public class AyuAntiDeleteConfig {
             return;
         }
         excludedDialogs = copy;
-        org.telegram.messenger.ayu.AyuChatCapturePolicy.updateLegacyExclusions(getExcludedDialogs());
         if (preferences != null) {
             preferences.edit().putString("excludedDialogs", join(copy)).apply();
         }
@@ -198,7 +197,6 @@ public class AyuAntiDeleteConfig {
     public static synchronized void clearExcluded() {
         ensureLoaded();
         excludedDialogs = Collections.emptySet();
-        org.telegram.messenger.ayu.AyuChatCapturePolicy.updateLegacyExclusions(new long[0]);
         if (preferences != null) {
             preferences.edit().putString("excludedDialogs", "").apply();
         }

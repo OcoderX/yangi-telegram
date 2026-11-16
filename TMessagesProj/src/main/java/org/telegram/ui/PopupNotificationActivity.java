@@ -8,8 +8,6 @@
 
 package org.telegram.ui;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -1194,18 +1192,14 @@ public class PopupNotificationActivity extends Activity implements NotificationC
         popupMessages.clear();
         if (isReply) {
             int account = intent != null ? intent.getIntExtra("currentAccount", UserConfig.selectedAccount) : UserConfig.selectedAccount;
-            if (!UserConfig.isValidAccount(account) || !SharedConfig.showNotificationsForAllAccounts && account != UserConfig.selectedAccount) {
-                onFinish();
-                finish();
+            if (!UserConfig.isValidAccount(account)) {
                 return;
             }
             popupMessages.addAll(NotificationsController.getInstance(account).popupReplyMessages);
-            popupMessages.removeIf(message -> HiddenChatsController.getInstance(message.currentAccount).isHidden(message.getDialogId()));
         } else {
             for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                if ((SharedConfig.showNotificationsForAllAccounts || a == UserConfig.selectedAccount) && UserConfig.getInstance(a).isClientActivated()) {
+                if (UserConfig.getInstance(a).isClientActivated()) {
                     popupMessages.addAll(NotificationsController.getInstance(a).popupMessages);
-            popupMessages.removeIf(message -> HiddenChatsController.getInstance(message.currentAccount).isHidden(message.getDialogId()));
                 }
             }
         }
@@ -1471,22 +1465,11 @@ public class PopupNotificationActivity extends Activity implements NotificationC
                 finish();
             }
         } else if (id == NotificationCenter.pushMessagesUpdated) {
-            if (currentMessageObject != null && HiddenChatsController.getInstance(currentMessageObject.currentAccount).isHidden(currentMessageObject.getDialogId())) {
-                onFinish();
-                finish();
-                return;
-            }
-            if (isReply && !SharedConfig.showNotificationsForAllAccounts && currentMessageObject != null && currentMessageObject.currentAccount != UserConfig.selectedAccount) {
-                onFinish();
-                finish();
-                return;
-            }
             if (!isReply) {
                 popupMessages.clear();
                 for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                    if ((SharedConfig.showNotificationsForAllAccounts || a == UserConfig.selectedAccount) && UserConfig.getInstance(a).isClientActivated()) {
+                    if (UserConfig.getInstance(a).isClientActivated()) {
                         popupMessages.addAll(NotificationsController.getInstance(a).popupMessages);
-            popupMessages.removeIf(message -> HiddenChatsController.getInstance(message.currentAccount).isHidden(message.getDialogId()));
                     }
                 }
                 getNewMessage();

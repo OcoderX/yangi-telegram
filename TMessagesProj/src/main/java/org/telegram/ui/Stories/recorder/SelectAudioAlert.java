@@ -43,7 +43,6 @@ import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
@@ -394,11 +393,6 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.ayuConfigChanged) {
-            pruneHiddenSharedAudio();
-            if (adapter != null) adapter.update(true);
-            return;
-        }
         if (id == NotificationCenter.musicListLoaded) {
             adapter.update(true);
         }
@@ -422,7 +416,6 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
 
     private String query;
     public void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-        pruneHiddenSharedAudio();
         adapter.itemsOffset = 1;
         int height = dp(64);
         items.add(UItem.asSpace(dp(64)));
@@ -457,7 +450,7 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
     }
 
     private int addSection(boolean filter, ArrayList<UItem> items, String name, ArrayList<MessageObject> messageObjects, boolean loading, boolean showMore, int showMoreId) {
-        if (messageObjects == null || messageObjects.isEmpty() && !loading && !showMore) {
+        if (messageObjects == null || messageObjects.isEmpty() && !loading) {
             return 0;
         }
         final ArrayList<MessageObject> filtered = new ArrayList<>();
@@ -479,7 +472,7 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
                 }
             }
         }
-        if (filtered.isEmpty() && !loading && !showMore) {
+        if (filtered.isEmpty() && !loading) {
             return 0;
         }
         int height = 0;
@@ -519,24 +512,6 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
     }
 
     private int nextSearchRate;
-    private TLRPC.Message lastSharedAudioMessage;
-    private int sharedAudioLoadedCount;
-    private boolean sharedAudioLoaded;
-    private int sharedAudioGeneration;
-
-    private void pruneHiddenSharedAudio() {
-        if (sharedAudio == null) return;
-        HiddenChatsController hidden = HiddenChatsController.getInstance(currentAccount);
-        for (int i = sharedAudio.size() - 1; i >= 0; i--) {
-            MessageObject message = sharedAudio.get(i);
-            if (!hidden.isHidden(message.getDialogId())) continue;
-            sharedAudio.remove(i);
-            if (playingAudio == message && MediaController.getInstance().isPlayingMessage(message)) {
-                MediaController.getInstance().cleanupPlayer(true, true);
-                playingAudio = null;
-            }
-        }
-    }
     private boolean sharedAudioHasMore;
     private boolean loadingSharedAudio;
     private boolean willLoadSharedAudio;
@@ -548,11 +523,6 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
         }
         loadingSharedAudioRequestId = -1;
         nextSearchRate = 0;
-        lastSharedAudioMessage = null;
-        sharedAudioLoadedCount = 0;
-        sharedAudioLoaded = false;
-        sharedAudioHasMore = false;
-        sharedAudioGeneration++;
         sharedAudio.clear();
         loadingSharedAudio = false;
         willLoadSharedAudio = false;
@@ -570,7 +540,7 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
         }
 
         if (loadingSharedAudio) return;
-        if (sharedAudioLoaded && !sharedAudioHasMore) return;
+        if (!sharedAudio.isEmpty() && !sharedAudioHasMore) return;
 
         loadingSharedAudio = true;
 
@@ -578,20 +548,18 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
         req.filter = new TLRPC.TL_inputMessagesFilterMusic();
         req.q = lastLoadingSharedAudioQuery = query == null ? "" : query;
         req.limit = 20;
-        if (lastSharedAudioMessage != null) {
-            final TLRPC.Message lastMessage = lastSharedAudioMessage;
-            req.offset_id = lastMessage.id;
+        if (sharedAudio != null && sharedAudio.size() > 0) {
+            final MessageObject lastMessage = sharedAudio.get(sharedAudio.size() - 1);
+            req.offset_id = lastMessage.getId();
             req.offset_rate = nextSearchRate;
-            long id = MessageObject.getPeerId(lastMessage.peer_id);
+            long id = MessageObject.getPeerId(lastMessage.messageOwner.peer_id);
             req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(id);
         } else {
             req.offset_rate = 0;
             req.offset_id = 0;
             req.offset_peer = new TLRPC.TL_inputPeerEmpty();
         }
-        final int generation = ++sharedAudioGeneration;
         loadingSharedAudioRequestId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
-            if (generation != sharedAudioGeneration || !TextUtils.equals(req.q, query == null ? "" : query)) return;
             willLoadSharedAudio = false;
             loadingSharedAudio = false;
             if (res instanceof TLRPC.messages_Messages) {
@@ -599,17 +567,12 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
                 MessagesController.getInstance(currentAccount).putUsers(r.users, false);
                 MessagesController.getInstance(currentAccount).putChats(r.chats, false);
 
-                sharedAudioLoaded = true;
-                sharedAudioLoadedCount += r.messages.size();
-                if (!r.messages.isEmpty()) lastSharedAudioMessage = r.messages.get(r.messages.size() - 1);
-
                 for (final TLRPC.Message message : r.messages) {
-                    if (HiddenChatsController.getInstance(currentAccount).isHidden(MessageObject.getDialogId(message))) continue;
                     final MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                     sharedAudio.add(messageObject);
                 }
 
-                sharedAudioHasMore = !r.messages.isEmpty() && r instanceof TLRPC.TL_messages_messagesSlice && sharedAudioLoadedCount < r.count;
+                sharedAudioHasMore = r instanceof TLRPC.TL_messages_messagesSlice && sharedAudio.size() < r.count;
                 nextSearchRate = r.next_rate;
             } else {
                 sharedAudioHasMore = false;
@@ -804,16 +767,12 @@ public class SelectAudioAlert extends BottomSheetWithRecyclerListView implements
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.musicListLoaded);
-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.ayuConfigChanged);
-        pruneHiddenSharedAudio();
-        if (adapter != null) adapter.update(false);
     }
 
     @Override
     public void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.musicListLoaded);
-        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.ayuConfigChanged);
     }
 
     @Override

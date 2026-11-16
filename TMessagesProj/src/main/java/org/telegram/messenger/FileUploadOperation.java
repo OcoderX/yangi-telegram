@@ -23,8 +23,6 @@ import org.telegram.tgnet.TLRPC;
 
 import java.io.File;
 import java.io.FileDescriptor;
-import java.io.EOFException;
-import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -65,7 +63,8 @@ public class FileUploadOperation {
     private int operationGuid;
     private static final int minUploadChunkSize = 128;
     private static final int minUploadChunkSlowNetworkSize = 32;
-    private static final int uploadPumpBatchSize = 2;
+    private static final int initialRequestsCount = 8;
+    private static final int initialRequestsSlowNetworkCount = 1;
     private static final int maxUploadingKBytes = 1024 * 2;
     private static final int maxUploadingSlowNetworkKBytes = 32;
     private static final int maxUploadChunkKBytes = 512; // largest part size upload.saveFilePart / saveBigFilePart accept
@@ -74,7 +73,6 @@ public class FileUploadOperation {
     private static final long maxPartRetryDelay = 30 * 1000L;
 
     private int maxRequestsCount;
-    private Runnable uploadPumpRunnable;
     private int uploadChunkSize = 64 * 1024;
     private boolean slowNetwork;
     private int uploadConnectionsCount = 4;
@@ -102,7 +100,6 @@ public class FileUploadOperation {
     private boolean forceSmallFile;
     private String fileKey;
     private long estimatedSize;
-    private long finalizedFileSize;
     private int uploadStartTime;
     private RandomAccessFile stream;
     private boolean started;
@@ -160,10 +157,6 @@ public class FileUploadOperation {
         return state != 0;
     }
 
-    public boolean isFinishedOrFailed() {
-        return state >= 2;
-    }
-
     /** AyuGram: true while the AyuGram upload queue holds this operation back */
     public boolean isPausedByUser() {
         return paused;
@@ -185,7 +178,9 @@ public class FileUploadOperation {
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("start upload on slow network = " + slowNetwork);
             }
-            scheduleUploadRequests();
+            for (int a = 0, count = getInitialRequestsCount(); a < count; a++) {
+                startUploadRequest();
+            }
         });
     }
 
@@ -194,9 +189,6 @@ public class FileUploadOperation {
             return;
         }
         Utilities.stageQueue.postRunnable(() -> {
-            if (state != 1) {
-                return;
-            }
             if (slowNetwork != slow) {
                 slowNetwork = slow;
                 if (BuildVars.LOGS_ENABLED) {
@@ -207,10 +199,15 @@ public class FileUploadOperation {
                 }
                 requestTokens.clear();
                 // AyuGram: a network change used to wipe the resume information (cleanup() removes it)
-                // and restart the whole file from byte 0. Keep valid part boundaries and confirmed
-                // progress while recalculating only the request window for the new network.
+                // and restart the whole file from byte 0. Keep the information instead: the chunk size
+                // usually changes together with the network speed, and when it does the regular
+                // "chunk size mismatch" check below still forces a clean restart.
                 softReset();
-                scheduleUploadRequests();
+                uploadFirstPartLater = false;
+
+                for (int a = 0, count = getInitialRequestsCount(); a < count; a++) {
+                    startUploadRequest();
+                }
             }
         });
         AndroidUtilities.runOnUIThread(() -> uiRequestTokens.clear());
@@ -262,7 +259,9 @@ public class FileUploadOperation {
             if (paused || state != 1) {
                 return;
             }
-            scheduleUploadRequests();
+            for (int a = 0, count = getInitialRequestsCount(); a < count; a++) {
+                startUploadRequest();
+            }
         });
     }
 
@@ -272,7 +271,6 @@ public class FileUploadOperation {
      * upload up where it stopped. Must run on {@code Utilities.stageQueue}.
      */
     private void softReset() {
-        cancelUploadPump();
         for (int a = 0; a < requestTokens.size(); a++) {
             ConnectionsManager.getInstance(currentAccount).cancelRequest(requestTokens.valueAt(a), true);
         }
@@ -288,7 +286,6 @@ public class FileUploadOperation {
             FileLog.e(e);
         }
         isLastPart = false;
-        uploadFirstPartLater |= nextPartFirst;
         nextPartFirst = false;
         requestNum = 0;
         currentPartNum = 0;
@@ -298,7 +295,6 @@ public class FileUploadOperation {
         key = null;
         iv = null;
         ivChange = null;
-        fingerprint = 0;
         currentUploadRequetsCount = 0;
         lastSavedPartNum = 0;
         cachedResults.clear();
@@ -306,7 +302,6 @@ public class FileUploadOperation {
     }
 
     private void cleanup() {
-        cancelUploadPump();
         if (preferences == null) {
             preferences = ApplicationLoader.applicationContext.getSharedPreferences("uploadinfo", Activity.MODE_PRIVATE);
         }
@@ -333,9 +328,6 @@ public class FileUploadOperation {
 
     protected void checkNewDataAvailable(final long newAvailableSize, final long finalSize, final Float progress) {
         Utilities.stageQueue.postRunnable(() -> {
-            if (state != 0 && state != 1) {
-                return;
-            }
             if (progress != null && estimatedSize != 0 && finalSize == 0) {
                 boolean needRecalculation = false;
                 if (progress > 0.75f && !recalculatedEstimatedSize[0]) {
@@ -353,53 +345,27 @@ public class FileUploadOperation {
 
             if (estimatedSize != 0 && finalSize != 0) {
                 estimatedSize = 0;
-                totalFileSize = finalizedFileSize = finalSize;
+                totalFileSize = finalSize;
                 calcTotalPartsCount();
-                if (stream != null && (totalPartsCount > getUploadPartsLimit()
-                        || !forceSmallFile && !isBigFile && finalSize > 10 * 1024 * 1024)) {
-                    // An estimate can choose the wrong part boundaries or small-file method.
-                    // A fresh file id is required before switching either of them.
-                    softReset();
-                } else if (!uploadFirstPartLater && stream != null) {
+                if (!uploadFirstPartLater && started) {
                     storeFileUploadInfo();
                 }
             }
             availableSize = finalSize > 0 ? finalSize : newAvailableSize;
-            scheduleUploadRequests();
+            if (currentUploadRequetsCount < maxRequestsCount) {
+                startUploadRequest();
+            }
         });
     }
 
-    private void cancelUploadPump() {
-        if (uploadPumpRunnable != null) {
-            Utilities.stageQueue.cancelRunnable(uploadPumpRunnable);
-            uploadPumpRunnable = null;
+    private int getInitialRequestsCount() {
+        if (slowNetwork) {
+            return initialRequestsSlowNetworkCount;
         }
-    }
-
-    private void scheduleUploadRequests() {
-        if (uploadPumpRunnable != null || state != 1 || paused || isLastPart
-                || maxRequestsCount > 0 && currentUploadRequetsCount >= maxRequestsCount) {
-            return;
+        if (SharedConfig.enableUploadAccelerator) {
+            return Math.max(initialRequestsCount, Math.min(16, SharedConfig.uploadThreadsCount));
         }
-        final int guid = operationGuid;
-        uploadPumpRunnable = () -> {
-            if (guid != operationGuid) {
-                return;
-            }
-            uploadPumpRunnable = null;
-            for (int i = 0; i < uploadPumpBatchSize; i++) {
-                int previousCount = currentUploadRequetsCount;
-                startUploadRequest();
-                if (currentUploadRequetsCount == previousCount) {
-                    // The video producer has no complete part yet, or the operation has finished.
-                    // Only new data or a request callback should wake us again.
-                    return;
-                }
-            }
-            // Yield between small batches so encryption/reads cannot monopolize stageQueue.
-            scheduleUploadRequests();
-        };
-        Utilities.stageQueue.postRunnable(uploadPumpRunnable);
+        return initialRequestsCount;
     }
 
     private void storeFileUploadInfo() {
@@ -475,7 +441,7 @@ public class FileUploadOperation {
             preferences.edit()
                     .putString(fileKey + "_parts", Utilities.bytesToHex(confirmedParts.toByteArray()))
                     .putLong(fileKey + "_uploaded", offset)
-                    .apply();
+                    .commit();
         } catch (Throwable e) {
             FileLog.e(e);
         }
@@ -498,29 +464,6 @@ public class FileUploadOperation {
     }
 
     // ------------------------------------------------------------- part requests
-
-    private int readUploadPart(int expectedBytes) throws IOException {
-        if (expectedBytes <= 0) {
-            throw new EOFException("invalid upload part size");
-        }
-        long position = stream.getFilePointer();
-        int offset = 0;
-        while (offset < expectedBytes) {
-            int read = stream.read(readBuffer, offset, expectedBytes - offset);
-            if (read <= 0) break;
-            offset += read;
-        }
-        if (offset != expectedBytes) {
-            stream.seek(position);
-            if (estimatedSize != 0) {
-                // A producer notification can race its disk write. Keep the part intact and wait
-                // for the next notification; never upload a partial intermediate chunk.
-                return -1;
-            }
-            throw new EOFException("upload ended before final size");
-        }
-        return offset;
-    }
 
     private TLObject buildPartRequest(UploadPart part, NativeByteBuffer sendBuffer) {
         if (isBigFile) {
@@ -586,8 +529,8 @@ public class FileUploadOperation {
                 onPartFailed(part, error);
             }
         }, null, () -> Utilities.stageQueue.postRunnable(() -> {
-            if (part.guid == operationGuid) {
-                scheduleUploadRequests();
+            if (currentUploadRequetsCount < maxRequestsCount) {
+                startUploadRequest();
             }
         }), forceSmallFile ? ConnectionsManager.RequestFlagCanCompress : 0, ConnectionsManager.DEFAULT_DATACENTER_ID, connectionType, true);
         if (BuildVars.LOGS_ENABLED) {
@@ -635,7 +578,7 @@ public class FileUploadOperation {
                         if (isEncrypted && ivToSave != null) {
                             editor.putString(fileKey + "_ivc", Utilities.bytesToHex(ivToSave));
                         }
-                        editor.apply();
+                        editor.commit();
                     }
                 } else {
                     UploadCachedResult result = new UploadCachedResult();
@@ -648,7 +591,7 @@ public class FileUploadOperation {
                 }
                 saveInfoTimes++;
             }
-            scheduleUploadRequests();
+            startUploadRequest();
         }
     }
 
@@ -713,11 +656,10 @@ public class FileUploadOperation {
     }
 
     private long retryDelay(int attempt, TLRPC.TL_error error) {
-        if (error != null && error.text != null && (error.text.startsWith("FLOOD_WAIT_")
-                || error.text.startsWith("FLOOD_PREMIUM_WAIT_"))) {
+        if (error != null && error.text != null && error.text.startsWith("FLOOD_WAIT_")) {
             try {
-                final int seconds = Integer.parseInt(error.text.substring(error.text.lastIndexOf('_') + 1));
-                return Math.max(1000L, seconds * 1000L);
+                final int seconds = Integer.parseInt(error.text.substring("FLOOD_WAIT_".length()));
+                return Math.max(1000L, Math.min(60 * 1000L, seconds * 1000L));
             } catch (Exception ignore) {
             }
         }
@@ -732,7 +674,9 @@ public class FileUploadOperation {
         }
         if (trackConfirmedParts && confirmedParts.get(part.partNum)) {
             currentUploadRequetsCount--;
-            scheduleUploadRequests();
+            if (currentUploadRequetsCount < maxRequestsCount) {
+                startUploadRequest();
+            }
             return;
         }
         final NativeByteBuffer sendBuffer;
@@ -825,53 +769,8 @@ public class FileUploadOperation {
         }
     }
 
-    private void configureUploadWindow(long maxUploadParts) {
-        if (maxUploadParts <= 0 || totalFileSize > maxUploadParts * maxUploadChunkKBytes * 1024L) {
-            throw new IllegalArgumentException("file exceeds upload part limit");
-        }
-        uploadChunkSize = (int) Math.max(slowNetwork ? minUploadChunkSlowNetworkSize : minUploadChunkSize, (totalFileSize + 1024L * maxUploadParts - 1) / (1024L * maxUploadParts));
-        if (1024 % uploadChunkSize != 0) {
-            int chunkSize = 64;
-            while (uploadChunkSize > chunkSize) {
-                chunkSize *= 2;
-            }
-            uploadChunkSize = chunkSize;
-        }
-        boolean uploadBoost = SharedConfig.enableUploadAccelerator && !slowNetwork && !forceSmallFile && totalFileSize >= uploadBoostMinFileSize;
-        if (uploadBoost) {
-            uploadChunkSize = maxUploadChunkKBytes;
-        }
-        int savedChunk = preferences.getInt(fileKey + "_chunk", 0);
-        if (estimatedSize == 0 && !uploadFirstPartLater && !nextPartFirst
-                && preferences.getLong(fileKey + "_size", 0) == totalFileSize
-                && savedChunk >= minUploadChunkSlowNetworkSize * 1024 && savedChunk <= maxUploadChunkKBytes * 1024
-                && (savedChunk & (savedChunk - 1)) == 0
-                && (totalFileSize + savedChunk - 1) / savedChunk <= maxUploadParts) {
-            // Part boundaries belong to file_id. A network change must not discard confirmed work.
-            uploadChunkSize = savedChunk / 1024;
-        }
-        if (uploadBoost) {
-            maxRequestsCount = Math.max(4, Math.min(16, SharedConfig.uploadThreadsCount));
-            uploadConnectionsCount = Math.min(ConnectionsManager.UploadConnectionsCount, maxRequestsCount);
-        } else {
-            maxRequestsCount = Math.min(16, Math.max(1, (slowNetwork ? maxUploadingSlowNetworkKBytes : maxUploadingKBytes) / uploadChunkSize));
-            uploadConnectionsCount = 4;
-        }
-        if (BuildVars.LOGS_ENABLED) {
-            FileLog.d("debug_uploading: boost=" + uploadBoost + " chunk=" + uploadChunkSize + "KB requests=" + maxRequestsCount + " connections=" + uploadConnectionsCount);
-        }
-    }
-
-    private long getUploadPartsLimit() {
-        return AccountInstance.getInstance(currentAccount).getUserConfig().isRealPremium()
-                && totalFileSize > FileLoader.DEFAULT_MAX_FILE_SIZE
-                ? MessagesController.getInstance(currentAccount).uploadMaxFilePartsPremium
-                : MessagesController.getInstance(currentAccount).uploadMaxFileParts;
-    }
-
     private void startUploadRequest() {
-        if (state != 1 || paused || isLastPart
-                || maxRequestsCount > 0 && currentUploadRequetsCount >= maxRequestsCount) {
+        if (state != 1 || paused) {
             return;
         }
 
@@ -904,15 +803,37 @@ public class FileUploadOperation {
                 if (estimatedSize != 0) {
                     totalFileSize = estimatedSize;
                 } else {
-                    totalFileSize = finalizedFileSize > 0 ? finalizedFileSize : cacheFile.length();
+                    totalFileSize = cacheFile.length();
                 }
                 if (!forceSmallFile && totalFileSize > 10 * 1024 * 1024) {
                     isBigFile = true;
                 }
 
-                long maxUploadParts = getUploadPartsLimit();
-                fileKey = Utilities.MD5(uploadingFilePath + (isEncrypted ? "enc" : ""));
-                configureUploadWindow(maxUploadParts);
+                long maxUploadParts = MessagesController.getInstance(currentAccount).uploadMaxFileParts;
+                if (AccountInstance.getInstance(currentAccount).getUserConfig().isRealPremium() && totalFileSize > FileLoader.DEFAULT_MAX_FILE_SIZE) {
+                    maxUploadParts = MessagesController.getInstance(currentAccount).uploadMaxFilePartsPremium;
+                }
+                uploadChunkSize = (int) Math.max(slowNetwork ? minUploadChunkSlowNetworkSize : minUploadChunkSize, (totalFileSize + 1024L * maxUploadParts - 1) / (1024L * maxUploadParts));
+                if (1024 % uploadChunkSize != 0) {
+                    int chunkSize = 64;
+                    while (uploadChunkSize > chunkSize) {
+                        chunkSize *= 2;
+                    }
+                    uploadChunkSize = chunkSize;
+                }
+                boolean uploadBoost = SharedConfig.enableUploadAccelerator && !slowNetwork && !forceSmallFile && totalFileSize >= uploadBoostMinFileSize;
+                if (uploadBoost) {
+                    int threads = Math.max(4, Math.min(16, SharedConfig.uploadThreadsCount));
+                    uploadChunkSize = Math.max(uploadChunkSize, maxUploadChunkKBytes);
+                    maxRequestsCount = threads;
+                    uploadConnectionsCount = Math.min(ConnectionsManager.UploadConnectionsCount, threads);
+                } else {
+                    maxRequestsCount = Math.max(1, (slowNetwork ? maxUploadingSlowNetworkKBytes : maxUploadingKBytes) / uploadChunkSize);
+                    uploadConnectionsCount = 4;
+                }
+                if (BuildVars.LOGS_ENABLED) {
+                    FileLog.d("debug_uploading: boost=" + uploadBoost + " chunk=" + uploadChunkSize + "KB requests=" + maxRequestsCount + " connections=" + uploadConnectionsCount);
+                }
 
                 if (isEncrypted) {
                     freeRequestIvs = new ArrayList<>(maxRequestsCount);
@@ -925,6 +846,7 @@ public class FileUploadOperation {
                 calcTotalPartsCount();
                 readBuffer = new byte[uploadChunkSize];
 
+                fileKey = Utilities.MD5(uploadingFilePath + (isEncrypted ? "enc" : ""));
                 // AyuGram: only a plain big-file upload can skip individual confirmed parts
                 trackConfirmedParts = AyuUploadConfig.isReuseConfirmedPartsEnabled()
                         && isBigFile && !isEncrypted && estimatedSize == 0 && !uploadFirstPartLater && !nextPartFirst;
@@ -936,10 +858,6 @@ public class FileUploadOperation {
                     currentFileId = preferences.getLong(fileKey + "_id", 0);
                     int date = preferences.getInt(fileKey + "_time", 0);
                     long uploadedSize = preferences.getLong(fileKey + "_uploaded", 0);
-                    if (uploadedSize < 0 || uploadedSize > totalFileSize) {
-                        rewrite = true;
-                        uploadedSize = 0;
-                    }
                     if (uploadedSize > 0 && uploadedSize % uploadChunkSize != 0 && uploadedSize != totalFileSize) {
                         // not a whole number of parts: the value cannot be trusted as a read offset
                         uploadedSize = 0;
@@ -1024,8 +942,6 @@ public class FileUploadOperation {
                             } else {
                                 rewrite = true;
                             }
-                        } else {
-                            rewrite = true;
                         }
                     } else {
                         rewrite = true;
@@ -1037,7 +953,6 @@ public class FileUploadOperation {
                     confirmedParts.clear();
                     readBytesCount = 0;
                     currentPartNum = 0;
-                    stream.seek(0);
                     if (isEncrypted) {
                         iv = new byte[32];
                         key = new byte[32];
@@ -1116,46 +1031,20 @@ public class FileUploadOperation {
                 }
             }
 
-            // The producer may finalize immediately after a full chunk. There is then no short
-            // tail read to switch to part 0 (or to finish an encrypted upload). Settle that boundary
-            // before reading EOF, including videos smaller than the reserved header chunk.
-            if (estimatedSize == 0 && !nextPartFirst && readBytesCount >= totalFileSize) {
-                if (totalFileSize <= 0) {
-                    throw new EOFException("empty upload");
-                }
-                if (readBytesCount > totalFileSize && !(uploadFirstPartLater && currentPartNum == 1)) {
-                    throw new EOFException("upload size changed after reading parts");
-                }
-                if (uploadFirstPartLater) {
-                    nextPartFirst = true;
-                    uploadFirstPartLater = false;
-                } else {
-                    isLastPart = true;
-                    if (currentUploadRequetsCount == 0) {
-                        finishUploadOperation();
-                    }
-                    return;
-                }
-            }
-
             if (nextPartFirst) {
                 stream.seek(0);
                 part.fileOffset = 0;
                 if (isBigFile) {
-                    currentRequestBytes = readUploadPart((int) Math.min(totalFileSize, uploadChunkSize));
+                    currentRequestBytes = stream.read(readBuffer);
                 } else {
-                    currentRequestBytes = readUploadPart((int) Math.min(totalFileSize, 1024));
+                    currentRequestBytes = stream.read(readBuffer, 0, 1024);
                 }
                 currentPartNum = 0;
             } else {
                 part.fileOffset = stream.getFilePointer();
-                currentRequestBytes = readUploadPart(estimatedSize != 0 ? uploadChunkSize
-                        : (int) Math.min(uploadChunkSize, totalFileSize - part.fileOffset));
+                currentRequestBytes = stream.read(readBuffer);
             }
             if (currentRequestBytes == -1) {
-                if (estimatedSize == 0) {
-                    throw new EOFException("upload ended before final size");
-                }
                 return;
             }
             int toAdd = 0;

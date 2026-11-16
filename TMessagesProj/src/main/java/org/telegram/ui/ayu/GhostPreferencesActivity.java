@@ -51,8 +51,6 @@ public class GhostPreferencesActivity extends UniversalFragment implements Notif
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.ayuGhostModeChanged && args.length > 0
-                && args[0] instanceof Integer && (Integer) args[0] != currentAccount) return;
         if (id == NotificationCenter.ayuGhostModeChanged) {
             if (listView != null && listView.adapter != null) {
                 listView.adapter.update(true);
@@ -76,20 +74,20 @@ public class GhostPreferencesActivity extends UniversalFragment implements Notif
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asHeader(getString(R.string.AyuGhostMode)));
-        items.add(UItem.asCheck(GHOST_READ, getString(R.string.AyuGhostDontReadMessages)).setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets));
-        items.add(UItem.asCheck(GHOST_STORIES, getString(R.string.AyuGhostDontReadStories)).setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories));
-        items.add(UItem.asCheck(GHOST_ONLINE, getString(R.string.AyuGhostDontSendOnline)).setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets));
-        items.add(UItem.asCheck(GHOST_TYPING, getString(R.string.AyuGhostDontSendTyping)).setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress));
-        items.add(UItem.asCheck(GHOST_OFFLINE_AFTER_ONLINE, getString(R.string.AyuGhostSendOfflineAfterOnline)).setChecked(org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOfflinePacketAfterOnline));
+        items.add(UItem.asCheck(GHOST_READ, getString(R.string.AyuGhostDontReadMessages)).setChecked(!AyuConfig.sendReadPackets));
+        items.add(UItem.asCheck(GHOST_STORIES, getString(R.string.AyuGhostDontReadStories)).setChecked(!AyuConfig.sendReadStories));
+        items.add(UItem.asCheck(GHOST_ONLINE, getString(R.string.AyuGhostDontSendOnline)).setChecked(!AyuConfig.sendOnlinePackets));
+        items.add(UItem.asCheck(GHOST_TYPING, getString(R.string.AyuGhostDontSendTyping)).setChecked(!AyuConfig.sendUploadProgress));
+        items.add(UItem.asCheck(GHOST_OFFLINE_AFTER_ONLINE, getString(R.string.AyuGhostSendOfflineAfterOnline)).setChecked(AyuConfig.sendOfflinePacketAfterOnline));
         items.add(UItem.asShadow(getString(R.string.AyuGhostModeInfo)));
 
         items.add(UItem.asHeader(getString(R.string.AyuGhostExtras)));
-        items.add(UItem.asCheck(MARK_READ_AFTER_SEND, getString(R.string.AyuGhostMarkReadAfterSend)).setChecked(org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).markReadAfterSend));
-        items.add(UItem.asCheck(MARK_READ_AFTER_ACTION, getString(R.string.AyuGhostMarkReadAfterAction)).setChecked(org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).markReadAfterAction));
-        items.add(UItem.asCheck(USE_SCHEDULED_MESSAGES, getString(R.string.AyuGhostUseScheduledMessages)).setChecked(org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).useScheduledMessages));
+        items.add(UItem.asCheck(MARK_READ_AFTER_SEND, getString(R.string.AyuGhostMarkReadAfterSend)).setChecked(AyuConfig.markReadAfterSend));
+        items.add(UItem.asCheck(MARK_READ_AFTER_ACTION, getString(R.string.AyuGhostMarkReadAfterAction)).setChecked(AyuConfig.markReadAfterAction));
+        items.add(UItem.asCheck(USE_SCHEDULED_MESSAGES, getString(R.string.AyuGhostUseScheduledMessages)).setChecked(AyuConfig.useScheduledMessages));
         items.add(UItem.asShadow(getString(R.string.AyuGhostUseScheduledMessagesInfo)));
 
-        items.add(UItem.asCheck(ALERT_BEFORE_STORY, getString(R.string.AyuGhostAlertBeforeStory)).setChecked(org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).alertBeforeOpeningStory));
+        items.add(UItem.asCheck(ALERT_BEFORE_STORY, getString(R.string.AyuGhostAlertBeforeStory)).setChecked(AyuConfig.alertBeforeOpeningStory));
         items.add(UItem.asShadow(getString(R.string.AyuGhostAlertBeforeStoryInfo)));
 
         items.add(UItem.asCheck(LOCAL_PREMIUM, getString(R.string.AyuLocalPremium)).setChecked(AyuConfig.localPremium));
@@ -100,53 +98,53 @@ public class GhostPreferencesActivity extends UniversalFragment implements Notif
     protected void onClick(UItem item, View view, int position, float x, float y) {
         switch (item.id) {
             case GHOST_READ:
-                AyuConfig.setSendReadPackets(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets);
-                toggleSwitch(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets);
+                AyuConfig.setSendReadPackets(!AyuConfig.sendReadPackets);
+                toggleSwitch(view, !AyuConfig.sendReadPackets);
                 break;
             case GHOST_STORIES:
-                AyuConfig.setSendReadStories(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories);
-                toggleSwitch(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories);
+                AyuConfig.setSendReadStories(!AyuConfig.sendReadStories);
+                toggleSwitch(view, !AyuConfig.sendReadStories);
                 break;
             case GHOST_ONLINE:
-                AyuConfig.setSendOnlinePackets(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets);
-                toggleSwitch(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets);
+                AyuConfig.setSendOnlinePackets(!AyuConfig.sendOnlinePackets);
+                toggleSwitch(view, !AyuConfig.sendOnlinePackets);
                 break;
             case GHOST_TYPING:
-                AyuConfig.setSendUploadProgress(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress);
-                toggleSwitch(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress);
+                AyuConfig.setSendUploadProgress(!AyuConfig.sendUploadProgress);
+                toggleSwitch(view, !AyuConfig.sendUploadProgress);
                 break;
             case GHOST_OFFLINE_AFTER_ONLINE:
-                AyuConfig.setSendOfflinePacketAfterOnline(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOfflinePacketAfterOnline);
-                toggleSwitch(view, org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOfflinePacketAfterOnline);
+                AyuConfig.setSendOfflinePacketAfterOnline(!AyuConfig.sendOfflinePacketAfterOnline);
+                toggleSwitch(view, AyuConfig.sendOfflinePacketAfterOnline);
                 break;
 
             case MARK_READ_AFTER_SEND: {
-                final boolean enabled = !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).markReadAfterSend;
-                AyuConfig.setMarkReadAfterSend(currentAccount, enabled);
-                if (enabled && org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).useScheduledMessages) {
+                final boolean enabled = !AyuConfig.markReadAfterSend;
+                AyuConfig.setMarkReadAfterSend(enabled);
+                if (enabled && AyuConfig.useScheduledMessages) {
                     // the two options are mutually exclusive
-                    AyuConfig.setUseScheduledMessages(currentAccount, false);
+                    AyuConfig.setUseScheduledMessages(false);
                 }
-                toggleSwitch(view, org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).markReadAfterSend);
+                toggleSwitch(view, AyuConfig.markReadAfterSend);
                 break;
             }
             case MARK_READ_AFTER_ACTION:
-                AyuConfig.setMarkReadAfterAction(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).markReadAfterAction);
-                toggleSwitch(view, org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).markReadAfterAction);
+                AyuConfig.setMarkReadAfterAction(!AyuConfig.markReadAfterAction);
+                toggleSwitch(view, AyuConfig.markReadAfterAction);
                 break;
             case USE_SCHEDULED_MESSAGES: {
-                final boolean enabled = !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).useScheduledMessages;
-                AyuConfig.setUseScheduledMessages(currentAccount, enabled);
-                if (enabled && org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).markReadAfterSend) {
+                final boolean enabled = !AyuConfig.useScheduledMessages;
+                AyuConfig.setUseScheduledMessages(enabled);
+                if (enabled && AyuConfig.markReadAfterSend) {
                     // the two options are mutually exclusive
-                    AyuConfig.setMarkReadAfterSend(currentAccount, false);
+                    AyuConfig.setMarkReadAfterSend(false);
                 }
-                toggleSwitch(view, org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).useScheduledMessages);
+                toggleSwitch(view, AyuConfig.useScheduledMessages);
                 break;
             }
             case ALERT_BEFORE_STORY:
-                AyuConfig.setAlertBeforeOpeningStory(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).alertBeforeOpeningStory);
-                toggleSwitch(view, org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).alertBeforeOpeningStory);
+                AyuConfig.setAlertBeforeOpeningStory(!AyuConfig.alertBeforeOpeningStory);
+                toggleSwitch(view, AyuConfig.alertBeforeOpeningStory);
                 break;
             case LOCAL_PREMIUM:
                 AyuConfig.setLocalPremium(!AyuConfig.localPremium);

@@ -44,7 +44,6 @@ public class MusicSongsScreen extends Screen
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.messagePlayingDidStart);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.activeAccountChanged);
-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.ayuConfigChanged);
     }
 
     @Override
@@ -52,7 +51,6 @@ public class MusicSongsScreen extends Screen
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.messagePlayingDidStart);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.activeAccountChanged);
-        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.ayuConfigChanged);
     }
 
     @Override
@@ -68,10 +66,6 @@ public class MusicSongsScreen extends Screen
     @Override
     public Template onGetTemplate() {
         TelegramMediaSession session = TelegramMediaSession.getInstance(getCarContext().getApplicationContext());
-        if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(session.getCurrentAccount()).isHidden(dialogId)) {
-            return new MessageTemplate.Builder(getCarContext().getString(R.string.NoCarMusic))
-                    .setHeaderAction(Action.BACK).build();
-        }
         String headerTitle = title.isEmpty() ? " " : title;
 
         ArrayList<MessageObject> songs = session.getMusicMessages(dialogId);

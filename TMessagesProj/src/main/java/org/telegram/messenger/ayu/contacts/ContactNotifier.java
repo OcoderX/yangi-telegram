@@ -7,8 +7,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
-import android.service.notification.StatusBarNotification;
-import android.util.SparseIntArray;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -18,8 +16,6 @@ import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
-import org.telegram.messenger.SharedConfig;
-import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.ayu.AyuConstants;
 import org.telegram.tgnet.TLRPC;
@@ -38,17 +34,9 @@ public class ContactNotifier {
     private static final String CHANNEL_ID = "ox_contacts";
     /** far away from Telegram's own ids, from AyuKeepAliveService's 3117 and from the radar's 74100 */
     private static final int NOTIFICATION_ID_BASE = 74300;
-    private static final String NOTIFICATION_TAG_PREFIX = CHANNEL_ID + ":";
-    // Accessed on the UI thread only; track posted IDs, rather than scanning every contact slot.
-    private static final SparseIntArray postedAccounts = new SparseIntArray();
-
-    private static boolean canNotify(int account) {
-        return SharedConfig.showNotificationsForAllAccounts || account == UserConfig.selectedAccount;
-    }
 
     public static void notifyStatus(int account, TLRPC.User user, boolean online) {
-        if (user == null || !canNotify(account)
-                || org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(account).isHidden(user.id)) {
+        if (user == null) {
             return;
         }
         final String name = UserObject.getUserName(user);
@@ -57,9 +45,6 @@ public class ContactNotifier {
     }
 
     private static void post(int account, long userId, String name, boolean online) {
-        if (!canNotify(account) || org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(account).isHidden(userId)) {
-            return;
-        }
         try {
             Context context = ApplicationLoader.applicationContext;
             if (context == null) {
@@ -92,22 +77,7 @@ public class ContactNotifier {
                     .setCategory(NotificationCompat.CATEGORY_STATUS);
 
             Notification notification = builder.build();
-            if (!canNotify(account)) {
-                return;
-            }
-            NotificationManagerCompat manager = NotificationManagerCompat.from(context);
-            String tag = NOTIFICATION_TAG_PREFIX + account;
-            manager.cancel(notificationId); // Replace a surviving notification from the untagged format.
-            if (!canNotify(account)) {
-                return;
-            }
-            manager.notify(tag, notificationId, notification);
-            if (canNotify(account)) {
-                postedAccounts.put(notificationId, account);
-            } else {
-                manager.cancel(tag, notificationId);
-                postedAccounts.delete(notificationId);
-            }
+            NotificationManagerCompat.from(context).notify(notificationId, notification);
         } catch (Throwable e) {
             FileLog.e(e);
         }
@@ -142,91 +112,10 @@ public class ContactNotifier {
     }
 
     public static void cancel(int account, long userId) {
-        AndroidUtilities.runOnUIThread(() -> {
-            try {
-                NotificationManagerCompat manager = NotificationManagerCompat.from(ApplicationLoader.applicationContext);
-                int id = notificationId(account, userId);
-                manager.cancel(NOTIFICATION_TAG_PREFIX + account, id);
-                manager.cancel(id);
-                postedAccounts.delete(id);
-            } catch (Throwable e) {
-                FileLog.e(e);
-            }
-        });
-    }
-
-    public static void cancelInactiveNotifications() {
-        if (SharedConfig.showNotificationsForAllAccounts) {
-            return;
-        }
-        AndroidUtilities.runOnUIThread(ContactNotifier::cancelInactiveNotificationsOnUIThread);
-    }
-
-    private static void cancelInactiveNotificationsOnUIThread() {
-        if (SharedConfig.showNotificationsForAllAccounts) {
-            return;
-        }
         try {
-            Context context = ApplicationLoader.applicationContext;
-            if (context == null) {
-                return;
-            }
-            NotificationManagerCompat manager = NotificationManagerCompat.from(context);
-            for (int i = postedAccounts.size() - 1; i >= 0; i--) {
-                if (SharedConfig.showNotificationsForAllAccounts) {
-                    return;
-                }
-                int account = postedAccounts.valueAt(i);
-                if (account != UserConfig.selectedAccount) {
-                    int id = postedAccounts.keyAt(i);
-                    manager.cancel(NOTIFICATION_TAG_PREFIX + account, id);
-                    manager.cancel(id);
-                    postedAccounts.removeAt(i);
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                cancelInactiveActiveNotifications(context);
-            }
+            NotificationManagerCompat.from(ApplicationLoader.applicationContext).cancel(notificationId(account, userId));
         } catch (Throwable e) {
             FileLog.e(e);
-        }
-    }
-
-    @android.annotation.TargetApi(Build.VERSION_CODES.M)
-    private static void cancelInactiveActiveNotifications(Context context) {
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager == null) {
-            return;
-        }
-        for (StatusBarNotification posted : manager.getActiveNotifications()) {
-            if (SharedConfig.showNotificationsForAllAccounts) {
-                return;
-            }
-            int offset = posted.getId() - NOTIFICATION_ID_BASE;
-            if (offset < 0 || offset >= UserConfig.MAX_ACCOUNT_COUNT * 1000) {
-                continue;
-            }
-            int account = offset / 1000;
-            if (account == UserConfig.selectedAccount) {
-                continue;
-            }
-            String tag = posted.getTag();
-            boolean ours = (NOTIFICATION_TAG_PREFIX + account).equals(tag);
-            if (tag == null) {
-                Notification notification = posted.getNotification();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    ours = CHANNEL_ID.equals(notification.getChannelId());
-                } else {
-                    // The old format predates tags and channels. Its reserved IDs, status
-                    // category, icon and auto-cancel flag distinguish it from message/service posts.
-                    ours = NotificationCompat.CATEGORY_STATUS.equals(notification.category)
-                            && notification.icon == R.drawable.notification
-                            && (notification.flags & Notification.FLAG_AUTO_CANCEL) != 0;
-                }
-            }
-            if (ours) {
-                manager.cancel(tag, posted.getId());
-            }
         }
     }
 }

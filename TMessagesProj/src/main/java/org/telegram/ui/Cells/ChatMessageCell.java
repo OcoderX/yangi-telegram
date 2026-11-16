@@ -133,8 +133,6 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.RichMessageLayout;
-import org.telegram.messenger.utils.tlutils.TLKeyboardHelper;
-import org.telegram.tgnet.tl.TL_keyboard;
 import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.SvgHelper;
@@ -672,13 +670,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         default void didPressOther(ChatMessageCell cell, float otherX, float otherY) {
         }
 
-        default void didPressRichDocumentOptions(ChatMessageCell cell, TLRPC.Document document, float x, float y) {
-        }
-
-        default boolean canSaveRichDocument(ChatMessageCell cell) {
-            return false;
-        }
-
         default void didPressSponsoredClose(ChatMessageCell cell) {
         }
 
@@ -695,15 +686,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
 
         default void didLongPressBotButton(ChatMessageCell cell, TLRPC.KeyboardButton button) {
-        }
-
-        default void didPressRichButton(ChatMessageCell cell, TL_keyboard.KeyboardButtonProto button) {
-        }
-
-        default void didLongPressRichButton(ChatMessageCell cell, TL_keyboard.KeyboardButtonProto button) {
-        }
-
-        default void didPressAppUpdateButton() {
         }
 
         default void didPressCustomBotButton(ChatMessageCell cell, BotInlineKeyboard.ButtonCustom button) {
@@ -6938,10 +6920,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     private void cancelLoading(MessageObject messageObject) {
-        if (messageObject != null && !messageObject.mediaExists && !messageObject.putInDownloadsStore && !DownloadController.getInstance(currentAccount).isDownloading(messageObject.messageOwner.id) && !DownloadController.getInstance(currentAccount).isDownloading(messageObject.getDocument()) && !PhotoViewer.getInstance().isVisible()) {
-            if (!messageObject.loadingCancelled && FileLoader.getInstance(currentAccount).isLoadingFile(messageObject.getFileName())) {
-                return;
-            }
+        if (messageObject != null && !messageObject.mediaExists && !messageObject.putInDownloadsStore && !DownloadController.getInstance(currentAccount).isDownloading(messageObject.messageOwner.id) && !PhotoViewer.getInstance().isVisible()) {
             TLRPC.Document document = messageObject.getDocument();
             boolean loadDocumentFromImageReceiver = MessageObject.isStickerDocument(document) || MessageObject.isAnimatedStickerDocument(document, true) || MessageObject.isGifDocument(document) || MessageObject.isRoundVideoDocument(document);
             if (!loadDocumentFromImageReceiver) {
@@ -16798,21 +16777,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
     }
 
-    public final boolean drawButtonProgress(TL_keyboard.KeyboardButtonProto button, String callbackKey) {
-        final TL_keyboard.ButtonTypeProto type = button == null ? null : button.getType();
-        if (type instanceof TL_keyboard.TL_inlineButtonTypeCallback
-            || type instanceof TL_keyboard.TL_inlineButtonTypeGame
-            || type instanceof TL_keyboard.TL_inlineButtonTypeBuy
-            || type instanceof TL_keyboard.TL_inlineButtonTypeUrlAuth) {
-            return SendMessagesHelper.getInstance(currentAccount).isSendingCallback(callbackKey);
-        }
-        if (type instanceof TL_keyboard.TL_inlineButtonTypeUrl && delegate != null) {
-            return delegate.isProgressLoading(this, ChatActivity.PROGRESS_BOT_BUTTON)
-                && TextUtils.equals(delegate.getProgressLoadingBotButtonUrl(this), ((TL_keyboard.TL_inlineButtonTypeUrl) type).url);
-        }
-        return false;
-    }
-
     private boolean allowDrawPhotoImage() {
         return !currentMessageObject.hasMediaSpoilers() || currentMessageObject.isMediaSpoilersRevealed || mediaSpoilerRevealProgress != 0f || blurredPhotoImage.getBitmap() == null;
     }
@@ -18052,7 +18016,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         if (currentMessageObject != null && !currentMessageObject.isAnyKindOfSticker()) {
             currentMessageObject.putInDownloadsStore = true;
-            currentMessageObject.loadingCancelled = false;
         }
         // AyuGram: Personal Firewall - do not even start downloading a blocked document
         if (org.telegram.ui.ayu.firewall.FirewallAlerts.guardDocumentTap(getContext(), resourcesProvider, currentAccount, currentMessageObject, () -> didPressButton(animated, video))) {
@@ -18116,7 +18079,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         createLoadingProgressLayout(documentAttach);
                     }
                 } else if (documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO) {
-                    FileLoader.getInstance(currentAccount).loadFile(documentAttach, currentMessageObject, FileLoader.PRIORITY_NORMAL_UP, cacheType);
+                    FileLoader.getInstance(currentAccount).loadFile(documentAttach, currentMessageObject, FileLoader.PRIORITY_NORMAL, cacheType);
                     if (currentMessageObject.loadedFileSize > 0) {
                         createLoadingProgressLayout(currentMessageObject.getDocument());
                     }
@@ -18162,7 +18125,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     }
                 } else {
                     currentMessageObject.loadingCancelled = true;
-                    currentMessageObject.putInDownloadsStore = false;
                     if (
                         documentAttachType == DOCUMENT_ATTACH_TYPE_GIF ||
                         documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO ||

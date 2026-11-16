@@ -59,7 +59,6 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
-import org.telegram.messenger.ayu.PostStatisticsState;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -131,23 +130,15 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
     }
 
     public static BaseFragment create(TLRPC.Chat chat, boolean startFromBoosts) {
-        return create(chat, startFromBoosts, UserConfig.selectedAccount);
-    }
-
-    public static BaseFragment create(TLRPC.Chat chat, boolean startFromBoosts, int account) {
         Bundle args = new Bundle();
         args.putLong("chat_id", chat.id);
         args.putBoolean("is_megagroup", chat.megagroup);
         args.putBoolean("start_from_boosts", startFromBoosts);
-        TLRPC.ChatFull chatInfo = MessagesController.getInstance(account).getChatFull(chat.id);
-        BaseFragment fragment;
+        TLRPC.ChatFull chatInfo = MessagesController.getInstance(UserConfig.selectedAccount).getChatFull(chat.id);
         if (chatInfo == null || !chatInfo.can_view_stats && !chatInfo.can_view_stars_revenue) {
-            fragment = new BoostsActivity(-chat.id);
-        } else {
-            fragment = new StatisticActivity(args);
+            return new BoostsActivity(-chat.id);
         }
-        fragment.setCurrentAccount(account);
-        return fragment;
+        return new StatisticActivity(args);
     }
 
     private TLRPC.ChatFull chat;
@@ -198,15 +189,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
 
     private BaseChartView.SharedUiComponents sharedUi;
     private LinearLayout progressLayout;
-    private TextView loadingTitle, loadingSubtitle;
-    private volatile boolean statisticsDestroyed;
-    private long statisticsOwner;
-    private volatile int statisticsGeneration;
-    private boolean statisticsLoading;
-    private int statisticsRequestId;
-    private int statisticsError;
-    private Runnable statisticsTimeout;
-    private ChartViewData[] loadedCharts = new ChartViewData[0];
     private final boolean isMegagroup;
     private final boolean startFromBoosts;
     private final boolean startFromMonetization;
@@ -265,14 +247,12 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
     private final Runnable showProgressbar = new Runnable() {
         @Override
         public void run() {
-            if (!statisticsDestroyed && progressLayout != null) progressLayout.animate().alpha(1f).setDuration(230);
+            progressLayout.animate().alpha(1f).setDuration(230);
         }
     };
 
     @Override
     public boolean onFragmentCreate() {
-        statisticsOwner = getUserConfig().getClientUserId();
-        chat = getMessagesController().getChatFull(chatId);
         getNotificationCenter().addObserver(this, NotificationCenter.messagesDidLoad);
         getNotificationCenter().addObserver(this, NotificationCenter.chatInfoDidLoad);
         getNotificationCenter().addObserver(this, NotificationCenter.boostByChannelCreated);
@@ -285,7 +265,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         if (chat != null) {
             loadStatistic();
         } else {
-            loadStatisticsChat();
+            MessagesController.getInstance(currentAccount).loadFullChat(chatId, classGuid, true);
         }
         return super.onFragmentCreate();
     }
@@ -298,18 +278,9 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
     }
 
     private void loadStatistic() {
-        if (onlyBoostsStat || statisticsLoading || !isStatisticsCurrent()) {
+        if (onlyBoostsStat) {
             return;
         }
-        if (chat == null) {
-            loadStatisticsChat();
-            return;
-        }
-        AndroidUtilities.cancelRunOnUIThread(statisticsTimeout);
-        final int generation = ++statisticsGeneration;
-        statisticsLoading = true;
-        statisticsError = 0;
-        updateStatisticsProgress();
         TLObject req;
         if (isMegagroup) {
             TL_stats.TL_getMegagroupStats getMegagroupStats = new TL_stats.TL_getMegagroupStats();
@@ -321,17 +292,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
             getBroadcastStats.channel = MessagesController.getInstance(currentAccount).getInputChannel(chatId);
         }
 
-        java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean();
         int reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
-            if (!isStatisticsCurrent() || generation != statisticsGeneration || !completed.compareAndSet(false, true)) return;
-            if (error != null || !(response instanceof TL_stats.TL_broadcastStats || response instanceof TL_stats.TL_megagroupStats)) {
-                AndroidUtilities.runOnUIThread(() -> {
-                    if (isStatisticsCurrent() && generation == statisticsGeneration) {
-                        statisticsFailed(error == null ? PostStatisticsState.Graph.INVALID_DATA : PostStatisticsState.error(error.text, false));
-                    }
-                });
-                return;
-            }
             if (response instanceof TL_stats.TL_broadcastStats) {
                 final ChartViewData[] chartsViewData = new ChartViewData[12];
                 TL_stats.TL_broadcastStats stats = (TL_stats.TL_broadcastStats) response;
@@ -353,49 +314,46 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
                     chartsViewData[2].useHourFormat = true;
                 }
 
-                AndroidUtilities.runOnUIThread(() -> {
-                    if (!isStatisticsCurrent() || generation != statisticsGeneration) return;
-                    overviewChannelData = new OverviewChannelData(stats);
-                    maxDateOverview = stats.period.max_date * 1000L;
-                    minDateOverview = stats.period.min_date * 1000L;
+                overviewChannelData = new OverviewChannelData(stats);
+                maxDateOverview = stats.period.max_date * 1000L;
+                minDateOverview = stats.period.min_date * 1000L;
 
-                    recentPostsAll.clear();
-                    recentPostsLoaded.clear();
-                    recentStoriesAll.clear();
-                    recentPostIdtoIndexMap.clear();
-                    recentStoriesIdtoIndexMap.clear();
+                recentPostsAll.clear();
 
-                    int msgPos = 0;
-                    int storiesPos = 0;
-                    List<Integer> storiesIds = new ArrayList<>();
-                    for (TL_stats.PostInteractionCounters interactionCounters : stats.recent_posts_interactions) {
-                        RecentPostInfo recentPostInfo = new RecentPostInfo();
-                        recentPostInfo.counters = interactionCounters;
+                int msgPos = 0;
+                int storiesPos = 0;
+                List<Integer> storiesIds = new ArrayList<>();
+                for (TL_stats.PostInteractionCounters interactionCounters : stats.recent_posts_interactions) {
+                    RecentPostInfo recentPostInfo = new RecentPostInfo();
+                    recentPostInfo.counters = interactionCounters;
 
-                        if (interactionCounters instanceof TL_stats.TL_postInteractionCountersMessage) {
-                            recentPostsAll.add(recentPostInfo);
-                            recentPostIdtoIndexMap.put(recentPostInfo.getId(), msgPos);
-                            msgPos++;
-                        }
-                        if (interactionCounters instanceof TL_stats.TL_postInteractionCountersStory) {
-                            storiesIds.add(recentPostInfo.getId());
-                            recentStoriesAll.add(recentPostInfo);
-                            recentStoriesIdtoIndexMap.put(recentPostInfo.getId(), storiesPos);
-                            storiesPos++;
-                        }
+                    if (interactionCounters instanceof TL_stats.TL_postInteractionCountersMessage) {
+                        recentPostsAll.add(recentPostInfo);
+                        recentPostIdtoIndexMap.put(recentPostInfo.getId(), msgPos);
+                        msgPos++;
                     }
+                    if (interactionCounters instanceof TL_stats.TL_postInteractionCountersStory) {
+                        storiesIds.add(recentPostInfo.getId());
+                        recentStoriesAll.add(recentPostInfo);
+                        recentStoriesIdtoIndexMap.put(recentPostInfo.getId(), storiesPos);
+                        storiesPos++;
+                    }
+                }
 
-                    if (storiesList != null && !storiesList.load(storiesIds)) {
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (!storiesList.load(storiesIds)) {
                         prepareStoriesLoadedItems();
                         sortAllLoadedData();
                     }
+                });
 
-                    if (recentPostsAll.size() > 0) {
-                        int lastPostId = recentPostsAll.get(0).getId();
-                        int count = recentPostsAll.size();
-                        getMessagesStorage().getMessages(-chatId, 0, false, count, lastPostId, 0, 0, classGuid, 0, 0, 0, 0, true, false, null);
-                    }
+                if (recentPostsAll.size() > 0) {
+                    int lastPostId = recentPostsAll.get(0).getId();
+                    int count = recentPostsAll.size();
+                    getMessagesStorage().getMessages(-chatId, 0, false, count, lastPostId, 0, 0, classGuid, 0, 0, 0, 0, true, false, null);
+                }
 
+                AndroidUtilities.runOnUIThread(() -> {
                     ivInteractionsData = chartsViewData[0];
                     followersData = chartsViewData[1];
                     topHoursData = chartsViewData[2];
@@ -436,42 +394,37 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
                     chartsViewData[7].useWeekFormat = true;
                 }
 
+                overviewChatData = new OverviewChatData(stats);
+                maxDateOverview = stats.period.max_date * 1000L;
+                minDateOverview = stats.period.min_date * 1000L;
+
+                if (stats.top_posters != null && !stats.top_posters.isEmpty()) {
+                    for (int i = 0; i < stats.top_posters.size(); i++) {
+                        MemberData data = MemberData.from(stats.top_posters.get(i), stats.users);
+                        if (topMembersVisible.size() < 10) {
+                            topMembersVisible.add(data);
+                        }
+                        topMembersAll.add(data);
+                    }
+                    if (topMembersAll.size() - topMembersVisible.size() < 2) {
+                        topMembersVisible.clear();
+                        topMembersVisible.addAll(topMembersAll);
+                    }
+                }
+
+                if (stats.top_admins != null && !stats.top_admins.isEmpty()) {
+                    for (int i = 0; i < stats.top_admins.size(); i++) {
+                        topAdmins.add(MemberData.from(stats.top_admins.get(i), stats.users));
+                    }
+                }
+
+                if (stats.top_inviters != null && !stats.top_inviters.isEmpty()) {
+                    for (int i = 0; i < stats.top_inviters.size(); i++) {
+                        topInviters.add(MemberData.from(stats.top_inviters.get(i), stats.users));
+                    }
+                }
+
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (!isStatisticsCurrent() || generation != statisticsGeneration) return;
-                    topMembersAll.clear();
-                    topMembersVisible.clear();
-                    topAdmins.clear();
-                    topInviters.clear();
-                    overviewChatData = new OverviewChatData(stats);
-                    maxDateOverview = stats.period.max_date * 1000L;
-                    minDateOverview = stats.period.min_date * 1000L;
-
-                    if (stats.top_posters != null && !stats.top_posters.isEmpty()) {
-                        for (int i = 0; i < stats.top_posters.size(); i++) {
-                            MemberData data = MemberData.from(stats.top_posters.get(i), stats.users);
-                            if (topMembersVisible.size() < 10) {
-                                topMembersVisible.add(data);
-                            }
-                            topMembersAll.add(data);
-                        }
-                        if (topMembersAll.size() - topMembersVisible.size() < 2) {
-                            topMembersVisible.clear();
-                            topMembersVisible.addAll(topMembersAll);
-                        }
-                    }
-
-                    if (stats.top_admins != null && !stats.top_admins.isEmpty()) {
-                        for (int i = 0; i < stats.top_admins.size(); i++) {
-                            topAdmins.add(MemberData.from(stats.top_admins.get(i), stats.users));
-                        }
-                    }
-
-                    if (stats.top_inviters != null && !stats.top_inviters.isEmpty()) {
-                        for (int i = 0; i < stats.top_inviters.size(); i++) {
-                            topInviters.add(MemberData.from(stats.top_inviters.get(i), stats.users));
-                        }
-                    }
-
                     growthData = chartsViewData[0];
                     groupMembersData = chartsViewData[1];
                     newMembersBySourceData = chartsViewData[2];
@@ -484,74 +437,12 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
                     dataLoaded(chartsViewData);
                 });
             }
-        }, null, null, 0, chat.stats_dc > 0 ? chat.stats_dc : ConnectionsManager.DEFAULT_DATACENTER_ID, ConnectionsManager.ConnectionTypeGeneric, true);
+        }, null, null, 0, chat.stats_dc, ConnectionsManager.ConnectionTypeGeneric, true);
 
-        statisticsRequestId = reqId;
-        statisticsTimeout = () -> {
-            if (!isStatisticsCurrent() || generation != statisticsGeneration || !completed.compareAndSet(false, true)) return;
-            getConnectionsManager().cancelRequest(reqId, true);
-            statisticsFailed();
-        };
-        AndroidUtilities.runOnUIThread(statisticsTimeout, 20000);
         getConnectionsManager().bindRequestToGuid(reqId, classGuid);
     }
 
-    private boolean isStatisticsCurrent() {
-        return !statisticsDestroyed && statisticsOwner != 0 && statisticsOwner == getUserConfig().getClientUserId();
-    }
-
-    private void loadStatisticsChat() {
-        if (onlyBoostsStat || !isStatisticsCurrent()) return;
-        statisticsLoading = true;
-        statisticsError = 0;
-        updateStatisticsProgress();
-        AndroidUtilities.cancelRunOnUIThread(statisticsTimeout);
-        statisticsTimeout = () -> {
-            if (isStatisticsCurrent() && chat == null) statisticsFailed();
-        };
-        AndroidUtilities.runOnUIThread(statisticsTimeout, 20000);
-        getMessagesController().loadFullChat(chatId, classGuid, true);
-    }
-
-    private void statisticsFailed() {
-        statisticsFailed(PostStatisticsState.Graph.NETWORK_ERROR);
-    }
-
-    private void statisticsFailed(PostStatisticsState.Graph reason) {
-        statisticsLoading = false;
-        statisticsRequestId = 0;
-        statisticsError = reason == PostStatisticsState.Graph.ACCESS_REQUIRED ? R.string.OxChannelStatsAccess
-                : reason == PostStatisticsState.Graph.UNSUPPORTED ? R.string.OxStatsUnsupported
-                : reason == PostStatisticsState.Graph.LIMITED ? R.string.OxStatsGraphLimited
-                : reason == PostStatisticsState.Graph.EMPTY ? R.string.OxChannelStatsGraphEmpty : R.string.OxChannelStatsFailed;
-        AndroidUtilities.cancelRunOnUIThread(statisticsTimeout);
-        AndroidUtilities.cancelRunOnUIThread(showProgressbar);
-        updateStatisticsProgress();
-    }
-
-    private void updateStatisticsProgress() {
-        if (progressLayout == null) return;
-        loadingTitle.setText(getString(statisticsError == 0 ? R.string.LoadingStats : statisticsError));
-        loadingSubtitle.setText(getString(statisticsError == 0 ? R.string.LoadingStatsDescription : R.string.OxStatsRetry));
-        imageView.setVisibility(statisticsError == 0 ? View.VISIBLE : View.GONE);
-        progressLayout.setOnClickListener(statisticsError == 0 ? null : v -> loadStatistic());
-        progressLayout.setFocusable(statisticsError != 0);
-        if (statisticsError != 0) {
-            progressLayout.animate().cancel();
-            progressLayout.setAlpha(1f);
-            progressLayout.setVisibility(View.VISIBLE);
-        }
-    }
-
     private void dataLoaded(ChartViewData[] chartsViewData) {
-        if (!isStatisticsCurrent()) return;
-        statisticsLoading = false;
-        statisticsRequestId = 0;
-        statisticsError = 0;
-        for (ChartViewData data : loadedCharts) if (data != null) data.cancelLoad();
-        loadedCharts = chartsViewData;
-        AndroidUtilities.cancelRunOnUIThread(statisticsTimeout);
-        AndroidUtilities.cancelRunOnUIThread(showProgressbar);
         if (adapter != null) {
             adapter.update();
             recyclerListView.setItemAnimator(null);
@@ -570,18 +461,16 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
             recyclerListView.setAlpha(0);
             recyclerListView.animate().alpha(1).setDuration(230).start();
 
-        }
-        // Requests are independent of whether createView or its progress animation has run.
-        for (ChartViewData data : chartsViewData) {
-            if (data != null && data.chartData == null && data.token != null && !data.isError) {
-                data.load(currentAccount, classGuid, chat.stats_dc, getFindChartCell(data));
+            for (ChartViewData data : chartsViewData) {
+                if (data != null && data.chartData == null && data.token != null) {
+                    data.load(currentAccount, classGuid, chat.stats_dc, getFindChartCell(data));
+                }
             }
         }
     }
 
     private Utilities.Callback0Return<BaseChartCell> getFindChartCell(ChartViewData data) {
         return () -> {
-            if (!isStatisticsCurrent() || recyclerListView == null || diffUtilsCallback == null) return null;
             int n = recyclerListView.getChildCount();
             for (int i = 0; i < n; i++) {
                 View child = recyclerListView.getChildAt(i);
@@ -597,13 +486,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
 
     @Override
     public void onFragmentDestroy() {
-        statisticsDestroyed = true;
-        statisticsGeneration++;
-        AndroidUtilities.cancelRunOnUIThread(showProgressbar);
-        AndroidUtilities.cancelRunOnUIThread(statisticsTimeout);
-        if (statisticsRequestId != 0) getConnectionsManager().cancelRequest(statisticsRequestId, true);
-        for (ChartViewData data : loadedCharts) if (data != null) data.cancelLoad();
-        cancelZoom();
         getNotificationCenter().removeObserver(this, NotificationCenter.boostByChannelCreated);
         getNotificationCenter().removeObserver(this, NotificationCenter.messagesDidLoad);
         getNotificationCenter().removeObserver(this, NotificationCenter.chatInfoDidLoad);
@@ -715,9 +597,8 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         } else if (id == NotificationCenter.chatInfoDidLoad) {
             TLRPC.ChatFull chatFull = (TLRPC.ChatFull) args[0];
             if (chatFull.id == chatId) {
-                if (chat == null && isStatisticsCurrent()) {
+                if (chat == null) {
                     chat = chatFull;
-                    statisticsLoading = false;
                     loadStatistic();
                 }
             }
@@ -1002,7 +883,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         imageView.setAnimation(R.raw.statistic_preload, 120, 120);
         imageView.playAnimation();
 
-        loadingTitle = new TextView(context);
+        TextView loadingTitle = new TextView(context);
         loadingTitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
         loadingTitle.setTypeface(AndroidUtilities.bold());
         loadingTitle.setTextColor(Theme.getColor(Theme.key_player_actionBarTitle));
@@ -1010,7 +891,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         loadingTitle.setText(getString(R.string.LoadingStats));
         loadingTitle.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        loadingSubtitle = new TextView(context);
+        TextView loadingSubtitle = new TextView(context);
         loadingSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
         loadingSubtitle.setTextColor(Theme.getColor(Theme.key_player_actionBarSubtitle));
         loadingSubtitle.setTag(Theme.key_player_actionBarSubtitle);
@@ -1173,7 +1054,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         checkUi_listPaddings();
 
         diffUtilsCallback = new DiffUtilsCallback(adapter, layoutManager);
-        updateStatisticsProgress();
         return fragmentView;
     }
 
@@ -1185,38 +1065,33 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
     }
 
     public static ChartViewData createViewData(TL_stats.StatsGraph graph, String title, int graphType, boolean isLanguages) {
-        if (graph == null) return null;
+        if (graph == null || graph instanceof TL_stats.TL_statsGraphError) {
+            return null;
+        }
         ChartViewData viewData = new ChartViewData(title, graphType);
         viewData.isLanguages = isLanguages;
-        if (graph instanceof TL_stats.TL_statsGraphError) {
-            viewData.setGraphError(PostStatisticsState.error(((TL_stats.TL_statsGraphError) graph).error, true));
-        } else if (graph instanceof TL_stats.TL_statsGraph) {
+        if (graph instanceof TL_stats.TL_statsGraph) {
+            String json = ((TL_stats.TL_statsGraph) graph).json.data;
             try {
-                String json = ((TL_stats.TL_statsGraph) graph).json.data;
                 viewData.chartData = createChartData(new JSONObject(json), graphType, isLanguages);
                 if (viewData.chartData != null) {
                     viewData.chartData.yRate = graph.rate;
                 }
                 viewData.zoomToken = ((TL_stats.TL_statsGraph) graph).zoom_token;
-                if (viewData.chartData == null || viewData.chartData.x == null || viewData.chartData.x.length == 0 || viewData.chartData.lines.isEmpty()) {
-                    viewData.setGraphError(PostStatisticsState.Graph.EMPTY);
-                } else if (viewData.chartData.x.length < 2) {
-                    viewData.setGraphError(PostStatisticsState.Graph.LIMITED);
+                if (viewData.chartData == null || viewData.chartData.x == null || viewData.chartData.x.length < 2) {
+                    viewData.isEmpty = true;
                 }
-                if (graphType == 4 && !viewData.isError) {
+                if (graphType == 4 && viewData.chartData != null && viewData.chartData.x != null && viewData.chartData.x.length > 0) {
                     long x = viewData.chartData.x[viewData.chartData.x.length - 1];
                     viewData.childChartData = new StackLinearChartData(viewData.chartData, x);
                     viewData.activeZoom = x;
                 }
-            } catch (JSONException | RuntimeException e) {
-                viewData.chartData = null;
-                viewData.setGraphError(PostStatisticsState.Graph.INVALID_DATA);
+            } catch (JSONException e) {
+                e.printStackTrace();
+                return null;
             }
         } else if (graph instanceof TL_stats.TL_statsGraphAsync) {
             viewData.token = ((TL_stats.TL_statsGraphAsync) graph).token;
-            if (viewData.token == null || viewData.token.isEmpty()) viewData.setGraphError(PostStatisticsState.Graph.INVALID_DATA);
-        } else {
-            viewData.setGraphError(PostStatisticsState.Graph.INVALID_DATA);
         }
 
         return viewData;
@@ -1583,38 +1458,38 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
                     }
                     groupMembersCell = count++;
                 }
-                if (newMembersBySourceData != null && !newMembersBySourceData.isEmpty) {
+                if (newMembersBySourceData != null && !newMembersBySourceData.isEmpty && !newMembersBySourceData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     newMembersBySourceCell = count++;
                 }
-                if (membersLanguageData != null && !membersLanguageData.isEmpty) {
+                if (membersLanguageData != null && !membersLanguageData.isEmpty && !membersLanguageData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     membersLanguageCell = count++;
                 }
-                if (messagesData != null && !messagesData.isEmpty) {
+                if (messagesData != null && !messagesData.isEmpty && !messagesData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     messagesCell = count++;
                 }
-                if (actionsData != null && !actionsData.isEmpty) {
+                if (actionsData != null && !actionsData.isEmpty && !actionsData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     actionsCell = count++;
                 }
-                if (topHoursData != null && !topHoursData.isEmpty) {
+                if (topHoursData != null && !topHoursData.isEmpty && !topHoursData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     topHourseCell = count++;
                 }
 
-                if (topDayOfWeeksData != null && !topDayOfWeeksData.isEmpty) {
+                if (topDayOfWeeksData != null && !topDayOfWeeksData.isEmpty && !topDayOfWeeksData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
@@ -1716,25 +1591,25 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
                     }
                     interactionsCell = count++;
                 }
-                if ((ivInteractionsData != null && !ivInteractionsData.loading)) {
+                if ((ivInteractionsData != null && !ivInteractionsData.loading && !ivInteractionsData.isError)) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     ivInteractionsCell = count++;
                 }
-                if (reactionsByEmotionData != null && !reactionsByEmotionData.isEmpty) {
+                if (reactionsByEmotionData != null && !reactionsByEmotionData.isEmpty && !reactionsByEmotionData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     reactionsByEmotionCell = count++;
                 }
-                if (storyInteractionsData != null && !storyInteractionsData.isEmpty) {
+                if (storyInteractionsData != null && !storyInteractionsData.isEmpty && !storyInteractionsData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
                     storyInteractionsCell = count++;
                 }
-                if (storyReactionsByEmotionData != null && !storyReactionsByEmotionData.isEmpty) {
+                if (storyReactionsByEmotionData != null && !storyReactionsByEmotionData.isEmpty && !storyReactionsByEmotionData.isError) {
                     if (count > 0) {
                         shadowDivideCells.add(count++);
                     }
@@ -1815,11 +1690,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
 
         private final int currentAccount;
 
-        @Override
-        protected boolean canRetryData(ChartViewData viewData) {
-            return viewData.canRetry;
-        }
-
         public ChartCell(
             @NonNull Context context,
             int currentAccount,
@@ -1876,51 +1746,41 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
 
             chartView.legendSignatureView.showProgress(true, false);
 
-            final ChartViewData zoomSource = data;
             int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(request, (response, error) -> {
                 ChartData childData = null;
-                if (error == null && response instanceof TL_stats.TL_statsGraph) {
-                    ChartViewData parsed = createViewData((TL_stats.StatsGraph) response, zoomSource.title, zoomSource.graphType, zoomSource.isLanguages);
-                    if (parsed != null && !parsed.isError && !parsed.isEmpty) childData = parsed.chartData;
+                if (response instanceof TL_stats.TL_statsGraph) {
+                    String json = ((TL_stats.TL_statsGraph) response).json.data;
+                    try {
+                        childData = createChartData(new JSONObject(json), data.graphType, data == languagesData);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                } else if (response instanceof TL_stats.TL_statsGraphError) {
+                    Toast.makeText(getContext(), ((TL_stats.TL_statsGraphError) response).error, Toast.LENGTH_LONG).show();
                 }
 
                 ChartData finalChildData = childData;
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (!isStatisticsCurrent() || finalCancelable.canceled || lastCancelable != finalCancelable) return;
                     if (finalChildData != null) {
                         childDataCache.put(cacheKey, finalChildData);
                     }
                     if (finalChildData != null && !finalCancelable.canceled && finalCancelable.adapterPosition >= 0) {
                         View view = layoutManager.findViewByPosition(finalCancelable.adapterPosition);
-                        if (view instanceof ChartCell && ((ChartCell) view).data == zoomSource) {
-                            zoomSource.childChartData = finalChildData;
+                        if (view instanceof ChartCell) {
+                            data.childChartData = finalChildData;
                             ((ChartCell) view).chartView.legendSignatureView.showProgress(false, false);
                             ((ChartCell) view).zoomChart(false);
                         }
                     }
-                    if (finalChildData == null && getContext() != null) Toast.makeText(getContext(), getString(R.string.OxStatsGraphRetry), Toast.LENGTH_SHORT).show();
                     cancelZoom();
                 });
-            }, null, null, 0, chat.stats_dc > 0 ? chat.stats_dc : ConnectionsManager.DEFAULT_DATACENTER_ID, ConnectionsManager.ConnectionTypeGeneric, true);
-            finalCancelable.requestId = reqId;
-            finalCancelable.account = currentAccount;
-            finalCancelable.timeout = () -> {
-                if (!isStatisticsCurrent() || finalCancelable.canceled || lastCancelable != finalCancelable) return;
-                cancelZoom();
-                if (getContext() != null) Toast.makeText(getContext(), getString(R.string.OxStatsGraphRetry), Toast.LENGTH_SHORT).show();
-            };
-            AndroidUtilities.runOnUIThread(finalCancelable.timeout, 20000);
+            }, null, null, 0, chat.stats_dc, ConnectionsManager.ConnectionTypeGeneric, true);
             ConnectionsManager.getInstance(currentAccount).bindRequestToGuid(reqId, classGuid);
         }
 
         @Override
         public void loadData(ChartViewData viewData) {
-            if (!isStatisticsCurrent()) return;
-            if (viewData.token == null) {
-                if (viewData.canRetry) loadStatistic();
-                return;
-            }
-            viewData.load(currentAccount, classGuid, chat.stats_dc, getFindChartCell(viewData));
+            viewData.load(currentAccount, classGuid, chat.stats_dc, getFindChartCell(data));
         }
     }
 
@@ -2045,8 +1905,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
 
             errorTextView = new TextView(context);
             errorTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-            errorTextView.setGravity(Gravity.CENTER);
-            errorTextView.setPadding(dp(16), dp(8), dp(16), dp(8));
             frameLayout.addView(errorTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER, 0, 0, 0, 30));
             progressView.setVisibility(View.GONE);
 
@@ -2085,10 +1943,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         public abstract void zoomCanceled();
 
         protected abstract void loadData(ChartViewData viewData);
-
-        protected boolean canRetryData(ChartViewData viewData) {
-            return viewData.canRetry && viewData.token != null;
-        }
 
         public void zoomChart(boolean skipTransition) {
             long d = chartView.getSelectedDate();
@@ -2319,30 +2173,11 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
             viewData.viewShowed = true;
             zoomedChartView.setLandscape(land);
             data = viewData;
-            boolean placeholder = viewData.isEmpty || viewData.isError;
-            ViewGroup chartFrame = (ViewGroup) chartView.getParent();
-            chartFrame.setMinimumHeight(placeholder ? dp(112) : 0);
-            errorTextView.setOnClickListener(null);
-            errorTextView.setClickable(false);
-            errorTextView.setFocusable(false);
 
-            if (placeholder) {
+            if (viewData.isEmpty || viewData.isError) {
                 progressView.setVisibility(View.GONE);
-                chartHeaderView.showDate(false);
-                chartView.setVisibility(View.GONE);
-                zoomedChartView.setVisibility(View.GONE);
-                chartView.legendSignatureView.setVisibility(View.GONE);
-                zoomedChartView.legendSignatureView.setVisibility(View.GONE);
-                {
-                    errorTextView.setText(viewData.errorMessage == null ? getString(R.string.OxChannelStatsGraphEmpty) : viewData.errorMessage);
-                    if (canRetryData(viewData)) {
-                        errorTextView.append("\n" + getString(R.string.OxStatsRetry));
-                        errorTextView.setFocusable(true);
-                        errorTextView.setOnClickListener(v -> {
-                            loadData(viewData);
-                            if (viewData.loading) updateData(viewData, false);
-                        });
-                    }
+                if (viewData.errorMessage != null) {
+                    errorTextView.setText(viewData.errorMessage);
                     if (errorTextView.getVisibility() == View.GONE) {
                         errorTextView.setAlpha(0f);
                         errorTextView.animate().alpha(1f);
@@ -2356,8 +2191,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
             }
 
             errorTextView.setVisibility(View.GONE);
-            chartView.setVisibility(View.VISIBLE);
-            zoomedChartView.setVisibility(View.INVISIBLE);
             chartView.legendSignatureView.isTopHourChart = viewData.useHourFormat;
             chartHeaderView.showDate(!viewData.useHourFormat);
 
@@ -2541,11 +2374,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
     private void cancelZoom() {
         if (lastCancelable != null) {
             lastCancelable.canceled = true;
-            AndroidUtilities.cancelRunOnUIThread(lastCancelable.timeout);
-            if (lastCancelable.requestId != 0) ConnectionsManager.getInstance(lastCancelable.account).cancelRequest(lastCancelable.requestId, true);
-            lastCancelable = null;
         }
-        if (recyclerListView == null) return;
         int n = recyclerListView.getChildCount();
         for (int i = 0; i < n; i++) {
             View child = recyclerListView.getChildAt(i);
@@ -2557,8 +2386,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
 
 
     public static class ZoomCancelable {
-        private int requestId, account;
-        private Runnable timeout;
         int adapterPosition;
         boolean canceled;
     }
@@ -2583,11 +2410,6 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         public boolean isLanguages;
         public boolean useHourFormat;
         public boolean useWeekFormat;
-        public boolean canRetry;
-        private int requestId;
-        private int requestAccount;
-        private int loadGeneration;
-        private Runnable loadTimeout;
 
         public ChartViewData(String title, int grahType) {
             this.title = title;
@@ -2595,82 +2417,50 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
         }
 
         public void load(int accountId, int classGuid, int dc, Utilities.Callback0Return<BaseChartCell> findMe) {
-            if (loading || chartData != null || token == null || token.isEmpty()) return;
-            final long owner = UserConfig.getInstance(accountId).getClientUserId();
-            if (owner == 0) return;
-            final int generation = ++loadGeneration;
-            requestAccount = accountId;
-            loading = true;
-            isError = isEmpty = canRetry = false;
-            errorMessage = null;
-            TL_stats.TL_loadAsyncGraph request = new TL_stats.TL_loadAsyncGraph();
-            request.token = token;
-            requestId = ConnectionsManager.getInstance(accountId).sendRequest(request, (response, error) -> {
-                ChartViewData result = error == null && response instanceof TL_stats.StatsGraph
-                        ? createViewData((TL_stats.StatsGraph) response, title, graphType, isLanguages) : null;
-                AndroidUtilities.runOnUIThread(() -> {
-                    if (!loading || generation != loadGeneration || owner != UserConfig.getInstance(accountId).getClientUserId()) return;
-                    AndroidUtilities.cancelRunOnUIThread(loadTimeout);
-                    requestId = 0;
-                    loading = false;
-                    if (error != null) {
-                        setGraphError(PostStatisticsState.error(error.text, false));
-                    } else if (result == null) {
-                        setGraphError(PostStatisticsState.Graph.INVALID_DATA);
-                    } else if (result.token != null && !result.isError) {
-                        // The server can defer a graph again. Keep its latest token for an explicit retry.
-                        token = result.token;
-                        setGraphError(PostStatisticsState.Graph.UNAVAILABLE);
-                    } else {
-                        chartData = result.chartData;
-                        childChartData = result.childChartData;
-                        zoomToken = result.zoomToken;
-                        activeZoom = result.activeZoom;
-                        isEmpty = result.isEmpty;
-                        isError = result.isError;
-                        canRetry = result.canRetry;
-                        errorMessage = result.errorMessage;
+            if (!loading) {
+                loading = true;
+                TL_stats.TL_loadAsyncGraph request = new TL_stats.TL_loadAsyncGraph();
+                request.token = token;
+                int reqId = ConnectionsManager.getInstance(accountId).sendRequest(request, (response, error) -> {
+                    ChartData chartData = null;
+                    String zoomToken = null;
+                    if (error == null) {
+                        if (response instanceof TL_stats.TL_statsGraph) {
+                            String json = ((TL_stats.TL_statsGraph) response).json.data;
+                            try {
+                                chartData = createChartData(new JSONObject(json), graphType, isLanguages);
+                                zoomToken = ((TL_stats.TL_statsGraph) response).zoom_token;
+                                if (graphType == 4 && chartData.x != null && chartData.x.length > 0) {
+                                    long x = chartData.x[chartData.x.length - 1];
+                                    childChartData = new StackLinearChartData(chartData, x);
+                                    activeZoom = x;
+                                }
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        if (response instanceof TL_stats.TL_statsGraphError) {
+                            isEmpty = false;
+                            isError = true;
+                            errorMessage = ((TL_stats.TL_statsGraphError) response).error;
+                        }
                     }
-                    if (!canRetry) token = null;
-                    BaseChartCell me = findMe == null ? null : findMe.run();
-                    if (me != null) me.updateData(this, true);
-                });
-            }, null, null, 0, dc > 0 ? dc : ConnectionsManager.DEFAULT_DATACENTER_ID, ConnectionsManager.ConnectionTypeGeneric, true);
-            ConnectionsManager.getInstance(accountId).bindRequestToGuid(requestId, classGuid);
-            loadTimeout = () -> {
-                if (!loading || generation != loadGeneration) return;
-                cancelLoad();
-                if (owner != UserConfig.getInstance(accountId).getClientUserId()) return;
-                setGraphError(PostStatisticsState.Graph.NETWORK_ERROR);
-                BaseChartCell me = findMe == null ? null : findMe.run();
-                if (me != null) me.updateData(this, false);
-            };
-            AndroidUtilities.runOnUIThread(loadTimeout, 20000);
-        }
 
-        public void cancelLoad() {
-            loadGeneration++;
-            loading = false;
-            AndroidUtilities.cancelRunOnUIThread(loadTimeout);
-            if (requestId != 0) ConnectionsManager.getInstance(requestAccount).cancelRequest(requestId, true);
-            requestId = 0;
-        }
+                    ChartData finalChartData = chartData;
+                    String finalZoomToken = zoomToken;
+                    AndroidUtilities.runOnUIThread(() -> {
+                        loading = false;
+                        this.chartData = finalChartData;
+                        this.zoomToken = finalZoomToken;
 
-        private void setGraphError(PostStatisticsState.Graph state) {
-            isError = true;
-            isEmpty = false;
-            canRetry = PostStatisticsState.canRetry(state);
-            int text;
-            switch (state) {
-                case EMPTY: text = R.string.OxChannelStatsGraphEmpty; break;
-                case LIMITED: text = R.string.OxStatsGraphLimited; break;
-                case ACCESS_REQUIRED: text = R.string.OxChannelStatsAccess; break;
-                case UNSUPPORTED: text = R.string.OxStatsUnsupported; break;
-                case NETWORK_ERROR: text = R.string.OxStatsGraphRetry; break;
-                case INVALID_DATA: text = R.string.OxStatsGraphInvalid; break;
-                default: text = R.string.OxChannelStatsGraphUnavailable; break;
+                        BaseChartCell me = findMe.run();
+                        if (me != null) {
+                            me.updateData(this, true);
+                        }
+                    });
+                }, null, null, 0, dc, ConnectionsManager.ConnectionTypeGeneric, true);
+                ConnectionsManager.getInstance(accountId).bindRequestToGuid(reqId, classGuid);
             }
-            errorMessage = getString(text);
         }
     }
 

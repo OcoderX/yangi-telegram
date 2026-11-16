@@ -1,7 +1,5 @@
 package org.telegram.ui.Components;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
@@ -378,8 +376,6 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
     }
 
     private void updateListInternal(boolean animated, ArrayList<MessageObject> currentLoadingFilesTmp, ArrayList<MessageObject> recentLoadingFilesTmp) {
-        currentLoadingFilesTmp.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
-        recentLoadingFilesTmp.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
         if (animated) {
             int oldDownloadingFilesHeader = downloadingFilesHeader;
             int oldDownloadingFilesStartRow = downloadingFilesStartRow;
@@ -468,14 +464,14 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
     private void updateRows(ArrayList<MessageObject> currentLoadingFilesTmp, ArrayList<MessageObject> recentLoadingFilesTmp) {
         currentLoadingFiles.clear();
         for (MessageObject object : currentLoadingFilesTmp) {
-            if (!object.isRoundVideo() && !object.isVoice() && !HiddenChatsController.getInstance(currentAccount).isHidden(object.getDialogId())) {
+            if (!object.isRoundVideo() && !object.isVoice()) {
                 currentLoadingFiles.add(object);
             }
         }
 
         recentLoadingFiles.clear();
         for (MessageObject object : recentLoadingFilesTmp) {
-            if (!object.isRoundVideo() && !object.isVoice() && !HiddenChatsController.getInstance(currentAccount).isHidden(object.getDialogId())) {
+            if (!object.isRoundVideo() && !object.isVoice()) {
                 recentLoadingFiles.add(object);
             }
         }
@@ -635,7 +631,6 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.onDownloadingFilesChanged);
-        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.premiumFloodWaitReceived);
         if (getVisibility() == View.VISIBLE) {
             DownloadController.getInstance(currentAccount).clearUnviewedDownloads();
@@ -648,17 +643,13 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.onDownloadingFilesChanged);
-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.dialogsNeedReload);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.premiumFloodWaitReceived);
     }
 
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.dialogsNeedReload) {
-            updateListInternal(false, new ArrayList<>(currentLoadingFiles), new ArrayList<>(recentLoadingFiles));
-            update(false);
-        } else if (id == NotificationCenter.onDownloadingFilesChanged) {
+        if (id == NotificationCenter.onDownloadingFilesChanged) {
             if (getVisibility() == View.VISIBLE) {
                 DownloadController.getInstance(currentAccount).clearUnviewedDownloads();
             }

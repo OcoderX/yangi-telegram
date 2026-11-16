@@ -8,8 +8,6 @@
 
 package org.telegram.messenger;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -56,7 +54,6 @@ import org.telegram.SQLite.SQLiteException;
 import org.telegram.SQLite.SQLitePreparedStatement;
 import org.telegram.messenger.ringtone.RingtoneDataStore;
 import org.telegram.messenger.ringtone.RingtoneUploader;
-import org.telegram.messenger.bot.BotAccountHelper;
 import org.telegram.messenger.utils.EphemeralMessagesHelper;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.NativeByteBuffer;
@@ -895,32 +892,15 @@ public class MediaDataController extends BaseController {
     }
 
     public void checkFeaturedStickers() {
-        if (finishFeaturedStickersForBot(false)) {
-            return;
-        }
         if (!loadingFeaturedStickers[0] && (!featuredStickersLoaded[0] || Math.abs(System.currentTimeMillis() / 1000 - loadFeaturedDate[0]) >= 60 * 60)) {
             loadFeaturedStickers(false, true);
         }
     }
 
     public void checkFeaturedEmoji() {
-        if (finishFeaturedStickersForBot(true)) {
-            return;
-        }
         if (!loadingFeaturedStickers[1] && (!featuredStickersLoaded[1] || Math.abs(System.currentTimeMillis() / 1000 - loadFeaturedDate[1]) >= 60 * 60)) {
             loadFeaturedStickers(true, true);
         }
-    }
-
-    private boolean finishFeaturedStickersForBot(boolean emoji) {
-        if (!BotAccountHelper.isBotAccount(currentAccount)) {
-            return false;
-        }
-        int type = emoji ? 1 : 0;
-        loadingFeaturedStickers[type] = false;
-        featuredStickersLoaded[type] = true;
-        loadFeaturedDate[type] = (int) (System.currentTimeMillis() / 1000);
-        return true;
     }
 
     public ArrayList<TLRPC.Document> getRecentStickers(int type) {
@@ -2286,9 +2266,6 @@ public class MediaDataController extends BaseController {
     }
 
     public void loadFeaturedStickers(boolean emoji, boolean cache) {
-        if (finishFeaturedStickersForBot(emoji)) {
-            return;
-        }
         if (loadingFeaturedStickers[emoji ? 1 : 0]) {
             return;
         }
@@ -5014,61 +4991,7 @@ public class MediaDataController extends BaseController {
     private static RectF bitmapRect;
     private static Path roundPath;
 
-    private void filterHiddenChatHints() {
-        HiddenChatsController hidden = HiddenChatsController.getInstance(currentAccount);
-        hints.removeIf(peer -> hidden.isHidden(MessageObject.getPeerId(peer.peer)));
-        inlineBots.removeIf(peer -> hidden.isHidden(MessageObject.getPeerId(peer.peer)));
-        guestBots.removeIf(peer -> hidden.isHidden(MessageObject.getPeerId(peer.peer)));
-        webapps.removeIf(peer -> hidden.isHidden(MessageObject.getPeerId(peer.peer)));
-    }
-
-    public void removeHiddenChatHints() {
-        filterHiddenChatHints();
-        removeHiddenShortcuts();
-        buildShortcuts();
-        getNotificationCenter().postNotificationName(NotificationCenter.reloadHints);
-        getNotificationCenter().postNotificationName(NotificationCenter.reloadInlineHints);
-    }
-
-    private void removeHiddenShortcuts() {
-        Utilities.globalQueue.postRunnable(() -> {
-            if (Build.VERSION.SDK_INT < 26) return;
-            try {
-                ArrayList<String> ids = new ArrayList<>();
-                ArrayList<ShortcutInfoCompat> neutral = new ArrayList<>();
-                for (ShortcutInfoCompat shortcut : ShortcutManagerCompat.getShortcuts(ApplicationLoader.applicationContext,
-                        ShortcutManagerCompat.FLAG_MATCH_PINNED | ShortcutManagerCompat.FLAG_MATCH_DYNAMIC)) {
-                    Intent oldIntent = shortcut.getIntent();
-                    if (oldIntent == null || oldIntent.getIntExtra("currentAccount", -1) != currentAccount) continue;
-                    long did = oldIntent.getLongExtra("userId", 0);
-                    if (did == 0) did = -oldIntent.getLongExtra("chatId", 0);
-                    if (did == 0) did = oldIntent.getLongExtra("botId", 0);
-                    if (did == 0 && oldIntent.hasExtra("encId")) did = DialogObject.makeEncryptedDialogId(oldIntent.getIntExtra("encId", 0));
-                    if (!HiddenChatsController.getInstance(currentAccount).isHidden(did)) continue;
-                    ids.add(shortcut.getId());
-                    Intent safe = new Intent(ApplicationLoader.applicationContext, LaunchActivity.class).setAction(Intent.ACTION_MAIN);
-                    neutral.add(new ShortcutInfoCompat.Builder(ApplicationLoader.applicationContext, shortcut.getId())
-                            .setShortLabel(LocaleController.getString(R.string.AppName))
-                            .setLongLabel(LocaleController.getString(R.string.AppName))
-                            .setIcon(IconCompat.createWithResource(ApplicationLoader.applicationContext, R.drawable.shortcut_compose))
-                            .setIntent(safe).build());
-                }
-                if (!ids.isEmpty()) {
-                    ShortcutManagerCompat.updateShortcuts(ApplicationLoader.applicationContext, neutral);
-                    ShortcutManagerCompat.disableShortcuts(ApplicationLoader.applicationContext, ids, null);
-                    ShortcutManagerCompat.removeDynamicShortcuts(ApplicationLoader.applicationContext, ids);
-                    if (Build.VERSION.SDK_INT >= 30) {
-                        ApplicationLoader.applicationContext.getSystemService(ShortcutManager.class).removeLongLivedShortcuts(ids);
-                    }
-                }
-            } catch (Exception e) {
-                FileLog.e(e);
-            }
-        });
-    }
-
     public void buildShortcuts() {
-        filterHiddenChatHints();
         if (Build.VERSION.SDK_INT < 23) {
             return;
         }
@@ -5157,7 +5080,6 @@ public class MediaDataController extends BaseController {
                     TLRPC.User user = null;
                     TLRPC.Chat chat = null;
                     long peerId = MessageObject.getPeerId(hint.peer);
-                    if (HiddenChatsController.getInstance(currentAccount).isHidden(peerId)) continue;
                     if (DialogObject.isUserDialog(peerId)) {
                         shortcutIntent.putExtra("userId", peerId);
                         user = getMessagesController().getUser(peerId);
@@ -5471,7 +5393,6 @@ public class MediaDataController extends BaseController {
     }
 
     private void increaseInlineRating(long uid, boolean guest) {
-        if (HiddenChatsController.getInstance(currentAccount).isHidden(uid)) return;
         if (!getUserConfig().suggestContacts) {
             return;
         }
@@ -5516,7 +5437,6 @@ public class MediaDataController extends BaseController {
     }
 
     public void increaseWebappRating(long uid) {
-        if (HiddenChatsController.getInstance(currentAccount).isHidden(uid)) return;
         final TLRPC.User user = getMessagesController().getUser(uid);
         if (user == null || !user.bot) return;
 
@@ -5623,7 +5543,6 @@ public class MediaDataController extends BaseController {
     }
 
     public void increasePeerRaiting(long dialogId) {
-        if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) return;
         if (!getUserConfig().suggestContacts) {
             return;
         }
@@ -5653,7 +5572,6 @@ public class MediaDataController extends BaseController {
             }
             double dtFinal = dt;
             AndroidUtilities.runOnUIThread(() -> {
-                if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) return;
                 TLRPC.TL_topPeer peer = null;
                 for (int a = 0; a < hints.size(); a++) {
                     TLRPC.TL_topPeer p = hints.get(a);
@@ -5761,10 +5679,6 @@ public class MediaDataController extends BaseController {
         installShortcut(dialogId, type, null);
     }
     public void installShortcut(long dialogId, int type, Utilities.Callback<Boolean> callback) {
-        if (HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) {
-            if (callback != null) callback.run(false);
-            return;
-        }
         try {
             Intent shortcutIntent = type == SHORTCUT_TYPE_USER_OR_CHAT ? createIntrnalShortcutIntent(dialogId) : createIntrnalAttachedBotShortcutIntent(dialogId);
             if (shortcutIntent == null) {

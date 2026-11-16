@@ -16,7 +16,7 @@ public class StackBarChartData extends ChartData {
     }
 
     public void init() {
-        int n = x.length;
+        int n = lines.get(0).y.length;
         int k = lines.size();
 
         ySum = new long[n];

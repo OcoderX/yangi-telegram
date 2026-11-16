@@ -381,7 +381,6 @@ public class NotificationCenter {
     public static final int ayuMessageHistoryUpdated = totalEvents++;
     public static final int ayuRegexFiltersUpdated = totalEvents++;
     public static final int ayuConfigChanged = totalEvents++;
-    public static final int dynamicIslandPlayerChanged = totalEvents++;
 
     public static boolean alreadyLogged;
 

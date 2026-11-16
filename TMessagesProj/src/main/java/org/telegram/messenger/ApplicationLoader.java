@@ -213,9 +213,6 @@ public class ApplicationLoader extends Application {
 
                     boolean isSlow = isConnectionSlow();
                     for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                        if (!ConnectionsManager.isInstanceCreated(a)) {
-                            continue;
-                        }
                         ConnectionsManager.getInstance(a).checkConnection();
                         FileLoader.getInstance(a).onNetworkChanged(isSlow);
                     }
@@ -254,14 +251,8 @@ public class ApplicationLoader extends Application {
         SharedPrefsHelper.init(applicationContext);
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
             UserConfig.getInstance(a).loadConfig();
-        }
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (a != UserConfig.selectedAccount && !UserConfig.getInstance(a).isClientActivated()) {
-                continue;
-            }
-            org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(a);
             MessagesController.getInstance(a);
-            if (a == UserConfig.selectedAccount) {
+            if (a == 0) {
                 SharedConfig.pushStringStatus = "__FIREBASE_GENERATING_SINCE_" + ConnectionsManager.getInstance(a).getCurrentTime() + "__";
             } else {
                 ConnectionsManager.getInstance(a);
@@ -281,9 +272,6 @@ public class ApplicationLoader extends Application {
 
         MediaController.getInstance();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) { //TODO improve account
-            if (a != UserConfig.selectedAccount && !UserConfig.getInstance(a).isClientActivated()) {
-                continue;
-            }
             ContactsController.getInstance(a).checkAppAccount();
             DownloadController.getInstance(a);
         }

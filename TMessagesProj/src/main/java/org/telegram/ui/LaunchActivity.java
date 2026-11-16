@@ -391,7 +391,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private FrameMetricsOverlayView frameMetricsOverlayView;
-    private org.telegram.ui.ayu.update.OxUpdateHost oxUpdateHost;
     // private RefreshRateController refreshRateController;
 
     @Override
@@ -444,9 +443,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         flagSecureReason.attach();
 
         super.onCreate(savedInstanceState);
-        if (ApplicationLoader.applicationLoaderInstance.isCustomUpdate()) {
-            oxUpdateHost = new org.telegram.ui.ayu.update.OxUpdateHost(this, savedInstanceState);
-        }
         if (Build.VERSION.SDK_INT >= 24) {
             AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
         }
@@ -554,7 +550,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         actionBarLayout.setDrawerLayoutContainer(drawerLayoutContainer);
         actionBarLayout.setFragmentStack(mainFragmentsStack);
         actionBarLayout.setFragmentStackChangedListener(() -> {
-            org.telegram.ui.ayu.DynamicIslandView.updateIfExists();
             checkSystemBarColors(true, false);
             if (getLastFragment() != null && getLastFragment().getLastStoryViewer() != null) {
                 getLastFragment().getLastStoryViewer().updatePlayingMode();
@@ -623,12 +618,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             }
                             case "settings2": {
                                 actionBarLayout.addFragmentToStack(new SettingsActivity());
-                                break;
-                            }
-                            case "ox_updates": {
-                                org.telegram.ui.ayu.update.OxUpdatesActivity updates = new org.telegram.ui.ayu.update.OxUpdatesActivity();
-                                actionBarLayout.addFragmentToStack(updates);
-                                updates.restoreSelfArgs(savedInstanceState);
                                 break;
                             }
                             case "group":
@@ -1030,7 +1019,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             rightActionBarLayout = new ActionBarLayout(this, false);
             rightActionBarLayout.setIsRightLayout();
             rightActionBarLayout.setFragmentStack(rightFragmentsStack);
-            rightActionBarLayout.setFragmentStackChangedListener(org.telegram.ui.ayu.DynamicIslandView::updateIfExists);
             rightActionBarLayout.setDelegate(this);
             launchLayout.addView(rightActionBarLayout.getView());
 
@@ -1073,7 +1061,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             layersActionBarLayout.setBackgroundView(shadowTablet);
             layersActionBarLayout.setUseAlphaAnimations(true);
             layersActionBarLayout.setFragmentStack(layerFragmentsStack);
-            layersActionBarLayout.setFragmentStackChangedListener(org.telegram.ui.ayu.DynamicIslandView::updateIfExists);
             layersActionBarLayout.setDelegate(this);
             layersActionBarLayout.setDrawerLayoutContainer(drawerLayoutContainer);
 
@@ -1206,36 +1193,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private boolean switchingAccount;
-    private org.telegram.ui.ayu.OxChannelMembershipGate requiredChannelGate;
-    private Intent requiredChannelIntent;
-    private long requiredChannelIntentUserId;
-    private int requiredChannelIntentAccount;
-    private boolean requiredChannelIntentIsNew;
-    private boolean requiredChannelIntentRestore;
-    private boolean requiredChannelIntentRebuild;
-    private boolean requiredChannelIntentOpenedTelegram;
-
-    private boolean updateRequiredChannelGate() {
-        if (requiredChannelGate == null && frameLayout != null && !finished) {
-            requiredChannelGate = new org.telegram.ui.ayu.OxChannelMembershipGate(this, () -> {
-                Intent pending = requiredChannelIntent;
-                requiredChannelIntent = null;
-                if (pending != null && requiredChannelIntentAccount == UserConfig.selectedAccount &&
-                        requiredChannelIntentUserId == UserConfig.getInstance(UserConfig.selectedAccount).getClientUserId()) {
-                    handleIntent(pending, requiredChannelIntentIsNew, requiredChannelIntentRestore, false,
-                            null, requiredChannelIntentRebuild, requiredChannelIntentOpenedTelegram);
-                }
-            });
-        }
-        return requiredChannelGate != null && requiredChannelGate.update();
-    }
-
-    private boolean allowRequiredChannelFragment(BaseFragment fragment) {
-        boolean blocked = updateRequiredChannelGate();
-        // Root/login screens still have to be installed underneath the gate after authentication.
-        return !blocked || fragment instanceof MainTabsActivity || fragment instanceof LoginActivity || fragment instanceof IntroActivity;
-    }
-
     public void switchToAccount(int account, boolean removeAll) {
         switchToAccount(account, removeAll, obj -> new MainTabsActivity());
     }
@@ -1244,11 +1201,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (account == UserConfig.selectedAccount || !UserConfig.isValidAccount(account)) {
             return;
         }
-        org.telegram.ui.ayu.hidden.HiddenChatsUi.cancelAllAuthorizations();
-        org.telegram.messenger.ayu.hidden.HiddenChatsController.lockAll();
-        org.telegram.ui.ayu.hidden.HiddenChatsUi.closeProtectedNavigation(actionBarLayout);
         switchingAccount = true;
-        requiredChannelIntent = null;
 
         ConnectionsManager.getInstance(currentAccount).setAppPaused(true, false);
         UserConfig.selectedAccount = account;
@@ -1256,7 +1209,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
         checkCurrentAccount();
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.activeAccountChanged, account);
-        org.telegram.messenger.ayu.AyuKeepAliveService.onAccountChanged();
         if (AndroidUtilities.isTablet()) {
             layersActionBarLayout.removeAllFragments();
             rightActionBarLayout.removeAllFragments();
@@ -1289,7 +1241,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         updateCurrentConnectionState(currentAccount);
 
         switchingAccount = false;
-        updateRequiredChannelGate();
     }
 
     private void switchToAvailableAccountOrLogout() {
@@ -1373,7 +1324,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             .add(NotificationCenter.currentUserPremiumStatusChanged)
             .add(NotificationCenter.chatSwitchedForum)
             .add(NotificationCenter.guardBotDecisionResult);
-        NotificationsController.refreshAccountNotifications();
     }
 
     private void checkLayout() {
@@ -1477,7 +1427,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (drawerLayoutContainer == null || isFinishing()) {
             return;
         }
-        if (requiredChannelGate != null) requiredChannelGate.onPasscodeShown();
         if (passcodeDialog == null) {
             passcodeDialog = new PasscodeViewDialog(this);
         }
@@ -1536,7 +1485,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 rightActionBarLayout.getView().setVisibility(View.VISIBLE);
             }
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.passcodeDismissed, view);
-            updateRequiredChannelGate();
             try {
                 NotificationsController.getInstance(UserConfig.selectedAccount).showNotifications();
             } catch (Exception e) {
@@ -1564,6 +1512,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @SuppressLint("Range")
     private boolean handleIntent(Intent intent, boolean isNew, boolean restore, boolean fromPassword, Browser.Progress progress, boolean rebuildFragments, boolean openedTelegram) {
+        if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
+            return true;
+        }
+        if (UserSelectorBottomSheet.handleIntent(intent, progress)) {
+            return true;
+        }
         if (AndroidUtilities.handleProxyIntent(this, intent, true)) {
             return true;
         }
@@ -1581,12 +1535,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         int flags = intent.getFlags();
         String action = intent.getAction();
         final int[] intentAccount = new int[]{intent.getIntExtra("currentAccount", UserConfig.selectedAccount)};
-        long videoNotificationOwner = intent.getLongExtra("ox_video_notification_owner", 0);
-        if (videoNotificationOwner != 0 && (intentAccount[0] < 0 || intentAccount[0] >= UserConfig.MAX_ACCOUNT_COUNT
-                || !UserConfig.getInstance(intentAccount[0]).isClientActivated()
-                || UserConfig.getInstance(intentAccount[0]).getClientUserId() != videoNotificationOwner)) {
-            return false;
-        }
         switchToAccount(intentAccount[0], true);
         final boolean isVoipIntent = action != null && action.equals("voip");
         final boolean isVoipAnswerIntent = action != null && action.equals("voip_answer");
@@ -1602,23 +1550,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 passcodeSaveIntentIsRestore = restore;
                 return false;
             }
-        }
-        if (updateRequiredChannelGate()) {
-            requiredChannelIntent = new Intent(intent);
-            requiredChannelIntentAccount = UserConfig.selectedAccount;
-            requiredChannelIntentUserId = UserConfig.getInstance(UserConfig.selectedAccount).getClientUserId();
-            requiredChannelIntentIsNew = isNew;
-            requiredChannelIntentRestore = restore;
-            requiredChannelIntentRebuild = rebuildFragments;
-            requiredChannelIntentOpenedTelegram = openedTelegram;
-            if (progress != null) progress.end();
-            return false;
-        }
-        if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
-            return true;
-        }
-        if (UserSelectorBottomSheet.handleIntent(intent, progress)) {
-            return true;
         }
         boolean pushOpened = false;
         long push_user_id = 0;
@@ -6030,34 +5961,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private boolean firstAppUpdateCheck = true;
-    public void installOxUpdate() {
-        if (oxUpdateHost != null) oxUpdateHost.install();
-    }
-
-    public void startOxUpdate(int version) {
-        if (oxUpdateHost != null) oxUpdateHost.startUserUpdate(version);
-    }
-
-    public void cancelOxUpdate() {
-        if (oxUpdateHost != null) oxUpdateHost.cancelUserUpdate();
-    }
-
-    public void setOxUpdatePageVisible(boolean visible) {
-        if (oxUpdateHost != null) oxUpdateHost.setUpdatePageVisible(visible);
-    }
-
-    public void offerOxUpdate() {
-        if (oxUpdateHost != null && (passcodeDialog == null || passcodeDialog.passcodeView.getVisibility() != View.VISIBLE)) {
-            oxUpdateHost.offerUpdate();
-        }
-    }
-
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
-        if (oxUpdateHost != null) {
-            oxUpdateHost.check(force);
-            if (progress != null) progress.end();
-            return;
-        }
         if (!ApplicationLoader.isStandaloneBuild() && !ApplicationLoader.isBetaBuild()) {
             return;
         }
@@ -6646,8 +6550,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private void onFinish() {
-        if (requiredChannelGate != null) requiredChannelGate.destroy();
-        requiredChannelIntent = null;
         if (lockRunnable != null) {
             AndroidUtilities.cancelRunOnUIThread(lockRunnable);
             lockRunnable = null;
@@ -6832,8 +6734,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     protected void onPause() {
         super.onPause();
-        if (oxUpdateHost != null) oxUpdateHost.onPause();
-        if (requiredChannelGate != null) requiredChannelGate.onPause();
         isResumed = false;
         pipActivityHandler.onPause();
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 4096);
@@ -6899,19 +6799,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     protected void onStop() {
         super.onStop();
-        org.telegram.ui.ayu.hidden.HiddenChatsUi.cancelAllAuthorizations();
-        org.telegram.messenger.ayu.hidden.HiddenChatsController.lockAll();
-        boolean protectedBranch = org.telegram.ui.ayu.hidden.HiddenChatsUi.closeProtectedNavigation(actionBarLayout);
-        protectedBranch |= org.telegram.ui.ayu.hidden.HiddenChatsUi.closeProtectedNavigation(rightActionBarLayout);
-        protectedBranch |= org.telegram.ui.ayu.hidden.HiddenChatsUi.closeProtectedNavigation(layersActionBarLayout);
-        if (protectedBranch) {
-            if (rightActionBarLayout != null) rightActionBarLayout.removeAllFragments();
-            if (layersActionBarLayout != null) layersActionBarLayout.removeAllFragments();
-            if (actionBarLayout != null && actionBarLayout.getFragmentStack().isEmpty()) {
-                actionBarLayout.addFragmentToStack(new MainTabsActivity());
-                actionBarLayout.showLastFragment();
-            }
-        }
         isStarted = false;
         pipActivityHandler.onStop();
         Browser.unbindCustomTabsService(this);
@@ -6966,9 +6853,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onDestroy() {
-        if (oxUpdateHost != null) oxUpdateHost.destroy();
-        if (requiredChannelGate != null) requiredChannelGate.destroy();
-        requiredChannelIntent = null;
         isActive = false;
         activeInstanceCount--;
         unregisterReceiver(batteryReceiver);
@@ -7080,7 +6964,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     protected void onResume() {
         super.onResume();
         isResumed = true;
-        if (oxUpdateHost != null) oxUpdateHost.onResume();
         pipActivityHandler.onResume();
         if (onResumeStaticCallback != null) {
             onResumeStaticCallback.run();
@@ -7094,7 +6977,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.startAllHeavyOperations, 4096);
         MediaController.getInstance().setFeedbackView(feedbackView = actionBarLayout.getView(), true);
         ApplicationLoader.mainInterfacePaused = false;
-        org.telegram.messenger.ayu.AyuKeepAliveService.onAppForeground();
         MessagesController.getInstance(currentAccount).sortDialogs(null);
         showLanguageAlert(false);
         Utilities.stageQueue.postRunnable(() -> {
@@ -7104,8 +6986,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         checkFreeDiscSpace(0);
         MediaController.checkGallery();
         onPasscodeResume();
-        updateRequiredChannelGate();
-        if (requiredChannelGate != null) requiredChannelGate.onResume();
         if (passcodeDialog == null || passcodeDialog.passcodeView.getVisibility() != View.VISIBLE) {
             actionBarLayout.onResume();
             if (AndroidUtilities.isTablet()) {
@@ -7147,10 +7027,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         if (UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService != null) {
             showTosActivity(UserConfig.selectedAccount, UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService);
-        } else if (!ApplicationLoader.applicationLoaderInstance.isCustomUpdate() && SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
+        } else if (SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
             showUpdateActivity(UserConfig.selectedAccount, SharedConfig.pendingAppUpdate, true);
         }
         checkAppUpdate(false, null);
+        org.telegram.messenger.ayu.OcoderXChannelPrompt.checkAndShow(this);
         //ayu: on Android 12+ an unverified t.me domain never reaches us, so offer "Open by default"
         org.telegram.messenger.ayu.AyuLinkHandling.checkAndShow(this);
 
@@ -7280,9 +7161,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @SuppressWarnings("unchecked")
     public void didReceivedNotification(int id, final int account, Object... args) {
         if (id == NotificationCenter.appDidLogout) {
-            requiredChannelIntent = null;
             switchToAvailableAccountOrLogout();
-            updateRequiredChannelGate();
         } else if (id == NotificationCenter.openBoostForUsersDialog) {
             long dialogId = (long) args[0];
             ChatMessageCell chatMessageCell = null;
@@ -7305,7 +7184,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 updateCurrentConnectionState(account);
             }
         } else if (id == NotificationCenter.mainUserInfoChanged) {
-            updateRequiredChannelGate();
+
         } else if (id == NotificationCenter.attachMenuBotsDidLoad) {
 
         } else if (id == NotificationCenter.needShowAlert) {
@@ -8374,7 +8253,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     protected void onSaveInstanceState(Bundle outState) {
         try {
             super.onSaveInstanceState(outState);
-            if (oxUpdateHost != null) oxUpdateHost.save(outState);
             BaseFragment lastFragment = null;
             if (AndroidUtilities.isTablet()) {
                 if (layersActionBarLayout != null && !layersActionBarLayout.getFragmentStack().isEmpty()) {
@@ -8413,8 +8291,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     outState.putString("fragment", "channel");
                 } else if (lastFragment instanceof SettingsActivity) {
                     outState.putString("fragment", "settings2");
-                } else if (lastFragment instanceof org.telegram.ui.ayu.update.OxUpdatesActivity) {
-                    outState.putString("fragment", "ox_updates");
                 }
                 lastFragment.saveSelfArgs(outState);
             }
@@ -8451,10 +8327,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             return false;
         }
         if (passcodeDialog != null && passcodeDialog.passcodeView.getVisibility() == View.VISIBLE) {
-            if (invoked) finish();
-            return false;
-        }
-        if (updateRequiredChannelGate()) {
             if (invoked) finish();
             return false;
         }
@@ -8628,7 +8500,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     public boolean needPresentFragment(INavigationLayout layout, INavigationLayout.NavigationParams params) {
         BaseFragment fragment = params.fragment;
-        if (!allowRequiredChannelFragment(fragment)) return false;
         boolean removeLast = params.removeLast;
         boolean forceWithoutAnimation = params.noAnimation;
 
@@ -8752,7 +8623,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     public boolean needAddFragmentToStack(BaseFragment fragment, INavigationLayout layout) {
-        if (!allowRequiredChannelFragment(fragment)) return false;
         if (AndroidUtilities.isTablet()) {
             if (fragment instanceof DialogsActivity || fragment instanceof MainTabsActivity) {
                 boolean needReplace = layout != actionBarLayout;
@@ -8874,20 +8744,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             return ((MainTabsActivity) lastFragment).getCurrentVisibleFragment();
         }
         return lastFragment;
-    }
-
-    public static BaseFragment getDynamicIslandFragment() {
-        if (instance != null && instance.sheetFragmentsStack.isEmpty() && AndroidUtilities.isTablet()) {
-            if (instance.layersActionBarLayout != null && !instance.layerFragmentsStack.isEmpty()
-                && instance.layersActionBarLayout.getView().getVisibility() == View.VISIBLE) {
-                return instance.layersActionBarLayout.getLastFragment();
-            }
-            if (instance.rightActionBarLayout != null && !instance.rightFragmentsStack.isEmpty()
-                && instance.rightActionBarLayout.getView().getVisibility() == View.VISIBLE) {
-                return instance.rightActionBarLayout.getLastFragment();
-            }
-        }
-        return getLastFragmentIncludeMainTabs();
     }
 
     public static BaseFragment getLastFragment() {

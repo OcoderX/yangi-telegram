@@ -1,8 +1,5 @@
 package org.telegram.ui.Components;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-import org.telegram.messenger.NotificationCenter;
-
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.formatPluralStringComma;
 import static org.telegram.messenger.LocaleController.formatString;
@@ -57,7 +54,7 @@ import java.util.HashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class PostsSearchContainer extends FrameLayout implements NotificationCenter.NotificationCenterDelegate {
+public class PostsSearchContainer extends FrameLayout {
 
     private final BaseFragment fragment;
     private final int currentAccount;
@@ -71,9 +68,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
 
     private final ArrayList<MessageObject> messages = new ArrayList<MessageObject>();
     private int lastRate;
-    private TLRPC.Message lastRawMessage, lastRawNewsMessage;
-    private int hiddenEmptyPages;
-    private int loadGeneration;
     private boolean endReached;
 
     private boolean loading;
@@ -228,7 +222,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
         }
 
         loading = true;
-        final int generation = ++loadGeneration;
 
         final MessagesController messagesController = MessagesController.getInstance(currentAccount);
         final ConnectionsManager connectionsManager = ConnectionsManager.getInstance(currentAccount);
@@ -238,20 +231,20 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
         req.query = lastQuery;
         req.limit = 30;
         if (news) {
-            if (lastRawNewsMessage != null) {
-                final TLRPC.Message lastMessage = lastRawNewsMessage;
+            if (!newsMessages.isEmpty()) {
+                final MessageObject lastMessage = newsMessages.get(newsMessages.size() - 1);
                 req.offset_rate = newsMessagesLastRate;
-                req.offset_id = lastMessage.id;
-                req.offset_peer = messagesController.getInputPeer(lastMessage.peer_id);
+                req.offset_id = lastMessage.getRealId();
+                req.offset_peer = messagesController.getInputPeer(lastMessage.messageOwner.peer_id);
             } else {
                 req.offset_peer = new TLRPC.TL_inputPeerEmpty();
             }
         } else {
-            if (lastRawMessage != null) {
-                final TLRPC.Message lastMessage = lastRawMessage;
+            if (!messages.isEmpty()) {
+                final MessageObject lastMessage = messages.get(messages.size() - 1);
                 req.offset_rate = lastRate;
-                req.offset_id = lastMessage.id;
-                req.offset_peer = messagesController.getInputPeer(lastMessage.peer_id);
+                req.offset_id = lastMessage.getRealId();
+                req.offset_peer = messagesController.getInputPeer(lastMessage.messageOwner.peer_id);
             } else {
                 req.offset_peer = new TLRPC.TL_inputPeerEmpty();
             }
@@ -265,7 +258,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
         }
 
         reqId = connectionsManager.sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
-            if (generation != loadGeneration) return;
             reqId = -1;
             loading = false;
             emptyButton.setLoading(false);
@@ -280,10 +272,7 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
 
                 final ArrayList<MessageObject> messages = news ? newsMessages : this.messages;
                 final boolean firstMessages = messages.isEmpty();
-                final TLRPC.Message rawLast = r.messages.isEmpty() ? null : r.messages.get(r.messages.size() - 1);
-                if (news) lastRawNewsMessage = rawLast; else lastRawMessage = rawLast;
                 for (TLRPC.Message message : r.messages) {
-                    if (HiddenChatsController.getInstance(currentAccount).isHidden(MessageObject.getDialogId(message))) continue;
                     final MessageObject msg = new MessageObject(currentAccount, message, false, false);
                     if (!news) {
                         msg.setQuery(req.query);
@@ -315,14 +304,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
                     }
                 }
 
-                if (r.messages.isEmpty()) {
-                    if (news) newsMessagesEndReached = true; else endReached = true;
-                }
-                if (messages.isEmpty() && !(news ? newsMessagesEndReached : endReached) && hiddenEmptyPages++ < 4) {
-                    AndroidUtilities.runOnUIThread(() -> {
-                        if (generation == loadGeneration && !loading) load(false);
-                    }, 1);
-                }
                 updateEmptyView();
                 if (firstMessages) {
                     listView.scrollToPosition(0);
@@ -381,7 +362,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
 
     private int reqId = -1;
     private void cancel() {
-        loadGeneration++;
         if (reqId >= 0) {
             ConnectionsManager.getInstance(currentAccount).cancelRequest(reqId, true);
             reqId = -1;
@@ -397,8 +377,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
 
         cancel();
         lastQuery = q;
-        lastRawMessage = null;
-        hiddenEmptyPages = 0;
         if (TextUtils.isEmpty(q)) {
             lastRate = 0;
             queryid++;
@@ -455,8 +433,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
-        listView.adapter.update(false);
         if (flood == null) {
             loadFlood(null);
         }
@@ -471,23 +447,7 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
     }
 
     private boolean isEmpty;
-    @Override
-    protected void onDetachedFromWindow() {
-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.dialogsNeedReload);
-        super.onDetachedFromWindow();
-    }
-
-    @Override
-    public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.dialogsNeedReload) {
-            listView.adapter.update(true);
-            updateEmptyView();
-        }
-    }
-
     private void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-        messages.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
-        newsMessages.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()));
         if (flood == null) {
             items.add(UItem.asFlicker(-1, FlickerLoadingView.DIALOG_CELL_TYPE));
             items.add(UItem.asFlicker(-2, FlickerLoadingView.DIALOG_CELL_TYPE));
@@ -526,7 +486,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
     private void onItemClick(UItem item, View view, int position, float x, float y) {
         if (item.object instanceof MessageObject) {
             final MessageObject msg = (MessageObject) item.object;
-            if (HiddenChatsController.getInstance(currentAccount).isHidden(msg.getDialogId())) return;
             Bundle args = new Bundle();
             if (msg.getDialogId() >= 0) {
                 args.putLong("user_id", msg.getDialogId());
@@ -629,7 +588,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
             emptyButton.setSubText(null, true);
             emptyButton.setOnClickListener(v -> {
                 emptyButton.setLoading(true);
-                hiddenEmptyPages = 0;
                 load(false);
             });
             if (flood != null) {
@@ -638,18 +596,6 @@ public class PostsSearchContainer extends FrameLayout implements NotificationCen
             } else {
                 emptyUnderButtonTextView.setVisibility(View.GONE);
             }
-        } else if (TextUtils.isEmpty(lastQuery) && newsMessages.isEmpty() && !newsMessagesEndReached && !loading && lastRawNewsMessage != null) {
-            emptyImageView.setVisibility(View.GONE);
-            emptyTitleView.setText(getString(R.string.SearchPostsTitle));
-            emptyTextView.setText(getString(R.string.SearchPostsText));
-            emptyButton.setVisibility(View.VISIBLE);
-            emptyButton.setText(getString(R.string.Retry), true);
-            emptyButton.setSubText(null, true);
-            emptyButton.setOnClickListener(view -> {
-                hiddenEmptyPages = 0;
-                load(false);
-            });
-            emptyUnderButtonTextView.setVisibility(View.GONE);
         } else /*if (newsMessages.isEmpty() && newsMessagesEndReached)*/ {
             emptyImageView.setVisibility(View.GONE);
             emptyTitleView.setText(getString(R.string.SearchPostsTitle));

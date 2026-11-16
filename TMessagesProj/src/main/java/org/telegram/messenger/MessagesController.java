@@ -8,8 +8,6 @@
 
 package org.telegram.messenger;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.getString;
 import static org.telegram.messenger.NotificationsController.TYPE_CHANNEL;
@@ -86,7 +84,6 @@ import org.telegram.tgnet.tl.TL_stars;
 import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.tgnet.tl.TL_chatlists;
 import org.telegram.tgnet.tl.TL_update;
-import org.telegram.tgnet.tl.TL_bot_updates;
 import org.telegram.ui.ActionBar.ActionBarLayout;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -364,16 +361,6 @@ public class MessagesController extends BaseController implements NotificationCe
     private boolean migratingDialogs;
     public boolean gettingDifference;
     private boolean getDifferenceFirstSync = true;
-    private volatile int botSyncGeneration;
-    private int botSyncRetryAttempt;
-    private Runnable botSyncRetryRunnable;
-    private long botSyncNextCheckTime;
-    private long botSyncRetryNotBefore;
-    private boolean botSyncWasActive;
-    private boolean botSyncPermanentError;
-    private int botSyncRequestSerial;
-    private int botSyncRequestToken;
-    private long botSyncRequestStartedAt;
     public boolean updatingState;
     public boolean firstGettingTask;
     public boolean registeringForPush;
@@ -1261,7 +1248,6 @@ public class MessagesController extends BaseController implements NotificationCe
     public static int PROMO_TYPE_OTHER = 2;
 
     private static class ReadTask {
-        public long ownerId;
         public long dialogId;
         public long replyId;
         public long monoForumPeerId;
@@ -1294,7 +1280,6 @@ public class MessagesController extends BaseController implements NotificationCe
         public int id;
         public String name;
         public ArrayList<TLRPC.MessageEntity> entities = new ArrayList<>();
-        private int visibleUnreadCount;
         public int unreadCount;
         public volatile int pendingUnreadCount;
         public int order;
@@ -2203,7 +2188,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 if (value == null) {
                     value = 0;
                 }
-                reconcileLoadedDialogReadState(d);
+                dialogs_read_inbox_max.put(d.id, Math.max(value, d.read_inbox_max_id));
 
                 value = dialogs_read_outbox_max.get(d.id);
                 if (value == null) {
@@ -2232,11 +2217,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         Integer value = read_max.get(message.dialog_id);
                         if (value == null) {
                             value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
-                            if (read_max == dialogs_read_inbox_max && !DialogObject.isEncryptedDialog(message.dialog_id)) {
-                                    value = read_max.merge(message.dialog_id, value, Math::max);
-                                } else {
-                                    read_max.put(message.dialog_id, value);
-                                }
+                            read_max.put(message.dialog_id, value);
                         }
                         message.unread = value < message.id;
                     }
@@ -2286,7 +2267,6 @@ public class MessagesController extends BaseController implements NotificationCe
                         long key = new_dialogs_dict.keyAt(a);
                         TLRPC.Dialog newDialog = new_dialogs_dict.valueAt(a);
                         TLRPC.Dialog currentDialog = dialogs_dict.get(key);
-                        reconcileDialogReadState(newDialog, currentDialog);
 
                         if (pinnedRemoteDialogs != null && pinnedRemoteDialogs.dialogs.contains(newDialog)) {
                             if (newDialog.draft instanceof TLRPC.TL_draftMessage) {
@@ -6504,7 +6484,6 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void cleanup() {
-        botSyncGeneration++;
         getContactsController().cleanup();
         MediaController.getInstance().cleanup();
         getNotificationsController().cleanup();
@@ -6666,16 +6645,6 @@ public class MessagesController extends BaseController implements NotificationCe
             createdDialogIds.clear();
             createdScheduledDialogIds.clear();
             gettingDifference = false;
-            clearBotSyncRetry();
-            botSyncNextCheckTime = 0;
-            botSyncRetryNotBefore = 0;
-            botSyncWasActive = false;
-            botSyncPermanentError = false;
-            if (botSyncRequestToken != 0) {
-                getConnectionsManager().cancelRequest(botSyncRequestToken, true);
-            }
-            finishBotSyncRequest();
-            botSyncRequestSerial++;
             resetDialogsPinned = null;
             resetDialogsAll = null;
         });
@@ -7479,7 +7448,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (value == null) {
                         value = 0;
                     }
-                    dialogs_read_inbox_max.merge(dialog.id, Math.max(dialog.read_inbox_max_id, value), Math::max);
+                    dialogs_read_inbox_max.put(dialog.id, Math.max(dialog.read_inbox_max_id, value));
                     if (value == 0) {
                         if (dialog.peer.channel_id != 0) {
                             TL_update.TL_updateReadChannelInbox update = new TL_update.TL_updateReadChannelInbox();
@@ -7735,7 +7704,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         value = getMessagesStorage().getDialogReadMax(false, dialogId);
                     }
 
-                    dialogs_read_inbox_max.merge(dialogId, Math.max(res.full_chat.read_inbox_max_id, value), Math::max);
+                    dialogs_read_inbox_max.put(dialogId, Math.max(res.full_chat.read_inbox_max_id, value));
                     if (res.full_chat.read_inbox_max_id > value) {
                         ArrayList<TLRPC.Update> arrayList = new ArrayList<>();
                         TL_update.TL_updateReadChannelInbox update = new TL_update.TL_updateReadChannelInbox();
@@ -7980,7 +7949,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 Integer inboxValue = dialogs_read_inbox_max.get(dialogId);
                 if (inboxValue == null) {
                     inboxValue = getMessagesStorage().getDialogReadMax(false, dialogId);
-                    inboxValue = dialogs_read_inbox_max.merge(dialogId, inboxValue, Math::max);
+                    dialogs_read_inbox_max.put(dialogId, inboxValue);
                 }
 
                 Integer outboxValue = dialogs_read_outbox_max.get(dialogId);
@@ -10591,7 +10560,7 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         statusSettingState = 0;
         lastStatusUpdateTime = 0;
-        if (!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets) {
+        if (!AyuConfig.sendOnlinePackets) {
             statusSettingState = 2;
             ayuLastOfflineAttempt = System.currentTimeMillis();
             TL_account.updateStatus req = new TL_account.updateStatus();
@@ -10618,10 +10587,9 @@ public class MessagesController extends BaseController implements NotificationCe
         if (getUserConfig().isClientActivated()) {
             if (getUserConfig().isBotAccount()) {
                 // a bot has no online status: account.updateStatus is refused by the server
-                checkBotUpdates();
             } else if (!ignoreSetOnline && getConnectionsManager().getPauseTime() == 0 && ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
                 if (ApplicationLoader.mainInterfacePausedStageQueueTime != 0 && Math.abs(ApplicationLoader.mainInterfacePausedStageQueueTime - System.currentTimeMillis()) > 1000) {
-                    if (org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets && statusSettingState != 1 && (lastStatusUpdateTime == 0 || Math.abs(System.currentTimeMillis() - lastStatusUpdateTime) >= 55000 || offlineSent)) {
+                    if (AyuConfig.sendOnlinePackets && statusSettingState != 1 && (lastStatusUpdateTime == 0 || Math.abs(System.currentTimeMillis() - lastStatusUpdateTime) >= 55000 || offlineSent)) {
                         statusSettingState = 1;
 
                         if (statusRequest != 0) {
@@ -10635,7 +10603,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                 lastStatusUpdateTime = System.currentTimeMillis();
                                 offlineSent = false;
                                 statusSettingState = 0;
-                                if (org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOfflinePacketAfterOnline) {
+                                if (AyuConfig.sendOfflinePacketAfterOnline) {
                                     AyuGhostHelper.sendOfflinePacket(currentAccount);
                                 }
                             } else {
@@ -10645,7 +10613,7 @@ public class MessagesController extends BaseController implements NotificationCe
                             }
                             statusRequest = 0;
                         });
-                    } else if (!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets && !offlineSent && statusSettingState != 2 && Math.abs(currentTime - ayuLastOfflineAttempt) >= 5000) {
+                    } else if (!AyuConfig.sendOnlinePackets && !offlineSent && statusSettingState != 2 && Math.abs(currentTime - ayuLastOfflineAttempt) >= 5000) {
                         // ghost mode: make sure the server sees us as offline even while the app is in the foreground
                         ayuLastOfflineAttempt = currentTime;
                         statusSettingState = 2;
@@ -11200,7 +11168,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                         if (value == null) {
                                             value = 0;
                                         }
-                                        dialogs_read_inbox_max.merge(promoDialog.id, promoDialog.read_inbox_max_id, Math::max);
+                                        dialogs_read_inbox_max.put(promoDialog.id, Math.max(value, promoDialog.read_inbox_max_id));
                                         value = dialogs_read_outbox_max.get(promoDialog.id);
                                         if (value == null) {
                                             value = 0;
@@ -11515,7 +11483,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean sendTyping(long dialogId, long threadMsgId, int action, String emojicon, int classGuid) {
-        if (!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress) {
+        if (!AyuConfig.sendUploadProgress) {
             return false;
         }
         if (action < 0 || action >= sendingTypings.length || dialogId == 0) {
@@ -12162,7 +12130,7 @@ public class MessagesController extends BaseController implements NotificationCe
             Integer inboxValue = dialogs_read_inbox_max.get(dialogId);
             if (inboxValue == null) {
                 inboxValue = getMessagesStorage().getDialogReadMax(false, dialogId);
-                inboxValue = dialogs_read_inbox_max.merge(dialogId, inboxValue, Math::max);
+                dialogs_read_inbox_max.put(dialogId, inboxValue);
             }
 
             Integer outboxValue = dialogs_read_outbox_max.get(dialogId);
@@ -12973,15 +12941,14 @@ public class MessagesController extends BaseController implements NotificationCe
 
     private void resetDialogs(boolean query, int seq, int newPts, int date, int qts) {
         if (getUserConfig().isBotAccount()) {
-            // Bot dialogs are built from updates; refreshing must preserve their local history.
-            final int generation = botSyncGeneration;
-            final long userId = getUserConfig().getClientUserId();
+            // both requests this needs are bot-forbidden; going ahead would leave resetingDialogs
+            // stuck on and block every later loadDialogs call
+            getMessagesStorage().setLastPtsValue(newPts);
+            getMessagesStorage().setLastDateValue(date);
+            getMessagesStorage().setLastQtsValue(qts);
+            getMessagesStorage().setLastSeqValue(seq);
+            getMessagesStorage().saveDiffParams(seq, newPts, date, qts);
             markBotDialogsEndReached(0);
-            Utilities.stageQueue.postRunnable(() -> {
-                if (isCurrentBotSync(generation, userId)) {
-                    getDifference();
-                }
-            });
             return;
         }
         if (query) {
@@ -13102,7 +13069,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 if (value == null) {
                     value = 0;
                 }
-                reconcileLoadedDialogReadState(d);
+                dialogs_read_inbox_max.put(d.id, Math.max(value, d.read_inbox_max_id));
 
                 value = dialogs_read_outbox_max.get(d.id);
                 if (value == null) {
@@ -13130,11 +13097,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     Integer value = read_max.get(message.dialog_id);
                     if (value == null) {
                         value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
-                        if (read_max == dialogs_read_inbox_max && !DialogObject.isEncryptedDialog(message.dialog_id)) {
-                                    value = read_max.merge(message.dialog_id, value, Math::max);
-                                } else {
-                                    read_max.put(message.dialog_id, value);
-                                }
+                        read_max.put(message.dialog_id, value);
                     }
                     message.unread = value < message.id;
                 }
@@ -13190,7 +13153,6 @@ public class MessagesController extends BaseController implements NotificationCe
                 for (int a = 0; a < new_dialogs_dict.size(); a++) {
                     long key = new_dialogs_dict.keyAt(a);
                     TLRPC.Dialog value = new_dialogs_dict.valueAt(a);
-                    reconcileDialogReadState(value, null);
                     if (value.draft instanceof TLRPC.TL_draftMessage) {
                         mediaDataController.saveDraft(value.id, 0, value.draft, null, false);
                     }
@@ -13659,7 +13621,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 if (value == null) {
                     value = 0;
                 }
-                reconcileLoadedDialogReadState(d);
+                dialogs_read_inbox_max.put(d.id, Math.max(value, d.read_inbox_max_id));
 
                 value = dialogs_read_outbox_max.get(d.id);
                 if (value == null) {
@@ -13689,11 +13651,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         Integer value = read_max.get(message.dialog_id);
                         if (value == null) {
                             value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
-                            if (read_max == dialogs_read_inbox_max && !DialogObject.isEncryptedDialog(message.dialog_id)) {
-                                    value = read_max.merge(message.dialog_id, value, Math::max);
-                                } else {
-                                    read_max.put(message.dialog_id, value);
-                                }
+                            read_max.put(message.dialog_id, value);
                         }
                         message.unread = value < message.id;
                     }
@@ -13748,7 +13706,6 @@ public class MessagesController extends BaseController implements NotificationCe
                     long key = new_dialogs_dict.keyAt(a);
                     TLRPC.Dialog value = new_dialogs_dict.valueAt(a);
                     TLRPC.Dialog currentDialog = dialogs_dict.get(key);
-                    reconcileDialogReadState(value, currentDialog);
                     if (migrate && currentDialog != null) {
                         currentDialog.folder_id = value.folder_id;
                     }
@@ -13996,36 +13953,6 @@ public class MessagesController extends BaseController implements NotificationCe
                 reloadMentionsCountForChannel(getInputPeer(dialogId), 0);
             }
         });
-    }
-
-    /** Called only by the background dialog-loading passes, before their UI callbacks. */
-    private void reconcileLoadedDialogReadState(TLRPC.Dialog dialog) {
-        if (dialog instanceof TLRPC.TL_dialog && !DialogObject.isEncryptedDialog(dialog.id)
-                && !dialogs_read_inbox_max.containsKey(dialog.id)) {
-            int persistedMax = getMessagesStorage().getDialogReadMax(false, dialog.id);
-            dialogs_read_inbox_max.merge(dialog.id, persistedMax, Math::max);
-        }
-        reconcileDialogReadState(dialog, null);
-    }
-
-    private void reconcileDialogReadState(TLRPC.Dialog dialog, TLRPC.Dialog previous) {
-        if (!(dialog instanceof TLRPC.TL_dialog) || DialogObject.isEncryptedDialog(dialog.id)) {
-            return;
-        }
-        Integer localMax = dialogs_read_inbox_max.get(dialog.id);
-        if (localMax == null) {
-            localMax = previous != null ? previous.read_inbox_max_id : 0;
-        }
-        final int remoteMax = DialogReadState.cloudReadMax(dialog.read_inbox_max_id, dialog.top_message);
-        final int effectiveMax = dialogs_read_inbox_max.merge(dialog.id, remoteMax, Math::max);
-        if (effectiveMax > remoteMax) {
-            localMax = Math.max(localMax, effectiveMax);
-        }
-        dialog.unread_count = DialogReadState.unreadCount(remoteMax,
-                dialog.top_message, dialog.unread_count, localMax,
-                previous == null ? 0 : previous.top_message,
-                previous == null ? -1 : previous.unread_count);
-        dialog.read_inbox_max_id = effectiveMax;
     }
 
     public void processDialogsUpdateRead(final LongSparseIntArray dialogsToUpdate, LongSparseIntArray dialogsMentionsToUpdate) {
@@ -14300,13 +14227,19 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
                 }
                 new_dialogs_dict.put(d.id, d);
+                dialogsToUpdate.put(d.id, d.unread_count);
 
                 Integer value = dialogs_read_inbox_max.get(d.id);
                 if (value == null) {
                     value = 0;
                 }
-                reconcileLoadedDialogReadState(d);
-                dialogsToUpdate.put(d.id, d.unread_count);
+                if (d.read_inbox_max_id > d.top_message) {
+                    d.read_inbox_max_id = d.top_message;
+                }
+                if (value > d.top_message) {
+                    value = d.top_message;
+                }
+                dialogs_read_inbox_max.put(d.id, Math.max(value, d.read_inbox_max_id));
 
                 value = dialogs_read_outbox_max.get(d.id);
                 if (value == null) {
@@ -14326,8 +14259,6 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
                     TLRPC.Dialog value = new_dialogs_dict.valueAt(a);
                     TLRPC.Dialog currentDialog = dialogs_dict.get(key);
-                    reconcileDialogReadState(value, currentDialog);
-                    dialogsToUpdate.put(key, value.unread_count);
                     ArrayList<MessageObject> newMsgs = new_dialogMessage.get(value.id);
                     if (currentDialog == null) {
                         if (BuildVars.LOGS_ENABLED) {
@@ -14581,7 +14512,7 @@ public class MessagesController extends BaseController implements NotificationCe
         if (messageObject.getId() < 0) {
             markMessageAsRead(messageObject.getDialogId(), messageObject.messageOwner.random_id, Integer.MIN_VALUE);
         } else {
-            if (!AyuState.isAllowReadPacket(currentAccount, dialogId)) {
+            if (!AyuState.isAllowReadPacket(dialogId)) {
                 return;
             }
             if (messageObject.messageOwner.peer_id.channel_id != 0) {
@@ -14609,7 +14540,7 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public void markMentionMessageAsRead(int mid, long channelId, long did) {
         getMessagesStorage().markMentionMessageAsRead(-channelId, mid, did);
-        if (!AyuState.isAllowReadPacket(currentAccount, did)) {
+        if (!AyuState.isAllowReadPacket(did)) {
             return;
         }
         if (channelId != 0) {
@@ -14668,7 +14599,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 return;
             }
         }
-        final boolean ayuAllowRead = AyuState.isAllowReadPacket(currentAccount, dialogId);
+        final boolean ayuAllowRead = AyuState.isAllowReadPacket(dialogId);
         long newTaskId;
         if (taskId == 0 && ayuAllowRead) {
             NativeByteBuffer data = null;
@@ -14736,7 +14667,7 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         ArrayList<Long> randomIds = new ArrayList<>();
         randomIds.add(randomId);
-        if (AyuState.isAllowReadPacket(currentAccount, dialogId)) {
+        if (AyuState.isAllowReadPacket(dialogId)) {
             getSecretChatHelper().sendMessagesReadMessage(chat, randomIds, null);
         }
         if (ttl > 0) {
@@ -14746,18 +14677,17 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     private void completeReadTask(ReadTask task) {
-        if (task.ownerId == 0 || task.ownerId != getUserConfig().getClientUserId()) return;
         if (getUserConfig().isBotAccount()) {
             // messages.readHistory & co. are bot-forbidden; the dialog is already read locally
             return;
         }
-        if (!AyuState.isAllowReadPacket(currentAccount, task.dialogId)) {
+        if (!AyuState.isAllowReadPacket(task.dialogId)) {
             // ghost mode: the dialog is already marked as read locally, remember the receipt in case
             // "mark read after send" / "read on interact" wants to replay it later
-            AyuState.saveSuppressedRead(currentAccount, task.dialogId, task.replyId, task.monoForumPeerId, task.maxId, task.maxDate);
+            AyuState.saveSuppressedRead(task.dialogId, task.replyId, task.monoForumPeerId, task.maxId, task.maxDate);
             return;
         }
-        AyuState.clearSuppressedReads(currentAccount, task.dialogId, task.replyId);
+        AyuState.clearSuppressedReads(task.dialogId, task.replyId);
         if (task.replyId != 0 && task.monoForumPeerId == 0) {
             TLRPC.TL_messages_readDiscussion req = new TLRPC.TL_messages_readDiscussion();
             req.msg_id = (int) task.replyId;
@@ -14867,10 +14797,8 @@ public class MessagesController extends BaseController implements NotificationCe
         if (dialogId == 0) {
             return;
         }
-        final long ownerId = org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).ownerId;
         Utilities.stageQueue.postRunnable(() -> {
-            if (ownerId == 0 || org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).ownerId != ownerId) return;
-            AyuState.setAllowReadPacket(currentAccount, dialogId, true, false);
+            AyuState.setAllowReadPacket(dialogId, true, false);
             try {
                 ReadTask currentReadTask = readTasksMap.get(dialogId);
                 if (currentReadTask != null) {
@@ -14888,14 +14816,13 @@ public class MessagesController extends BaseController implements NotificationCe
                     a--;
                     completeReadTask(task);
                 }
-                ArrayList<AyuState.SuppressedRead> suppressed = AyuState.takeSuppressedReads(currentAccount, dialogId);
+                ArrayList<AyuState.SuppressedRead> suppressed = AyuState.takeSuppressedReads(dialogId);
                 for (int a = 0; a < suppressed.size(); a++) {
                     AyuState.SuppressedRead read = suppressed.get(a);
                     if (read.maxId == 0 && read.maxDate == 0 || DialogObject.isEncryptedDialog(read.dialogId)) {
                         continue;
                     }
                     ReadTask task = new ReadTask();
-                    task.ownerId = ownerId;
                     task.dialogId = read.dialogId;
                     task.replyId = read.replyId;
                     task.monoForumPeerId = read.monoForumPeerId;
@@ -14904,7 +14831,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     completeReadTask(task);
                 }
             } finally {
-                AyuState.setAllowReadPacket(currentAccount, dialogId, false, true);
+                AyuState.setAllowReadPacket(dialogId, false, true);
             }
         });
     }
@@ -14967,7 +14894,7 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         // the receipt is not queued anywhere, so a suppressed read of the same dialog must not replay it
-        AyuState.clearSuppressedReads(currentAccount, dialogId, threadId);
+        AyuState.clearSuppressedReads(dialogId, threadId);
         getConnectionsManager().sendRequest(req, (response, error) -> {
             if (error == null && response instanceof TLRPC.TL_messages_affectedMessages) {
                 TLRPC.TL_messages_affectedMessages res = (TLRPC.TL_messages_affectedMessages) response;
@@ -15041,7 +14968,7 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         getMessagesStorage().resetMentionsCount(dialogId, topicId, 0);
-        if (!AyuState.isAllowReadPacket(currentAccount, dialogId)) {
+        if (!AyuState.isAllowReadPacket(dialogId)) {
             return;
         }
         TLRPC.TL_messages_readMentions req = new TLRPC.TL_messages_readMentions();
@@ -15054,16 +14981,6 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void markDialogAsRead(long dialogId, int maxPositiveId, int maxNegativeId, int maxDate, boolean popup, long threadId, int countDiff, boolean readNow, int scheduledCount) {
-        final long ownerId = getUserConfig().getClientUserId();
-        if (ownerId == 0) return;
-        final int readMaxId;
-        if (threadId == 0 && maxPositiveId == Integer.MAX_VALUE && !DialogObject.isEncryptedDialog(dialogId)) {
-            TLRPC.Dialog currentDialog = dialogs_dict.get(dialogId);
-            readMaxId = currentDialog == null ? dialogs_read_inbox_max.getOrDefault(dialogId, 0)
-                    : Math.max(0, currentDialog.top_message);
-        } else {
-            readMaxId = maxPositiveId;
-        }
         boolean createReadTask;
 
         if (threadId != 0) {
@@ -15071,28 +14988,26 @@ public class MessagesController extends BaseController implements NotificationCe
         } else {
             boolean countMessages = getNotificationsController().showBadgeMessages;
             if (!DialogObject.isEncryptedDialog(dialogId)) {
-                if (readMaxId == 0) {
+                if (maxPositiveId == 0) {
                     return;
                 }
                 Integer value = dialogs_read_inbox_max.get(dialogId);
                 if (value == null) {
                     value = 0;
                 }
-                dialogs_read_inbox_max.merge(dialogId, readMaxId, Math::max);
+                dialogs_read_inbox_max.put(dialogId, Math.max(value, maxPositiveId));
 
-                getMessagesStorage().processPendingRead(dialogId, readMaxId, maxNegativeId, scheduledCount);
+                getMessagesStorage().processPendingRead(dialogId, maxPositiveId, maxNegativeId, scheduledCount);
                 getMessagesStorage().getStorageQueue().postRunnable(() -> AndroidUtilities.runOnUIThread(() -> {
-                    if (ownerId != getUserConfig().getClientUserId()) return;
                     TLRPC.Dialog dialog = dialogs_dict.get(dialogId);
                     if (dialog != null) {
-                        dialog.read_inbox_max_id = Math.max(dialog.read_inbox_max_id, readMaxId);
                         int prevCount = dialog.unread_count;
-                        if (countDiff == 0 || readMaxId >= dialog.top_message) {
+                        if (countDiff == 0 || maxPositiveId >= dialog.top_message) {
                             dialog.unread_count = 0;
                         } else {
                             dialog.unread_count = Math.max(dialog.unread_count - countDiff, 0);
-                            if (readMaxId != Integer.MIN_VALUE && dialog.unread_count > dialog.top_message - readMaxId) {
-                                dialog.unread_count = dialog.top_message - readMaxId;
+                            if (maxPositiveId != Integer.MIN_VALUE && dialog.unread_count > dialog.top_message - maxPositiveId) {
+                                dialog.unread_count = dialog.top_message - maxPositiveId;
                             }
                         }
 
@@ -15116,12 +15031,12 @@ public class MessagesController extends BaseController implements NotificationCe
                         getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_READ_DIALOG_MESSAGE);
                     }
                     if (!popup) {
-                        getNotificationsController().processReadMessages(null, dialogId, 0, readMaxId, false);
+                        getNotificationsController().processReadMessages(null, dialogId, 0, maxPositiveId, false);
                         LongSparseIntArray dialogsToUpdate = new LongSparseIntArray(1);
                         dialogsToUpdate.put(dialogId, 0);
                         getNotificationsController().processDialogsUpdateRead(dialogsToUpdate);
                     } else {
-                        getNotificationsController().processReadMessages(null, dialogId, 0, readMaxId, true);
+                        getNotificationsController().processReadMessages(null, dialogId, 0, maxPositiveId, true);
                         LongSparseIntArray dialogsToUpdate = new LongSparseIntArray(1);
                         dialogsToUpdate.put(dialogId, -1);
                         getNotificationsController().processDialogsUpdateRead(dialogsToUpdate);
@@ -15136,9 +15051,8 @@ public class MessagesController extends BaseController implements NotificationCe
                 createReadTask = true;
 
                 TLRPC.EncryptedChat chat = getEncryptedChat(DialogObject.getEncryptedChatId(dialogId));
-                getMessagesStorage().processPendingRead(dialogId, readMaxId, maxNegativeId, scheduledCount);
+                getMessagesStorage().processPendingRead(dialogId, maxPositiveId, maxNegativeId, scheduledCount);
                 getMessagesStorage().getStorageQueue().postRunnable(() -> AndroidUtilities.runOnUIThread(() -> {
-                    if (ownerId != getUserConfig().getClientUserId()) return;
                     getNotificationsController().processReadMessages(null, dialogId, maxDate, 0, popup);
                     TLRPC.Dialog dialog = dialogs_dict.get(dialogId);
                     if (dialog != null) {
@@ -15191,7 +15105,6 @@ public class MessagesController extends BaseController implements NotificationCe
 
         if (createReadTask) {
             Utilities.stageQueue.postRunnable(() -> {
-                if (ownerId != getUserConfig().getClientUserId()) return;
                 ReadTask currentReadTask;
                 if (threadId != 0) {
                     currentReadTask = threadsReadTasksMap.get(dialogId + "_" + threadId);
@@ -15200,7 +15113,6 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
                 if (currentReadTask == null) {
                     currentReadTask = new ReadTask();
-                    currentReadTask.ownerId = ownerId;
                     currentReadTask.dialogId = dialogId;
                     currentReadTask.replyId = threadId;
                     currentReadTask.monoForumPeerId = monoForumPeerId;
@@ -15215,8 +15127,8 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
                     }
                 }
-                currentReadTask.maxDate = Math.max(currentReadTask.maxDate, maxDate);
-                currentReadTask.maxId = Math.max(currentReadTask.maxId, readMaxId);
+                currentReadTask.maxDate = maxDate;
+                currentReadTask.maxId = maxPositiveId;
                 if (readNow) {
                     completeReadTask(currentReadTask);
                 }
@@ -16569,7 +16481,6 @@ public class MessagesController extends BaseController implements NotificationCe
                 if (account != -1) {
                     UserConfig.selectedAccount = account;
                     UserConfig.getInstance(0).saveConfig(false);
-                    NotificationsController.refreshAccountNotifications();
                     if (LaunchActivity.instance != null) {
                         LaunchActivity.instance.clearFragments();
                     }
@@ -16625,173 +16536,16 @@ public class MessagesController extends BaseController implements NotificationCe
         });
     }
 
-    private boolean isCurrentBotSync(int generation, long userId) {
-        return generation == botSyncGeneration && getUserConfig().isBotAccount()
-                && getUserConfig().isClientActivated() && getUserConfig().getClientUserId() == userId;
-    }
-
-    private void clearBotSyncRetry() {
-        if (botSyncRetryRunnable != null) {
-            Utilities.stageQueue.cancelRunnable(botSyncRetryRunnable);
-            botSyncRetryRunnable = null;
-        }
-        botSyncRetryAttempt = 0;
-    }
-
-    private void checkBotUpdates() {
-        if (botSyncRequestStartedAt != 0 && SystemClock.elapsedRealtime() - botSyncRequestStartedAt >= 120_000) {
-            // Generic RPCs have no native retry-count deadline. Cancel this request before
-            // releasing the latch, and invalidate a response already queued for Java delivery.
-            botSyncRequestSerial++;
-            if (botSyncRequestToken != 0) {
-                getConnectionsManager().cancelRequest(botSyncRequestToken, true);
-            }
-            finishBotSyncRequest();
-            gettingDifference = false;
-            updatingState = false;
-            getConnectionsManager().setIsUpdating(false);
-            TLRPC.TL_error timeout = new TLRPC.TL_error();
-            timeout.code = -1;
-            timeout.text = "BOT_SYNC_TIMEOUT";
-            retryBotSync(timeout);
-            return;
-        }
-        // A quiet socket does not prove that this bot has received every update. Reconcile only
-        // the visible account, using the existing stage timer rather than another polling task.
-        boolean visible = getUserConfig().isBotAccount() && getUserConfig().isClientActivated()
-                && currentAccount == UserConfig.selectedAccount && ApplicationLoader.isScreenOn
-                && !ApplicationLoader.mainInterfacePausedStageQueue
-                && getConnectionsManager().getPauseTime() == 0;
-        boolean active = visible && getConnectionsManager().getConnectionState() == ConnectionsManager.ConnectionStateConnected;
-        if (!active) {
-            // Our own difference request temporarily reports ConnectionStateUpdating.
-            if (!visible || getConnectionsManager().getConnectionState() != ConnectionsManager.ConnectionStateUpdating) {
-                botSyncWasActive = false;
-            }
-            return;
-        }
-        long now = SystemClock.elapsedRealtime();
-        if (!botSyncWasActive) {
-            botSyncWasActive = true;
-            botSyncNextCheckTime = Math.min(botSyncNextCheckTime, now);
-            if (botSyncRetryRunnable == null) {
-                botSyncRetryAttempt = 0;
-            }
-        }
-        if (botSyncPermanentError || now < botSyncRetryNotBefore || now < botSyncNextCheckTime
-                || gettingDifference || updatingState || botSyncRetryRunnable != null) {
-            return;
-        }
-        getDifference();
-    }
-
-    private int beginBotSyncRequest() {
-        botSyncRequestStartedAt = SystemClock.elapsedRealtime();
-        return ++botSyncRequestSerial;
-    }
-
-    private void finishBotSyncRequest() {
-        botSyncRequestToken = 0;
-        botSyncRequestStartedAt = 0;
-    }
-
-    private void retryBotSync(TLRPC.TL_error error) {
-        // Transport owns reconnects/timeouts. Only retry returned transient failures, with a bound.
-        if (error != null && error.code >= 0 && error.code < 500) {
-            clearBotSyncRetry();
-            if (error.code == 420) {
-                long waitSeconds = 300;
-                if (error.text != null && error.text.startsWith("FLOOD_WAIT_")) {
-                    try {
-                        waitSeconds = Math.max(60, Long.parseLong(error.text.substring(11)));
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
-                botSyncRetryNotBefore = SystemClock.elapsedRealtime() + Math.min(waitSeconds, Integer.MAX_VALUE) * 1000L;
-            } else {
-                botSyncPermanentError = true;
-            }
-            return;
-        }
-        if (botSyncRetryAttempt >= 3) {
-            // A real foreground/reconnect transition can renew this bounded attempt series.
-            botSyncNextCheckTime = Long.MAX_VALUE;
-        }
-        if (!getUserConfig().isBotAccount() || !getUserConfig().isClientActivated()
-                || error == null
-                || botSyncRetryRunnable != null || botSyncRetryAttempt >= 3) {
-            return;
-        }
-        final int generation = botSyncGeneration;
-        final long userId = getUserConfig().getClientUserId();
-        long delay = 1000L << botSyncRetryAttempt++;
-        botSyncRetryRunnable = () -> {
-            botSyncRetryRunnable = null;
-            if (isCurrentBotSync(generation, userId) && !gettingDifference && !updatingState) {
-                if (getConnectionsManager().getConnectionState() == ConnectionsManager.ConnectionStateConnected) {
-                    getDifference();
-                } else {
-                    botSyncWasActive = false;
-                    botSyncNextCheckTime = 0;
-                }
-            }
-        };
-        Utilities.stageQueue.postRunnable(botSyncRetryRunnable, delay);
-    }
-
-    private void recoverBotDifference(int requestedPts, int newPts, int date, int qts) {
-        // No messages accompanied this checkpoint. Saving it would permanently skip the backlog:
-        // bots cannot rebuild it through messages.getDialogs/getHistory.
-        gettingDifference = false;
-        getConnectionsManager().setIsUpdating(false);
-        TLRPC.TL_error error = new TLRPC.TL_error();
-        error.code = -1;
-        error.text = "BOT_DIFFERENCE_NO_PROGRESS";
-        retryBotSync(error);
-    }
-
     public void loadCurrentState() {
-        if (getUserConfig().isBotAccount() && (botSyncPermanentError || SystemClock.elapsedRealtime() < botSyncRetryNotBefore)) {
-            return;
-        }
         if (updatingState) {
             return;
         }
-        if (getUserConfig().isBotAccount() && getMessagesStorage().getLastPtsValue() != 0) {
-            getDifference();
-            return;
-        }
         updatingState = true;
-        final boolean botSync = getUserConfig().isBotAccount();
-        if (botSync) {
-            botSyncNextCheckTime = SystemClock.elapsedRealtime() + 60_000;
-        }
-        final int generation = botSyncGeneration;
-        final long userId = getUserConfig().getClientUserId();
         TLRPC.TL_updates_getState req = new TLRPC.TL_updates_getState();
-        final int requestSerial = botSync ? beginBotSyncRequest() : 0;
-        int requestToken = getConnectionsManager().sendRequest(req, (response, error) -> {
-            if (botSync && (!isCurrentBotSync(generation, userId) || requestSerial != botSyncRequestSerial)) {
-                return;
-            }
-            if (botSync) {
-                finishBotSyncRequest();
-                if (error == null && !(response instanceof TLRPC.TL_updates_state)) {
-                    error = new TLRPC.TL_error();
-                    error.code = -1;
-                    error.text = "BOT_SYNC_INVALID_STATE";
-                }
-            }
+        getConnectionsManager().sendRequest(req, (response, error) -> {
             updatingState = false;
             if (error == null) {
-                if (botSync) {
-                    clearBotSyncRetry();
-                }
                 TLRPC.TL_updates_state res = (TLRPC.TL_updates_state) response;
-                if (botSync) {
-                    applyBotInitialState(res);
-                    return;
-                }
                 getMessagesStorage().setLastDateValue(res.date);
                 getMessagesStorage().setLastPtsValue(res.pts);
                 getMessagesStorage().setLastSeqValue(res.seq);
@@ -16801,54 +16555,11 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
                 getMessagesStorage().saveDiffParams(getMessagesStorage().getLastSeqValue(), getMessagesStorage().getLastPtsValue(), getMessagesStorage().getLastDateValue(), getMessagesStorage().getLastQtsValue());
             } else {
-                if (botSync) {
-                    retryBotSync(error);
-                } else if (error.code != 401) {
+                if (error.code != 401) {
                     loadCurrentState();
                 }
             }
-        }, botSync ? ConnectionsManager.RequestFlagFailOnServerErrors : 0);
-        if (botSync) {
-            botSyncRequestToken = requestToken;
-        }
-    }
-
-    private void applyBotInitialState(TLRPC.TL_updates_state state) {
-        // An update may arrive while getState is in flight. Preserve both an already applied
-        // checkpoint and the start of buffered sequences instead of marking their messages old.
-        if (getMessagesStorage().getLastPtsValue() != 0) {
-            getDifference();
-            return;
-        }
-        int pts = state.pts;
-        int seq = state.seq;
-        int qts = state.qts;
-        int date = state.date;
-        for (TLRPC.Updates update : updatesQueuePts) {
-            if (update.pts_count > 0) {
-                pts = Math.min(pts, Math.max(0, update.pts - update.pts_count));
-            }
-            if (update.date > 0) date = Math.min(date, update.date);
-        }
-        for (TLRPC.Updates update : updatesQueueSeq) {
-            if (getUpdateSeq(update) > 0) seq = Math.min(seq, getUpdateSeq(update) - 1);
-            if (update.date > 0) date = Math.min(date, update.date);
-        }
-        for (TLRPC.Updates update : updatesQueueQts) {
-            qts = Math.min(qts, Math.max(0, update.pts - update.updates.size()));
-            if (update.date > 0) date = Math.min(date, update.date);
-        }
-        getMessagesStorage().setLastPtsValue(pts);
-        getMessagesStorage().setLastSeqValue(seq);
-        getMessagesStorage().setLastQtsValue(qts);
-        getMessagesStorage().setLastDateValue(date);
-        for (int a = 0; a < 3; a++) {
-            processUpdatesQueue(a, 1);
-        }
-        getMessagesStorage().saveDiffParams(getMessagesStorage().getLastSeqValue(), getMessagesStorage().getLastPtsValue(), getMessagesStorage().getLastDateValue(), getMessagesStorage().getLastQtsValue());
-        if (pts != state.pts || seq != state.seq || qts != state.qts) {
-            getDifference();
-        }
+        });
     }
 
     private int getUpdateSeq(TLRPC.Updates updates) {
@@ -17045,12 +16756,7 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         final TLRPC.Message message = lastMessage.messageOwner;
-        final int generation = botSyncGeneration;
-        final long userId = getUserConfig().getClientUserId();
         Utilities.stageQueue.postRunnable(() -> {
-            if (!isCurrentBotSync(generation, userId)) {
-                return;
-            }
             try {
                 TLRPC.TL_dialog dialog = new TLRPC.TL_dialog();
                 dialog.id = dialogId;
@@ -17399,7 +17105,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                 Integer inboxValue = dialogs_read_inbox_max.get(dialogId);
                                 if (inboxValue == null) {
                                     inboxValue = getMessagesStorage().getDialogReadMax(false, dialogId);
-                                    inboxValue = dialogs_read_inbox_max.merge(dialogId, inboxValue, Math::max);
+                                    dialogs_read_inbox_max.put(dialogId, inboxValue);
                                 }
 
                                 Integer outboxValue = dialogs_read_outbox_max.get(dialogId);
@@ -17457,7 +17163,7 @@ public class MessagesController extends BaseController implements NotificationCe
                             Integer inboxValue = dialogs_read_inbox_max.get(dialogId);
                             if (inboxValue == null) {
                                 inboxValue = getMessagesStorage().getDialogReadMax(false, dialogId);
-                                inboxValue = dialogs_read_inbox_max.merge(dialogId, inboxValue, Math::max);
+                                dialogs_read_inbox_max.put(dialogId, inboxValue);
                             }
 
                             Integer outboxValue = dialogs_read_outbox_max.get(dialogId);
@@ -17532,9 +17238,6 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void getDifference(int pts, int date, int qts, boolean slice) {
-        if (getUserConfig().isBotAccount() && (botSyncPermanentError || SystemClock.elapsedRealtime() < botSyncRetryNotBefore || updatingState)) {
-            return;
-        }
         registerForPush(SharedConfig.pushType, SharedConfig.pushString);
         if (getMessagesStorage().getLastPtsValue() == 0) {
             loadCurrentState();
@@ -17544,29 +17247,16 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         gettingDifference = true;
-        final boolean botSync = getUserConfig().isBotAccount();
-        final int generation = botSyncGeneration;
-        final long userId = getUserConfig().getClientUserId();
         TLRPC.TL_updates_getDifference req = new TLRPC.TL_updates_getDifference();
         req.pts = pts;
         req.date = date;
         req.qts = qts;
-        if (botSync) {
-            botSyncNextCheckTime = SystemClock.elapsedRealtime() + 60_000;
-            // Omission also has a server-side total cap for large PTS. Keep normal server slices,
-            // but do not ask it to discard the backlog. Subtract PTS to avoid signed overflow.
-            req.flags |= 1;
-            req.pts_total_limit = Integer.MAX_VALUE - Math.max(0, pts);
-        }
         if (getDifferenceFirstSync) {
-            // A total limit deliberately discards a large backlog. Bots cannot refetch it as history.
-            if (!botSync) {
-                req.flags |= 1;
-                if (ApplicationLoader.isConnectedOrConnectingToWiFi()) {
-                    req.pts_total_limit = 5000;
-                } else {
-                    req.pts_total_limit = 1000;
-                }
+            req.flags |= 1;
+            if (ApplicationLoader.isConnectedOrConnectingToWiFi()) {
+                req.pts_total_limit = 5000;
+            } else {
+                req.pts_total_limit = 1000;
             }
             getDifferenceFirstSync = false;
         }
@@ -17578,26 +17268,10 @@ public class MessagesController extends BaseController implements NotificationCe
             FileLog.d("getDifference: isUpdating = true");
         }
         getConnectionsManager().setIsUpdating(true);
-        final int requestSerial = botSync ? beginBotSyncRequest() : 0;
-        int requestToken = getConnectionsManager().sendRequest(req, (response, error) -> {
-            if (botSync && (!isCurrentBotSync(generation, userId) || requestSerial != botSyncRequestSerial)) {
-                return;
-            }
-            if (botSync) {
-                finishBotSyncRequest();
-                if (error == null && !(response instanceof TLRPC.updates_Difference)) {
-                    error = new TLRPC.TL_error();
-                    error.code = -1;
-                    error.text = "BOT_SYNC_INVALID_DIFFERENCE";
-                }
-            }
+        getConnectionsManager().sendRequest(req, (response, error) -> {
             if (error == null) {
                 TLRPC.updates_Difference res = (TLRPC.updates_Difference) response;
                 if (res instanceof TLRPC.TL_updates_differenceTooLong) {
-                    if (botSync) {
-                        recoverBotDifference(pts, res.pts, date, qts);
-                        return;
-                    }
                     AndroidUtilities.runOnUIThread(() -> {
                         loadedFullUsers.clear();
                         loadedFullChats.clear();
@@ -17605,7 +17279,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         getStoriesController().cleanup();
                     });
                 } else {
-                    if (!botSync && res instanceof TLRPC.TL_updates_differenceSlice) {
+                    if (res instanceof TLRPC.TL_updates_differenceSlice) {
                         getDifference(res.intermediate_state.pts, res.intermediate_state.date, res.intermediate_state.qts, true);
                     }
 
@@ -17646,9 +17320,6 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
 
                     AndroidUtilities.runOnUIThread(() -> {
-                        if (botSync && !isCurrentBotSync(generation, userId)) {
-                            return;
-                        }
                         loadedFullUsers.clear();
                         loadedFullChats.clear();
                         putUsers(res.users, false);
@@ -17656,9 +17327,6 @@ public class MessagesController extends BaseController implements NotificationCe
                     });
 
                     getMessagesStorage().getStorageQueue().postRunnable(() -> {
-                        if (botSync && !isCurrentBotSync(generation, userId)) {
-                            return;
-                        }
                         getMessagesStorage().putUsersAndChats(res.users, res.chats, true, false);
                         if (!msgUpdates.isEmpty()) {
                             SparseArray<long[]> corrected = new SparseArray<>();
@@ -17672,9 +17340,6 @@ public class MessagesController extends BaseController implements NotificationCe
 
                             if (corrected.size() != 0) {
                                 AndroidUtilities.runOnUIThread(() -> {
-                                    if (botSync && !isCurrentBotSync(generation, userId)) {
-                                        return;
-                                    }
                                     for (int a = 0; a < corrected.size(); a++) {
                                         int newId = corrected.keyAt(a);
                                         long[] ids = corrected.valueAt(a);
@@ -17687,9 +17352,6 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
 
                         Utilities.stageQueue.postRunnable(() -> {
-                            if (botSync && !isCurrentBotSync(generation, userId)) {
-                                return;
-                            }
                             if (!res.new_messages.isEmpty() || !res.new_encrypted_messages.isEmpty()) {
                                 LongSparseArray<ArrayList<MessageObject>> messages = new LongSparseArray<>();
                                 for (int b = 0; b < res.new_encrypted_messages.size(); b++) {
@@ -17727,11 +17389,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                             Integer value = read_max.get(message.dialog_id);
                                             if (value == null) {
                                                 value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
-                                                if (read_max == dialogs_read_inbox_max && !DialogObject.isEncryptedDialog(message.dialog_id)) {
-                                    value = read_max.merge(message.dialog_id, value, Math::max);
-                                } else {
-                                    read_max.put(message.dialog_id, value);
-                                }
+                                                read_max.put(message.dialog_id, value);
                                             }
                                             message.unread = value < message.id;
                                         }
@@ -17758,15 +17416,8 @@ public class MessagesController extends BaseController implements NotificationCe
                                 }
 
                                 getMessagesStorage().getStorageQueue().postRunnable(() -> {
-                                    if (botSync && !isCurrentBotSync(generation, userId)) {
-                                        return;
-                                    }
                                     if (!pushMessages.isEmpty()) {
-                                        AndroidUtilities.runOnUIThread(() -> {
-                                            if (!botSync || isCurrentBotSync(generation, userId)) {
-                                                getNotificationsController().processNewMessages(pushMessages, !(res instanceof TLRPC.TL_updates_differenceSlice), false, null);
-                                            }
-                                        });
+                                        AndroidUtilities.runOnUIThread(() -> getNotificationsController().processNewMessages(pushMessages, !(res instanceof TLRPC.TL_updates_differenceSlice), false, null));
                                     }
                                     getMessagesStorage().putMessages(res.new_messages, true, false, false, getDownloadController().getAutodownloadMask(), 0, 0);
 
@@ -17775,9 +17426,6 @@ public class MessagesController extends BaseController implements NotificationCe
                                         ArrayList<MessageObject> arr = messages.valueAt(a);
                                         getMediaDataController().loadReplyMessagesForMessages(arr, dialogId, 0, 0, () -> {
                                             AndroidUtilities.runOnUIThread(() -> {
-                                                if (botSync && !isCurrentBotSync(generation, userId)) {
-                                                    return;
-                                                }
                                                 updateInterfaceWithMessages(dialogId, arr, 0);
                                                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
                                             });
@@ -17789,17 +17437,10 @@ public class MessagesController extends BaseController implements NotificationCe
                             }
 
                             if (!res.other_updates.isEmpty()) {
-                                boolean applied = processUpdateArray(res.other_updates, res.users, res.chats, true, 0);
-                                if (botSync && !applied) {
-                                    recoverBotDifference(pts, pts, date, qts);
-                                    return;
-                                }
+                                processUpdateArray(res.other_updates, res.users, res.chats, true, 0);
                             }
 
                             if (res instanceof TLRPC.TL_updates_difference) {
-                                if (botSync) {
-                                    clearBotSyncRetry();
-                                }
                                 gettingDifference = false;
                                 getMessagesStorage().setLastSeqValue(res.state.seq);
                                 getMessagesStorage().setLastDateValue(res.state.date);
@@ -17815,9 +17456,6 @@ public class MessagesController extends BaseController implements NotificationCe
                                 getMessagesStorage().setLastPtsValue(res.intermediate_state.pts);
                                 getMessagesStorage().setLastQtsValue(res.intermediate_state.qts);
                             } else if (res instanceof TLRPC.TL_updates_differenceEmpty) {
-                                if (botSync) {
-                                    clearBotSyncRetry();
-                                }
                                 gettingDifference = false;
                                 getMessagesStorage().setLastSeqValue(res.seq);
                                 getMessagesStorage().setLastDateValue(res.date);
@@ -17828,13 +17466,6 @@ public class MessagesController extends BaseController implements NotificationCe
                                 }
                             }
                             getMessagesStorage().saveDiffParams(getMessagesStorage().getLastSeqValue(), getMessagesStorage().getLastPtsValue(), getMessagesStorage().getLastDateValue(), getMessagesStorage().getLastQtsValue());
-                            if (botSync) {
-                                acknowledgeBotQts(qts);
-                            }
-                            if (botSync && res instanceof TLRPC.TL_updates_differenceSlice) {
-                                // Commit this slice before the next response can advance the bot checkpoint.
-                                getDifference(res.intermediate_state.pts, res.intermediate_state.date, res.intermediate_state.qts, true);
-                            }
                             if (BuildVars.LOGS_ENABLED) {
                                 FileLog.d("received difference with date = " + getMessagesStorage().getLastDateValue() + " pts = " + getMessagesStorage().getLastPtsValue() + " seq = " + getMessagesStorage().getLastSeqValue() + " messages = " + res.new_messages.size() + " users = " + res.users.size() + " chats = " + res.chats.size() + " other updates = " + res.other_updates.size());
                             }
@@ -17845,14 +17476,8 @@ public class MessagesController extends BaseController implements NotificationCe
                 gettingDifference = false;
                 getConnectionsManager().setIsUpdating(false);
                 FileLog.d("received: isUpdating = false");
-                if (botSync) {
-                    retryBotSync(error);
-                }
             }
-        }, botSync ? ConnectionsManager.RequestFlagFailOnServerErrors : 0);
-        if (botSync) {
-            botSyncRequestToken = requestToken;
-        }
+        });
     }
 
     public void markDialogAsUnread(long dialogId, TLRPC.InputPeer peer, long taskId) {
@@ -18194,7 +17819,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (value == null) {
                         value = 0;
                     }
-                    reconcileLoadedDialogReadState(d);
+                    dialogs_read_inbox_max.put(d.id, Math.max(value, d.read_inbox_max_id));
 
                     value = dialogs_read_outbox_max.get(d.id);
                     if (value == null) {
@@ -18466,7 +18091,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 update instanceof TL_update.TL_updateReadHistoryOutbox || update instanceof TL_update.TL_updateDeleteMessages || update instanceof TL_update.TL_updateWebPage ||
                 update instanceof TL_update.TL_updateEditMessage || update instanceof TL_update.TL_updateFolderPeers || update instanceof TL_update.TL_updatePinnedMessages) {
             return 0;
-        } else if (update instanceof TL_update.TL_updateNewEncryptedMessage || isBotQtsUpdate(update)) {
+        } else if (update instanceof TL_update.TL_updateNewEncryptedMessage) {
             return 1;
         } else if (update instanceof TL_update.TL_updateNewChannelMessage || update instanceof TL_update.TL_updateDeleteChannelMessages || update instanceof TL_update.TL_updateEditChannelMessage ||
                 update instanceof TL_update.TL_updateChannelWebPage || update instanceof TL_update.TL_updatePinnedChannelMessages) {
@@ -18549,35 +18174,8 @@ public class MessagesController extends BaseController implements NotificationCe
     private static int getUpdateQts(TLRPC.Update update) {
         if (update instanceof TL_update.TL_updateNewEncryptedMessage) {
             return ((TL_update.TL_updateNewEncryptedMessage) update).qts;
-        } else if (update instanceof TL_bot_updates.BotQtsUpdate) {
-            return ((TL_bot_updates.BotQtsUpdate) update).qts;
-        } else if (update instanceof TL_update.TL_updateChannelParticipant) {
-            return ((TL_update.TL_updateChannelParticipant) update).qts;
-        } else if (update instanceof TL_update.TL_updateBotPurchasedPaidMedia) {
-            return ((TL_update.TL_updateBotPurchasedPaidMedia) update).qts;
-        } else if (update instanceof TL_update.TL_updateBotSubscriptionExpire) {
-            return ((TL_update.TL_updateBotSubscriptionExpire) update).qts;
-        } else if (update instanceof TL_update.TL_updateManagedBot) {
-            return ((TL_update.TL_updateManagedBot) update).qts;
         } else {
             return 0;
-        }
-    }
-
-    private static boolean isBotQtsUpdate(TLRPC.Update update) {
-        return update instanceof TL_bot_updates.BotQtsUpdate
-                || update instanceof TL_update.TL_updateChannelParticipant
-                || update instanceof TL_update.TL_updateBotPurchasedPaidMedia
-                || update instanceof TL_update.TL_updateBotSubscriptionExpire
-                || update instanceof TL_update.TL_updateManagedBot;
-    }
-
-    private void acknowledgeBotQts(int previousQts) {
-        int qts = getMessagesStorage().getLastQtsValue();
-        if (qts > previousQts) {
-            TLRPC.TL_messages_receivedQueue req = new TLRPC.TL_messages_receivedQueue();
-            req.max_qts = qts;
-            getConnectionsManager().sendRequest(req, null);
         }
     }
 
@@ -18632,15 +18230,6 @@ public class MessagesController extends BaseController implements NotificationCe
 
     // must be run from Utilities.stageQueue
     public void processUpdates(final TLRPC.Updates updates, boolean fromQueue) {
-        if (updates instanceof TLRPC.TL_updateShort && isBotQtsUpdate(updates.update)) {
-            // Bot QTS events also arrive in short envelopes. Use the same ordered/acknowledged
-            // queue as their full Updates form, without treating them as chat messages.
-            TLRPC.TL_updates expanded = new TLRPC.TL_updates();
-            expanded.updates.add(updates.update);
-            expanded.date = updates.date;
-            processUpdates(expanded, fromQueue);
-            return;
-        }
         ArrayList<Long> needGetChannelsDiff = null;
         boolean needGetDiff = false;
         boolean needReceivedQueue = false;
@@ -18780,11 +18369,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     Integer value = read_max.get(message.dialog_id);
                     if (value == null) {
                         value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
-                        if (read_max == dialogs_read_inbox_max && !DialogObject.isEncryptedDialog(message.dialog_id)) {
-                                    value = read_max.merge(message.dialog_id, value, Math::max);
-                                } else {
-                                    read_max.put(message.dialog_id, value);
-                                }
+                        read_max.put(message.dialog_id, value);
                     }
                     message.unread = value < message.id;
 
@@ -18961,13 +18546,10 @@ public class MessagesController extends BaseController implements NotificationCe
                             }
                         }
                         if (getMessagesStorage().getLastQtsValue() == 0 || getMessagesStorage().getLastQtsValue() + updatesNew.updates.size() == updatesNew.pts) {
-                            if (processUpdateArray(updatesNew.updates, updates.users, updates.chats, false, updates.date)) {
-                                getMessagesStorage().setLastQtsValue(updatesNew.pts);
-                                needReceivedQueue = true;
-                            } else {
-                                needGetDiff = true;
-                            }
-                        } else if (getMessagesStorage().getLastQtsValue() < updatesNew.pts) {
+                            processUpdateArray(updatesNew.updates, updates.users, updates.chats, false, updates.date);
+                            getMessagesStorage().setLastQtsValue(updatesNew.pts);
+                            needReceivedQueue = true;
+                        } else if (getMessagesStorage().getLastPtsValue() != updatesNew.pts) {
                             if (BuildVars.LOGS_ENABLED) {
                                 FileLog.d(update + " need get diff, qts: " + getMessagesStorage().getLastQtsValue() + " " + updatesNew.pts);
                             }
@@ -19442,11 +19024,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     Integer value = read_max.get(message.dialog_id);
                     if (value == null) {
                         value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
-                        if (read_max == dialogs_read_inbox_max && !DialogObject.isEncryptedDialog(message.dialog_id)) {
-                                    value = read_max.merge(message.dialog_id, value, Math::max);
-                                } else {
-                                    read_max.put(message.dialog_id, value);
-                                }
+                        read_max.put(message.dialog_id, value);
                     }
                     message.unread = !(value >= message.id || chat != null && ChatObject.isNotInChat(chat) || message.action instanceof TLRPC.TL_messageActionChatMigrateTo || message.action instanceof TLRPC.TL_messageActionChannelCreate);
                     if (message.dialog_id == clientUserId) {
@@ -19589,7 +19167,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 if (value == null) {
                     value = getMessagesStorage().getDialogReadMax(false, dialogId);
                 }
-                dialogs_read_inbox_max.merge(dialogId, update.max_id, Math::max);
+                dialogs_read_inbox_max.put(dialogId, Math.max(value, update.max_id));
             } else if (baseUpdate instanceof TL_update.TL_updateReadHistoryOutbox) {
                 TL_update.TL_updateReadHistoryOutbox update = (TL_update.TL_updateReadHistoryOutbox) baseUpdate;
                 long dialogId;
@@ -20110,7 +19688,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
                 markAsReadMessagesInbox.put(dialogId, update.max_id);
                 stillUnreadMessagesCount.put(dialogId, update.still_unread_count);
-                dialogs_read_inbox_max.merge(dialogId, update.max_id, Math::max);
+                dialogs_read_inbox_max.put(dialogId, Math.max(value, update.max_id));
                 FileLog.d("TL_updateReadChannelInbox " + dialogId + "  new unread = " + update.still_unread_count + " max id = " + update.max_id + " from get diff " + fromGetDifference);
             } else if (
                 baseUpdate instanceof TL_update.TL_updatePinnedForumTopic ||
@@ -20275,11 +19853,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 Integer value = read_max.get(message.dialog_id);
                 if (value == null) {
                     value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
-                    if (read_max == dialogs_read_inbox_max && !DialogObject.isEncryptedDialog(message.dialog_id)) {
-                                    value = read_max.merge(message.dialog_id, value, Math::max);
-                                } else {
-                                    read_max.put(message.dialog_id, value);
-                                }
+                    read_max.put(message.dialog_id, value);
                 }
                 message.unread = value < message.id;
                 if (message.dialog_id == clientUserId) {
@@ -22339,7 +21913,7 @@ public class MessagesController extends BaseController implements NotificationCe
             topicsController.markAllReactionsAsRead(-dialogId, topicId);
         }
         getMessagesStorage().updateUnreadReactionsCount(dialogId, topicId, 0);
-        if (!AyuState.isAllowReadPacket(currentAccount, dialogId)) {
+        if (!AyuState.isAllowReadPacket(dialogId)) {
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_REACTIONS_READ);
             return;
         }
@@ -22803,13 +22377,7 @@ public class MessagesController extends BaseController implements NotificationCe
             }
             TLRPC.Dialog dialogFinal = dialog;
             final MessageObject lastMessageFinal = lastMessage;
-            final boolean botDialog = getUserConfig().isBotAccount();
-            final int botGeneration = botSyncGeneration;
-            final long botUserId = getUserConfig().getClientUserId();
             getMessagesStorage().getDialogFolderId(dialogId, param -> {
-                if (botDialog && !isCurrentBotSync(botGeneration, botUserId)) {
-                    return;
-                }
                 if (param != -1) {
                     if (param != 0) {
                         dialogFinal.folder_id = param;
@@ -22917,7 +22485,6 @@ public class MessagesController extends BaseController implements NotificationCe
         ArrayList<TLRPC.Dialog> dialogs = filter.dialogs;
         ArrayList<TLRPC.Dialog> dialogsForward = filter.dialogsForward;
         dialogs.clear();
-        filter.visibleUnreadCount = 0;
         dialogsForward.clear();
         sortingDialogFilter = filter;
         try {
@@ -22927,7 +22494,6 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         for (int a = 0, N = allDialogs.size(); a < N; a++) {
             TLRPC.Dialog d = allDialogs.get(a);
-            if (HiddenChatsController.getInstance(currentAccount).isHidden(d.id)) continue;
             final boolean isCommunity = d instanceof TLRPC.TL_dialogCommunity;
             if (d instanceof TLRPC.TL_dialog || isCommunity) {
                 long dialogId = d.id;
@@ -22948,7 +22514,6 @@ public class MessagesController extends BaseController implements NotificationCe
                         dialogsForward.add(d);
                     }
                     dialogs.add(d);
-                    if (countsAsVisibleUnread(d, (filter.flags & DIALOG_FILTER_FLAG_EXCLUDE_MUTED) == 0)) filter.visibleUnreadCount++;
                 }
             }
         }
@@ -22958,7 +22523,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean canAddToForward(TLRPC.Dialog d) {
-        if (d == null || HiddenChatsController.getInstance(currentAccount).isHidden(d.id)) {
+        if (d == null) {
             return false;
         }
         if (DialogObject.isEncryptedDialog(d.id)) {
@@ -23096,32 +22661,6 @@ public class MessagesController extends BaseController implements NotificationCe
     }
     
     
-    private int visibleMainUnreadCount;
-    private int visibleArchiveUnreadCount;
-
-    public int getVisibleUnreadCount(int folderId) {
-        // Storage totals also include protected peers. The visible cache converges as dialogs load.
-        if (HiddenChatsController.getInstance(currentAccount).hasHiddenChats()) {
-            return folderId == 1 ? visibleArchiveUnreadCount : visibleMainUnreadCount;
-        }
-        return folderId == 1 ? getMessagesStorage().getArchiveUnreadCount() : getMessagesStorage().getMainUnreadCount();
-    }
-
-    public int getVisibleFilterUnreadCount(DialogFilter filter) {
-        if (filter == null) return 0;
-        return HiddenChatsController.getInstance(currentAccount).hasHiddenChats() ? filter.visibleUnreadCount : filter.unreadCount;
-    }
-
-    private boolean countsAsVisibleUnread(TLRPC.Dialog dialog, boolean includeMuted) {
-        if (!(dialog instanceof TLRPC.TL_dialog) || HiddenChatsController.getInstance(currentAccount).isHidden(dialog.id)
-                || getDialogUnreadCount(dialog) == 0 && !dialog.unread_mark && dialog.unread_mentions_count == 0) return false;
-        if (DialogObject.isChatDialog(dialog.id)) {
-            TLRPC.Chat chat = getChat(-dialog.id);
-            if (ChatObject.isNotInChat(chat) || ChatObject.isCommunity(chat)) return false;
-        }
-        return includeMuted || !isDialogMuted(dialog.id, 0) || dialog.unread_mentions_count > 0;
-    }
-
     public void sortDialogs(LongSparseArray<TLRPC.Chat> chatsDict) {
         if (chatsDict == null && ApplicationLoader.mainInterfacePaused) {
             return;
@@ -23149,8 +22688,6 @@ public class MessagesController extends BaseController implements NotificationCe
             }
         }
         unreadUnmutedDialogs = 0;
-        visibleMainUnreadCount = 0;
-        visibleArchiveUnreadCount = 0;
         boolean selfAdded = false;
         long selfId = getUserConfig().getClientUserId();
         if (selectedDialogFilter[0] != null || selectedDialogFilter[1] != null) {
@@ -23162,7 +22699,6 @@ public class MessagesController extends BaseController implements NotificationCe
                 ArrayList<TLRPC.Dialog> dialogs = sortingDialogFilter.dialogs;
                 ArrayList<TLRPC.Dialog> dialogsForward = sortingDialogFilter.dialogsForward;
                 dialogs.clear();
-                sortingDialogFilter.visibleUnreadCount = 0;
                 dialogsForward.clear();
                 try {
                     Collections.sort(allDialogs, dialogDateComparator);
@@ -23171,7 +22707,6 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
                 for (int a = 0, N = allDialogs.size(); a < N; a++) {
                     final TLRPC.Dialog d = allDialogs.get(a);
-                    if (HiddenChatsController.getInstance(currentAccount).isHidden(d.id)) continue;
                     final boolean isCommunity = d instanceof TLRPC.TL_dialogCommunity;
                     if (d instanceof TLRPC.TL_dialog || isCommunity) {
                         long dialogId = d.id;
@@ -23193,7 +22728,6 @@ public class MessagesController extends BaseController implements NotificationCe
                                 dialogsForward.add(d);
                             }
                             dialogs.add(d);
-                            if (countsAsVisibleUnread(d, (sortingDialogFilter.flags & DIALOG_FILTER_FLAG_EXCLUDE_MUTED) == 0)) sortingDialogFilter.visibleUnreadCount++;
                         }
                     }
                 }
@@ -23212,11 +22746,6 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         for (int a = 0, N = allDialogs.size(); a < N; a++) {
             TLRPC.Dialog d = allDialogs.get(a);
-            if (countsAsVisibleUnread(d, d.folder_id == 1 || getNotificationsController().showBadgeMuted)) {
-                if (d.folder_id == 1) visibleArchiveUnreadCount++;
-                else if (d.folder_id == 0) visibleMainUnreadCount++;
-            }
-            if (HiddenChatsController.getInstance(currentAccount).isHidden(d.id)) continue;
             if (d instanceof TLRPC.TL_dialog) {
                 ArrayList<MessageObject> messageObjects = dialogMessage.get(d.id);
                 if (messageObjects != null) {
@@ -23318,9 +22847,9 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         if (promoDialog != null && isLeftPromoChannel) {
             allDialogs.add(0, promoDialog);
-            if (!HiddenChatsController.getInstance(currentAccount).isHidden(promoDialog.id)) addDialogToItsFolder(-2, promoDialog);
+            addDialogToItsFolder(-2, promoDialog);
         }
-        if (!selfAdded && !HiddenChatsController.getInstance(currentAccount).isHidden(selfId)) {
+        if (!selfAdded) {
             TLRPC.User user = getUserConfig().getCurrentUser();
             if (user != null) {
                 TLRPC.Dialog dialog = new TLRPC.TL_dialog();

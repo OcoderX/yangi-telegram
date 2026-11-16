@@ -101,7 +101,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 public class RichEditor extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
-    private long conversionContentRevision;
 
     private CharSequence initialText;
     private TL_iv.RichMessage initialRichMessage;
@@ -478,7 +477,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
                 updateBlockButtons();
             }
             @Override
-            public void onContentChanged() { conversionContentRevision++; updateSendButtonLoading(); updateSendButtonLock(); scheduleLimitCheck(); }
+            public void onContentChanged() { updateSendButtonLoading(); updateSendButtonLock(); scheduleLimitCheck(); }
             @Override
             public void onHistoryChanged() { updateHistoryButtons(); updateSendButtonLock(); }
             @Override
@@ -668,7 +667,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
                 currentMenuVisible.dismiss();
                 currentMenuVisible = null;
             }
-            final boolean premiumLock = editingMessageObject != null && !MessagesController.getInstance(currentAccount).richEditorAllowed();
+            final boolean premiumLock = !MessagesController.getInstance(currentAccount).richEditorAllowed() && !UserConfig.getInstance(currentAccount).isPremium();
             final BlockRow row = listView.findFocusedRow();
             final ItemOptions o = ItemOptions.makeOptions(RichEditor.this, v, true).dontFocus();
             final ItemOptions headers = o.makeSwipeback();
@@ -1842,68 +1841,22 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
     }
 
     private boolean isSendLocked() {
-        return isRichSendLocked(currentAccount, listView.isLossy(), editingMessageObject != null);
-    }
-
-    public static boolean isRichSendLocked(int currentAccount, boolean lossy, boolean editing) {
-        return !MessagesController.getInstance(currentAccount).richEditorAllowed() && (lossy || editing);
+        return !MessagesController.getInstance(currentAccount).richEditorAllowed()
+            && !UserConfig.getInstance(currentAccount).isPremium()
+            && listView.isLossy();
     }
 
     private void updateSendButtonLock() {
         if (sendButton == null) return;
-        sendButton.setLocked(editingMessageObject != null && isSendLocked());
+        sendButton.setLocked(isSendLocked());
     }
 
     private void showConversionSheet() {
-        if (editingMessageObject != null) {
-            AlertsCreator.showSimpleAlert(this, getString(R.string.OxRichConversionEditUnavailableTitle),
-                getString(R.string.OxRichConversionEditUnavailable));
-            return;
-        }
-        if (listView == null || chatActivity == null || isFinished || isFinishing() || getContext() == null) return;
-        if (hasConversionUploads()) return;
-        final RichEditorListView sourceList = listView;
-        final ChatActivity sourceChat = chatActivity;
-        final int account = currentAccount;
-        final int chatAccount = sourceChat.getCurrentAccount();
-        final long dialog = sourceChat.getDialogId();
-        final long thread = sourceChat.getDraftThreadId();
-        final Context context = getContext();
-        final TL_iv.RichMessage rich = sourceList.buildDraftRichMessage();
-        if (rich == null) return;
-        if (listView.loadedRichMessage != null && listView.loadedRichMessage.documents != null) {
-            rich.documents.addAll(listView.loadedRichMessage.documents);
-        }
-        final RichMessageSimpleConversion.Result conversion = RichMessageSimpleConversion.convert(rich, SimpleConversionPreview.localizedLabels());
-        final long revision = conversionContentRevision;
-        SimpleConversionPreview.show(getContext(), conversion, () -> {
-            if (conversion.blocked || conversion.isEmpty() || editingMessageObject != null || listView != sourceList
-                || chatActivity != sourceChat || conversionContentRevision != revision || currentAccount != account
-                || sourceChat.getCurrentAccount() != chatAccount || sourceChat.getDialogId() != dialog
-                || sourceChat.getDraftThreadId() != thread || isFinished || isFinishing() || sourceChat.isFinished
-                || getContext() != context) return;
-            if (hasConversionUploads()) return;
-            if (messageSendPreview != null) {
-                messageSendPreview.dismiss(false);
-                messageSendPreview = null;
+        openConversionSheet(getContext(), listView::convertToSimple, () -> {
+            if (!UserConfig.getInstance(currentAccount).isPremium()) {
+                showDialog(new PremiumFeatureBottomSheet(this, PremiumPreviewFragment.PREMIUM_FEATURE_RICH_EDITOR, true));
             }
-            listView.applySimpleConversion(ordinaryConversionText(conversion));
         }, getResourceProvider());
-    }
-
-    private boolean hasConversionUploads() {
-        if (listView != null && listView.hasPendingUploads()) {
-            AlertsCreator.showSimpleAlert(this, getString(R.string.OxSimpleConversionTitle),
-                getString(R.string.OxRichConversionPendingUploads));
-            return true;
-        }
-        return false;
-    }
-
-    public static CharSequence ordinaryConversionText(RichMessageSimpleConversion.Result conversion) {
-        final android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder(conversion.text);
-        MessageObject.addEntitiesToText(text, new ArrayList<>(conversion.entities), false, false, false, false);
-        return text;
     }
 
     private void openLocationPicker(BlockRow row) {
@@ -2506,7 +2459,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
     }
 
     private void updatePremiumButtons() {
-        final boolean premiumLock = editingMessageObject != null && !MessagesController.getInstance(currentAccount).richEditorAllowed();
+        final boolean premiumLock = !MessagesController.getInstance(currentAccount).richEditorAllowed() && !UserConfig.getInstance(currentAccount).isPremium();
         for (Button b : premiumButtons) {
             b.setPremiumLocked(premiumLock);
         }

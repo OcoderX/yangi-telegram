@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="OxChannelStatsFailed">Не удалось загрузить статистику</string>
-    <string name="OxChannelStatsGraphEmpty">Данных для графика пока нет.</string>
-    <string name="OxChannelStatsGraphUnavailable">Этот график пока недоступен.</string>
-    <string name="OxChannelStatsAccess">Для просмотра этой статистики нужен доступ.</string>
-</resources>

@@ -16,7 +16,6 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
-import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
 
 import java.io.UnsupportedEncodingException;
@@ -183,17 +182,8 @@ public class AyuFilter {
     private static ArrayList<Filter> filters;
     private static String parsedFrom;
 
-    private static final AccountCache[] caches = new AccountCache[UserConfig.MAX_ACCOUNT_COUNT];
-
-    private static final class AccountCache {
-        final long owner;
-        final LongSparseArray<SparseBooleanArray> messages = new LongSparseArray<>();
-        final LongSparseArray<LongSparseArray<Boolean>> groups = new LongSparseArray<>();
-
-        AccountCache(long owner) {
-            this.owner = owner;
-        }
-    }
+    private static final LongSparseArray<SparseBooleanArray> cache = new LongSparseArray<>();
+    private static final LongSparseArray<Boolean> groupCache = new LongSparseArray<>();
 
     public static synchronized ArrayList<Filter> getFilters() {
         String raw = AyuConfig.regexFilters;
@@ -247,10 +237,9 @@ public class AyuFilter {
     }
 
     public static void rebuildCache() {
-        synchronized (caches) {
-            for (int i = 0; i < caches.length; i++) {
-                caches[i] = null;
-            }
+        synchronized (cache) {
+            cache.clear();
+            groupCache.clear();
         }
         AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.ayuRegexFiltersUpdated));
     }
@@ -364,24 +353,24 @@ public class AyuFilter {
         final long groupId = msg.hasValidGroupId() ? msg.getGroupId() : 0;
 
         if (groupId == 0) {
-            Boolean cached = getCached(msg.currentAccount, dialogId, messageId);
+            Boolean cached = getCached(dialogId, messageId);
             if (cached != null) {
                 return cached;
             }
         }
         boolean result = matches(msg.messageOwner, dialogId, msg.currentAccount);
         if (groupId != 0) {
-            synchronized (caches) {
-                Boolean groupResult = getGroupCached(msg.currentAccount, dialogId, groupId);
+            synchronized (cache) {
+                Boolean groupResult = groupCache.get(groupId);
                 if (result) {
-                    putGroupCached(msg.currentAccount, dialogId, groupId);
+                    groupCache.put(groupId, Boolean.TRUE);
                 } else if (groupResult != null && groupResult) {
                     result = true;
                 }
             }
             return result;
         }
-        putCached(msg.currentAccount, dialogId, messageId, result);
+        putCached(dialogId, messageId, result);
         return result;
     }
 
@@ -405,12 +394,12 @@ public class AyuFilter {
         if (!AyuConfig.regexFiltersEnabled) {
             return false;
         }
-        Boolean cached = getCached(account, dialogId, msg.id);
+        Boolean cached = getCached(dialogId, msg.id);
         if (cached != null) {
             return cached;
         }
         boolean result = matches(msg, dialogId, account);
-        putCached(account, dialogId, msg.id, result);
+        putCached(dialogId, msg.id, result);
         return result;
     }
 
@@ -431,15 +420,14 @@ public class AyuFilter {
                 continue;
             }
             long groupId = msg.getGroupId();
-            long dialogId = msg.getDialogId();
-            synchronized (caches) {
-                if (getGroupCached(msg.currentAccount, dialogId, groupId) != null) {
+            synchronized (cache) {
+                if (groupCache.get(groupId) != null) {
                     continue;
                 }
             }
-            if (matches(msg.messageOwner, dialogId, msg.currentAccount)) {
-                synchronized (caches) {
-                    putGroupCached(msg.currentAccount, dialogId, groupId);
+            if (matches(msg.messageOwner, msg.getDialogId(), msg.currentAccount)) {
+                synchronized (cache) {
+                    groupCache.put(groupId, Boolean.TRUE);
                 }
             }
         }
@@ -454,13 +442,6 @@ public class AyuFilter {
 
     public static boolean isFilteredBySender(TLRPC.Message msg, long dialogId, int account) {
         if (!AyuConfig.filterBlockedUsers || msg == null || msg.out) {
-            return false;
-        }
-        if (dialogId == 0) {
-            dialogId = MessageObject.getDialogId(msg);
-        }
-        // A blocked author in another chat must not hide the Replies service inbox.
-        if (UserObject.isReplyUser(dialogId)) {
             return false;
         }
         long from = MessageObject.getFromChatId(msg);
@@ -490,15 +471,10 @@ public class AyuFilter {
         }
         final String text = message.message;
         final boolean isCaption = hasMedia(message);
-        final boolean isReplies = UserObject.isReplyUser(dialogId);
         String senderName = null;
         for (int i = 0; i < list.size(); i++) {
             Filter f = list.get(i);
             if (f == null || !f.enabled) {
-                continue;
-            }
-            // Only a filter explicitly created for Replies can hide its notifications.
-            if (isReplies && f.dialogId == 0) {
                 continue;
             }
             if (f.dialogId != 0 && f.dialogId != dialogId) {
@@ -564,45 +540,9 @@ public class AyuFilter {
 
     // ---------------------------------------------------------------- cache
 
-    /** Accessed only while holding caches; slot reuse must not inherit another owner's verdicts. */
-    private static AccountCache getAccountCache(int account, boolean create) {
-        if (account < 0 || account >= caches.length) {
-            return null;
-        }
-        long owner = UserConfig.getInstance(account).getClientUserId();
-        AccountCache accountCache = caches[account];
-        if (accountCache != null && accountCache.owner != owner) {
-            caches[account] = accountCache = null;
-        }
-        if (accountCache == null && create) {
-            caches[account] = accountCache = new AccountCache(owner);
-        }
-        return accountCache;
-    }
-
-    private static Boolean getGroupCached(int account, long dialogId, long groupId) {
-        AccountCache accountCache = getAccountCache(account, false);
-        LongSparseArray<Boolean> dialogCache = accountCache == null ? null : accountCache.groups.get(dialogId);
-        return dialogCache == null ? null : dialogCache.get(groupId);
-    }
-
-    private static void putGroupCached(int account, long dialogId, long groupId) {
-        AccountCache accountCache = getAccountCache(account, true);
-        if (accountCache == null) {
-            return;
-        }
-        LongSparseArray<Boolean> dialogCache = accountCache.groups.get(dialogId);
-        if (dialogCache == null) {
-            dialogCache = new LongSparseArray<>();
-            accountCache.groups.put(dialogId, dialogCache);
-        }
-        dialogCache.put(groupId, Boolean.TRUE);
-    }
-
-    private static Boolean getCached(int account, long dialogId, int messageId) {
-        synchronized (caches) {
-            AccountCache accountCache = getAccountCache(account, false);
-            SparseBooleanArray dialogCache = accountCache == null ? null : accountCache.messages.get(dialogId);
+    private static Boolean getCached(long dialogId, int messageId) {
+        synchronized (cache) {
+            SparseBooleanArray dialogCache = cache.get(dialogId);
             if (dialogCache == null) {
                 return null;
             }
@@ -614,16 +554,12 @@ public class AyuFilter {
         }
     }
 
-    private static void putCached(int account, long dialogId, int messageId, boolean value) {
-        synchronized (caches) {
-            AccountCache accountCache = getAccountCache(account, true);
-            if (accountCache == null) {
-                return;
-            }
-            SparseBooleanArray dialogCache = accountCache.messages.get(dialogId);
+    private static void putCached(long dialogId, int messageId, boolean value) {
+        synchronized (cache) {
+            SparseBooleanArray dialogCache = cache.get(dialogId);
             if (dialogCache == null) {
                 dialogCache = new SparseBooleanArray();
-                accountCache.messages.put(dialogId, dialogCache);
+                cache.put(dialogId, dialogCache);
             }
             if (dialogCache.size() > 4000) {
                 dialogCache.clear();

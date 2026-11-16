@@ -915,7 +915,7 @@ public class LocationController extends BaseController implements NotificationCe
             return;
         }
         lastReadLocationTime.put(dialogId, currentDate);
-        if (!org.telegram.messenger.ayu.AyuState.isAllowReadPacket(currentAccount, dialogId)) {
+        if (!org.telegram.messenger.ayu.AyuState.isAllowReadPacket(dialogId)) {
             return;
         }
         TLObject request;

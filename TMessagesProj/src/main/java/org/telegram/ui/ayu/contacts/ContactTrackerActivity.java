@@ -147,7 +147,6 @@ public class ContactTrackerActivity extends BaseFragment implements Notification
     private void updateRows() {
         userIds.clear();
         userIds.addAll(SpecialContactsConfig.getAll());
-        userIds.removeIf(id -> org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(id));
 
         rowCount = 0;
         if (userIds.isEmpty()) {

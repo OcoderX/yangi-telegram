@@ -6,9 +6,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.util.concurrent.atomic.AtomicLong;
-
-import org.telegram.messenger.FileUploadOperation;
 
 /**
  * One user visible entry of the AyuGram upload queue. A queue entry always maps 1:1 to a
@@ -16,8 +13,6 @@ import org.telegram.messenger.FileUploadOperation;
  * granularity {@code FileLoader} works with.
  */
 public class UploadQueueItem {
-
-    private static final AtomicLong nextTransferId = new AtomicLong(1);
 
     public static final int STATE_WAITING = 0;
     public static final int STATE_ACTIVE = 1;
@@ -46,15 +41,9 @@ public class UploadQueueItem {
     public long addedTime;
 
     // --- runtime only, never persisted ---
-    /** Negative ids cannot collide with download document ids or another upload's path hash. */
-    public final transient long transferId = -nextTransferId.getAndIncrement();
-    public transient long ownerId;
-    public transient FileUploadOperation operation;
-    public transient String operationKey;
     public transient long speed;
     public transient long lastSpeedTime;
     public transient long lastSpeedBytes;
-    public transient long lastProgressTime;
     /** true when the item exists in this process' FileLoader (i.e. it was really enqueued) */
     public transient boolean live;
     /** true while this paused item still occupies one of FileLoader's upload slots */

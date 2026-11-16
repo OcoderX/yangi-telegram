@@ -13,7 +13,6 @@ import android.text.style.URLSpan;
 import android.view.View;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLiteDatabase;
@@ -26,8 +25,6 @@ import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
-import org.telegram.messenger.NotificationCenter;
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
@@ -43,21 +40,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DialogsBotsAdapter extends UniversalAdapter {
-
-    private final NotificationCenter.NotificationCenterDelegate hiddenChatsObserver = (id, account, args) -> update(false);
-
-    @Override
-    public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
-        super.onAttachedToRecyclerView(recyclerView);
-        NotificationCenter.getGlobalInstance().addObserver(hiddenChatsObserver, NotificationCenter.ayuConfigChanged);
-        update(false);
-    }
-
-    @Override
-    public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
-        NotificationCenter.getGlobalInstance().removeObserver(hiddenChatsObserver, NotificationCenter.ayuConfigChanged);
-        super.onDetachedFromRecyclerView(recyclerView);
-    }
 
     private final Context context;
     private final int currentAccount;
@@ -122,10 +104,6 @@ public class DialogsBotsAdapter extends UniversalAdapter {
 
     private int topPeersStart, topPeersEnd;
     public void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-        HiddenChatsController hidden = HiddenChatsController.getInstance(currentAccount);
-        searchMine.removeIf(user -> hidden.isHidden(user.id));
-        searchGlobal.removeIf(user -> hidden.isHidden(user.id));
-        searchMessages.removeIf(message -> hidden.isHidden(message.getDialogId()));
         HashSet<Long> uids = new HashSet<>();
 
         if (!TextUtils.isEmpty(query)) {
@@ -145,7 +123,7 @@ public class DialogsBotsAdapter extends UniversalAdapter {
                     items.add(UItem.asProfileCell(foundBots.get(i)).withOpenButton(openBotCallback));
                 }
             }
-            if ((!searchMessages.isEmpty() || hasMore) && !showOnlyPopular) {
+            if (!searchMessages.isEmpty() && !showOnlyPopular) {
                 items.add(UItem.asGraySection(getString(R.string.SearchMessages)));
                 for (MessageObject message : searchMessages) {
                     items.add(UItem.asSearchMessage(message));
@@ -161,7 +139,6 @@ public class DialogsBotsAdapter extends UniversalAdapter {
                 for (int i = 0; i < top_peers.size(); ++i) {
                     TLRPC.TL_topPeer peer = top_peers.get(i);
                     long dialogId = DialogObject.getPeerDialogId(peer.peer);
-                    if (hidden.isHidden(dialogId)) continue;
                     TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
                     if (user == null || !user.bot) continue;
                     top_peers_bots.add(user);
@@ -189,7 +166,6 @@ public class DialogsBotsAdapter extends UniversalAdapter {
                 if (!showOnlyPopular) items.add(UItem.asGraySection(getString(R.string.SearchAppsPopular)));
                 for (int i = 0; i < popular.bots.size(); ++i) {
                     final TLRPC.User user = popular.bots.get(i);
-                    if (hidden.isHidden(user.id)) continue;
                     if (uids.contains(user.id)) continue;
                     uids.add(user.id);
                     items.add(UItem.asProfileCell(user).accent().red().withOpenButton(openBotCallback));
@@ -237,11 +213,7 @@ public class DialogsBotsAdapter extends UniversalAdapter {
 
     public Object getObject(int position) {
         UItem item = getItem(position);
-        Object object = item != null ? item.object : null;
-        HiddenChatsController hidden = HiddenChatsController.getInstance(currentAccount);
-        if (object instanceof TLRPC.User && hidden.isHidden(((TLRPC.User) object).id)
-                || object instanceof MessageObject && hidden.isHidden(((MessageObject) object).getDialogId())) return null;
-        return object;
+        return item != null ? item.object : null;
     }
 
     public boolean loadingMessages;
@@ -250,16 +222,9 @@ public class DialogsBotsAdapter extends UniversalAdapter {
     private boolean hasMore;
     private int allCount;
     private int nextRate;
-    private TLRPC.Message rawLastMessage;
-    private int rawMessagesLoaded;
     private int searchBotsId;
     public String query;
     private void searchMessages(boolean next) {
-        if (!next) {
-            rawLastMessage = null;
-            rawMessagesLoaded = 0;
-            nextRate = 0;
-        }
         loadingMessages = true;
         final int searchId = ++searchBotsId;
         TLRPC.TL_messages_searchGlobal req = new TLRPC.TL_messages_searchGlobal();
@@ -271,14 +236,14 @@ public class DialogsBotsAdapter extends UniversalAdapter {
         req.q = this.query;
         req.limit = 25;
         req.filter = new TLRPC.TL_inputMessagesFilterEmpty();
-        if (next && rawLastMessage != null) {
-            TLRPC.Message lastMessage = rawLastMessage;
+        if (next && !searchMessages.isEmpty()) {
+            MessageObject lastMessage = searchMessages.get(searchMessages.size() - 1);
             req.offset_rate = nextRate;
-            req.offset_id = lastMessage.id;
-            if (lastMessage.peer_id == null) {
+            req.offset_id = lastMessage.getId();
+            if (lastMessage.messageOwner.peer_id == null) {
                 req.offset_peer = new TLRPC.TL_inputPeerEmpty();
             } else {
-                req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(lastMessage.peer_id);
+                req.offset_peer = MessagesController.getInstance(currentAccount).getInputPeer(lastMessage.messageOwner.peer_id);
             }
         } else {
             req.offset_rate = 0;
@@ -299,22 +264,17 @@ public class DialogsBotsAdapter extends UniversalAdapter {
                     MessagesController.getInstance(currentAccount).putUsers(response.users, false);
                     MessagesController.getInstance(currentAccount).putChats(response.chats, false);
 
-                    rawMessagesLoaded += response.messages.size();
-                    if (!response.messages.isEmpty()) rawLastMessage = response.messages.get(response.messages.size() - 1);
-
                     for (TLRPC.Message message : response.messages) {
-                        if (HiddenChatsController.getInstance(currentAccount).isHidden(MessageObject.getDialogId(message))) continue;
                         MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                         messageObject.setQuery(query);
                         searchMessages.add(messageObject);
                     }
 
-                    hasMore = !response.messages.isEmpty() && response instanceof TLRPC.TL_messages_messagesSlice && rawMessagesLoaded < response.count;
+                    hasMore = response instanceof TLRPC.TL_messages_messagesSlice;
                     allCount = Math.max(searchMessages.size(), response.count);
                     nextRate = response.next_rate;
                 }
                 update(true);
-                if (hasMore && searchMessages.isEmpty()) searchMore();
             }));
         }, next ? 800 : 0);
 
@@ -401,11 +361,6 @@ public class DialogsBotsAdapter extends UniversalAdapter {
     public void search(String query) {
         if (TextUtils.equals(query, this.query)) return;
         this.query = query;
-        searchBotsId++;
-        rawLastMessage = null;
-        rawMessagesLoaded = 0;
-        hasMore = false;
-        nextRate = 0;
         AndroidUtilities.cancelRunOnUIThread(searchMessagesRunnable);
         if (TextUtils.isEmpty(this.query)) {
             searchMessages.clear();
@@ -637,7 +592,6 @@ public class DialogsBotsAdapter extends UniversalAdapter {
 
     private final Utilities.Callback<TLRPC.User> openBotCallback = this::openBot;
     public void openBot(TLRPC.User user) {
-        if (user == null || HiddenChatsController.getInstance(currentAccount).isHidden(user.id)) return;
         MessagesController.getInstance(currentAccount).openApp(user, 0);
     }
 

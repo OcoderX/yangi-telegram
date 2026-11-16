@@ -332,59 +332,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private final String ACTION_MODE_SEARCH_DIALOGS_TAG = "search_dialogs_action_mode";
     private boolean rightFragmentTransitionInProgress;
-    private org.telegram.ui.ayu.OxChatCategories chatCategories;
-    private org.telegram.ui.ayu.OxChatCategoryConfig chatCategoryConfig;
-    private org.telegram.ui.ayu.OxChatCategoryConfig renderedChatCategoryConfig;
-    private int renderedChatCategoryState = -1;
-    private boolean chatCategoriesUpdateScheduled;
-    private boolean chatCategoriesUpdateDeferred;
-    private final Runnable rebuildChatCategories = () -> {
-        chatCategoriesUpdateScheduled = false;
-        if (chatCategories == null || isFinished || !hasLocalChatCategories()) return;
-        if (this.dialogsListFrozen || this.movingWas) {
-            chatCategoriesUpdateDeferred = true;
-            return;
-        }
-        chatCategoriesUpdateDeferred = false;
-        rebuildChatCategorySources();
-        if (this.viewPages != null && !this.dialogsListFrozen) {
-            for (ViewPage page : this.viewPages) {
-                if (page != null && page.dialogsAdapter != null && org.telegram.ui.ayu.OxChatCategories.isCategory(page.dialogsType)) {
-                    page.dialogsAdapter.notifyDataSetChanged();
-                }
-            }
-        }
-        if (this.filterTabsView != null) this.filterTabsView.checkTabsCounter();
-    };
-
-    private boolean hasLocalChatCategories() {
-        return supportsLocalChatCategories() && (chatCategoryConfig == null || chatCategoryConfig.isEnabled(isForwardCategorySurface()));
-    }
-
-    private boolean isForwardCategorySurface() {
-        return initialDialogsType == DIALOGS_TYPE_FORWARD;
-    }
-
-    private boolean supportsLocalChatCategories() {
-        return (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect || isForwardCategorySurface())
-                && requestPeerType == null && (folderId == 0 || folderId == 1 && !isForwardCategorySurface())
-                && communityId == 0 && TextUtils.isEmpty(searchString);
-    }
-
-    private void rebuildChatCategorySources() {
-        if (isForwardCategorySurface()) {
-            chatCategories.rebuild(getMessagesController(), getUserConfig().getClientUserId(), getMessagesController().dialogsForward);
-        } else {
-            chatCategories.rebuild(getMessagesController(), getUserConfig().getClientUserId(), folderId, getMediaDataController());
-        }
-    }
-
-    private void scheduleChatCategoriesUpdate() {
-        if (chatCategories != null && !chatCategoriesUpdateScheduled) {
-            chatCategoriesUpdateScheduled = true;
-            AndroidUtilities.runOnUIThread(rebuildChatCategories);
-        }
-    }
     private boolean rightFragmentTransitionIsOpen;
     private boolean allowGlobalSearch = true;
 
@@ -428,7 +375,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         private int lastItemsCount;
         private DialogsItemAnimator dialogsItemAnimator;
         private RecyclerItemsEnterAnimator recyclerItemsEnterAnimator;
-        private ValueAnimator storiesOverscrollAnimator;
 
         private boolean isLocked;
         public boolean animateStoriesView;
@@ -441,7 +387,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         public boolean isDefaultDialogType() {
-            return dialogsType == DIALOGS_TYPE_DEFAULT || dialogsType == 7 || dialogsType == 8 || org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType);
+            return dialogsType == DIALOGS_TYPE_DEFAULT || dialogsType == 7 || dialogsType == 8;
         }
 
         boolean updating;
@@ -613,10 +559,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private DialogCell movingView;
     private boolean allowMoving;
     private boolean movingWas;
-    private final HashSet<Integer> movingCategoryFolders = new HashSet<>();
     private ArrayList<MessagesController.DialogFilter> movingDialogFilters = new ArrayList<>();
     private boolean waitingForScrollFinished;
     private boolean allowSwipeDuringCurrentTouch;
+    private boolean updatePullAfterScroll;
 
     private BackDrawable backDrawable;
 
@@ -707,9 +653,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private boolean searching;
     private boolean searchWas;
     private boolean onlySelect;
-    private boolean forwardMultiSelect;
-    private boolean forwardHideSender, forwardHideCaption, forwardHasCaption, forwardCanHideSender;
-    private final LongSparseArray<Long> selectedForwardTopics = new LongSparseArray<>();
     private boolean canSelectTopics;
     private String searchString;
     private String initialSearchString;
@@ -1769,7 +1712,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         private int lastTop;
         private int lastListPadding;
         private float rightFragmentOpenedProgress;
-        private ValueAnimator archivePullAnimator;
 
         Paint paint = new Paint();
         RectF rectF = new RectF();
@@ -2203,42 +2145,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             SharedConfig.toggleArchiveHidden();
             final UndoView undoView = getUndoView();
             if (SharedConfig.archiveHidden) {
-                if (action) {
-                    // Keep the header and first visible row on the same offset. A cancelled
-                    // pixel scroll must not leave the now-clipped archive occupying a row.
-                    final int scrollOffset = (int) scrollYOffset;
-                    waitingForScrollFinished = false;
-                    fixScrollYAfterArchiveOpened = false;
-                    stopScroll();
-                    parentPage.scroller.cancel();
-                    cancelArchivePullAnimation();
-                    if (parentPage.storiesOverscrollAnimator != null) {
-                        parentPage.storiesOverscrollAnimator.removeAllUpdateListeners();
-                        parentPage.storiesOverscrollAnimator.removeAllListeners();
-                        parentPage.storiesOverscrollAnimator.cancel();
-                        parentPage.storiesOverscrollAnimator = null;
-                    }
-                    setStoriesOvercroll(parentPage, 0);
-                    // The layout anchor uses getTop(), while a pulled row draws at getY().
-                    // Clear the separate translation even when storiesOverscroll was zero.
-                    setViewsOffset(0);
-                    startArchivePullingTime = 0;
-                    canShowHiddenArchive = false;
-                    if (parentPage.pullForegroundDrawable != null) {
-                        parentPage.pullForegroundDrawable.resetText();
-                        parentPage.pullForegroundDrawable.setPullProgress(0f);
-                    }
-                    disableActionBarScrolling = false;
-                    updatePullState();
-                    parentPage.dialogsAdapter.notifyDataSetChanged();
-                    if (hasHiddenArchive()) {
-                        parentPage.layoutManager.scrollToPositionWithOffset(1, scrollOffset);
-                    }
-                    invalidateScrollY = true;
-                    if (fragmentView != null) {
-                        fragmentView.invalidate();
-                    }
-                } else if (dialogCell != null) {
+                if (dialogCell != null) {
                     disableActionBarScrolling = true;
                     waitingForScrollFinished = true;
                     int offset = (dialogCell.getMeasuredHeight() + (dialogCell.getTop() - getPaddingTop()));
@@ -2247,7 +2154,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         offset += dp(DialogStoriesCell.HEIGHT_IN_DP);
                     }
                     smoothScrollBy(0, offset, CubicBezierInterpolator.EASE_OUT);
-                    updatePullState();
+                    if (action) {
+                        updatePullAfterScroll = true;
+                    } else {
+                        updatePullState();
+                    }
                 }
                 undoView.showWithAction(0, UndoView.ACTION_ARCHIVE_HIDDEN, null, null);
             } else {
@@ -2264,16 +2175,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             parentPage.archivePullViewState = SharedConfig.archiveHidden ? ARCHIVE_ITEM_STATE_HIDDEN : ARCHIVE_ITEM_STATE_PINNED;
             if (parentPage.pullForegroundDrawable != null) {
                 parentPage.pullForegroundDrawable.setWillDraw(parentPage.archivePullViewState != ARCHIVE_ITEM_STATE_PINNED);
-            }
-        }
-
-        private void cancelArchivePullAnimation() {
-            if (archivePullAnimator != null) {
-                archivePullAnimator.removeAllUpdateListeners();
-                archivePullAnimator.removeAllListeners();
-                archivePullAnimator.cancel();
-                archivePullAnimator = null;
-                setScrollEnabled(true);
             }
         }
 
@@ -2350,7 +2251,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     int pTop = getPaddingTop();
                     DialogCell view = findArchiveDialogCell(parentPage);
                     if (view != null) {
-                        int height = (int) ((dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(org.telegram.ui.ayu.OxChatCategories.isCategory(parentPage.dialogsType) ? DIALOGS_TYPE_DEFAULT : parentPage.dialogsType)) * PullForegroundDrawable.SNAP_HEIGHT);
+                        int height = (int) ((dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(parentPage.dialogsType)) * PullForegroundDrawable.SNAP_HEIGHT);
                         int diff = (view.getTop() - pTop) + view.getMeasuredHeight();
 
                         long pullingTime = System.currentTimeMillis() - startArchivePullingTime;
@@ -2382,9 +2283,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         }
 
                         if (getViewOffset() != 0) {
-                            cancelArchivePullAnimation();
                             ValueAnimator valueAnimator = ValueAnimator.ofFloat(getViewOffset(), 0f);
-                            archivePullAnimator = valueAnimator;
                             valueAnimator.addUpdateListener(animation -> setViewsOffset((float) animation.getAnimatedValue()));
 
                             valueAnimator.setDuration(Math.max(100, (long) (350f - 120f * (getViewOffset() / PullForegroundDrawable.getMaxOverscroll()))));
@@ -2394,7 +2293,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 @Override
                                 public void onAnimationEnd(Animator animation) {
                                     super.onAnimationEnd(animation);
-                                    archivePullAnimator = null;
                                     setScrollEnabled(true);
                                 }
                             });
@@ -2535,7 +2433,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 long dialogId = dialogCell.getDialogId();
                 if (actionBar.isActionModeShowed(null)) {
                     TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialogId);
-                    if (!allowMoving || parentPage.dialogsAdapter.isUnreadByThemActive() || dialog == null || !isDialogPinned(dialog) || DialogObject.isFolderDialogId(dialogId)) {
+                    if (!allowMoving || dialog == null || !isDialogPinned(dialog) || DialogObject.isFolderDialogId(dialogId)) {
                         return 0;
                     }
                     movingView = (DialogCell) viewHolder.itemView;
@@ -2551,9 +2449,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if ((filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_FOLDERS) || !allowSwipeDuringCurrentTouch || ((dialogId == getUserConfig().clientUserId || dialogId == 777000 || currentDialogsType == 7 || currentDialogsType == 8) && SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_ARCHIVE) || getMessagesController().isPromoDialog(dialogId, false) && getMessagesController().promoDialogType != MessagesController.PROMO_TYPE_PSA) {
                         return 0;
                     }
-                    TLRPC.Dialog swipeDialog = getMessagesController().dialogs_dict.get(dialogId);
-                    int swipeFolderId = org.telegram.ui.ayu.OxChatCategories.isCategory(currentDialogsType) && swipeDialog != null ? swipeDialog.folder_id : folderId;
-                    boolean canSwipeBack = swipeFolderId == 0 && (ChatObject.isCommunity(currentAccount, dialogId) || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_MUTE || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_READ || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_PIN || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_DELETE) && !rightSlidingDialogContainer.hasFragment();
+                    boolean canSwipeBack = folderId == 0 && (ChatObject.isCommunity(currentAccount, dialogId) || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_MUTE || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_READ || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_PIN || SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_DELETE) && !rightSlidingDialogContainer.hasFragment();
                     if (SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_READ) {
                         MessagesController.DialogFilter filter = null;
                         if (viewPages[0].dialogsType == 7 || viewPages[0].dialogsType == 8) {
@@ -2585,12 +2481,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialogId);
             if (dialog == null || !isDialogPinned(dialog) || DialogObject.isFolderDialogId(dialogId)) {
                 return false;
-            }
-            if (org.telegram.ui.ayu.OxChatCategories.isCategory(parentPage.dialogsType)) {
-                if (!(source.itemView instanceof DialogCell)) return false;
-                TLRPC.Dialog from = getMessagesController().dialogs_dict.get(((DialogCell) source.itemView).getDialogId());
-                if (from == null || !from.pinned || from.folder_id != dialog.folder_id) return false;
-                movingCategoryFolders.add(dialog.folder_id);
             }
             int fromIndex = source.getAdapterPosition();
             int toIndex = target.getAdapterPosition();
@@ -2632,7 +2522,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     return;
                 }
 
-                if (!getMessagesController().isPromoDialog(dialogId, false) && (org.telegram.ui.ayu.OxChatCategories.isCategory(parentPage.dialogsType) ? dialog.folder_id : folderId) == 0 && SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_READ) {
+                if (!getMessagesController().isPromoDialog(dialogId, false) && folderId == 0 && SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_READ) {
                     ArrayList<Long> selectedDialogs = new ArrayList<>();
                     selectedDialogs.add(dialogId);
                     canReadCount = dialog.unread_count > 0 || dialog.unread_mark ? 1 : 0;
@@ -2645,23 +2535,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     ArrayList<Long> selectedDialogs = new ArrayList<>();
                     selectedDialogs.add(dialogId);
                     performSelectedDialogsAction(selectedDialogs, community_ungroup, true, false);
-                    return;
-                }
-
-                if (org.telegram.ui.ayu.OxChatCategories.isCategory(parentPage.dialogsType)) {
-                    int sourceFolder = dialog.folder_id;
-                    int sourcePin = dialog.pinnedNum;
-                    parentPage.itemTouchhelper.clearSwipeRecovery(viewHolder);
-                    getMessagesController().addDialogToFolder(dialog.id, sourceFolder == 0 ? 1 : 0, -1, 0);
-                    parentPage.dialogsAdapter.notifyDataSetChanged();
-                    scheduleChatCategoriesUpdate();
-                    UndoView undoView = getUndoView();
-                    if (sourceFolder == 0 && undoView != null) {
-                        undoView.showWithAction(dialog.id, UndoView.ACTION_ARCHIVE, null, () -> {
-                            getMessagesController().addDialogToFolder(dialog.id, sourceFolder, sourcePin, 0);
-                            scheduleChatCategoriesUpdate();
-                        });
-                    }
                     return;
                 }
 
@@ -2704,7 +2577,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                     parentPage.updateList(true);
                                     if (!SharedConfig.archiveHidden && parentPage.layoutManager.findFirstVisibleItemPosition() == 0) {
                                         disableActionBarScrolling = true;
-                                        parentPage.listView.smoothScrollBy(0, -(dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(org.telegram.ui.ayu.OxChatCategories.isCategory(parentPage.dialogsType) ? DIALOGS_TYPE_DEFAULT : parentPage.dialogsType)));
+                                        parentPage.listView.smoothScrollBy(0, -(dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + DialogCell.getCardExtraHeight(parentPage.dialogsType)));
                                     }
                                 }
                                 ArrayList<TLRPC.Dialog> dialogs = getDialogsArray(currentAccount, parentPage.dialogsType, folderId, false);
@@ -2971,7 +2844,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             cantSendToChannels = arguments.getBoolean("cantSendToChannels", false);
             initialDialogsType = arguments.getInt("dialogsType", DIALOGS_TYPE_DEFAULT);
             isQuote = arguments.getBoolean("quote", false);
-            forwardMultiSelect = onlySelect && initialDialogsType == DIALOGS_TYPE_FORWARD && !isQuote && arguments.getBoolean("forwardMultiSelect", false);
             isReplyTo = arguments.getBoolean("reply_to", false);
             replyMessageAuthor = arguments.getLong("reply_to_author", 0L);
             forwardOriginalChannel = arguments.getLong("forward_into_channel", 0L);
@@ -3028,7 +2900,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             globalObserversGroup.add(NotificationCenter.emojiLoaded);
             globalObserversGroup.add(NotificationCenter.ayuGhostModeChanged);
-            globalObserversGroup.add(NotificationCenter.ayuConfigChanged);
             if (!onlySelect) {
                 globalObserversGroup.add(NotificationCenter.closeSearchByActiveAction);
                 globalObserversGroup.add(NotificationCenter.proxySettingsChanged);
@@ -3206,10 +3077,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
-        AndroidUtilities.cancelRunOnUIThread(rebuildChatCategories);
-        AndroidUtilities.cancelRunOnUIThread(unreadByThemRefreshRunnable);
-        chatCategoriesUpdateScheduled = false;
-        chatCategories = null;
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
             observersGroup = null;
@@ -3704,7 +3571,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         if (
             (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) &&
-            (folderId == 0 || supportsLocalChatCategories()) && communityId == 0 && TextUtils.isEmpty(searchString)
+            folderId == 0 && communityId == 0 && TextUtils.isEmpty(searchString)
         ) {
             filterTabsView = new FilterTabsView(context, resourceProvider) {
                 @Override
@@ -3775,7 +3642,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                 @Override
                 public void onPageSelected(FilterTabsView.Tab tab, boolean forward) {
-                    if (!filterTabsView.hasTab(tab.id)) return;
                     if (viewPages[0].selectedType == tab.id) {
                         return;
                     }
@@ -3786,7 +3652,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
 
                     ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
-                    if (!tab.isDefault && !org.telegram.ui.ayu.OxChatCategories.isCategory(tab.id) && (tab.id < 0 || tab.id >= dialogFilters.size())) {
+                    if (!tab.isDefault && (tab.id < 0 || tab.id >= dialogFilters.size())) {
                         return;
                     }
                     viewPages[1].selectedType = tab.id;
@@ -3834,20 +3700,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         return 0;
                     }
                     if (tabId == filterTabsView.getDefaultTabId()) {
-                        return getMessagesController().getVisibleUnreadCount(folderId);
+                        return getMessagesStorage().getMainUnreadCount();
                     }
-                    if (org.telegram.ui.ayu.OxChatCategories.isCategory(tabId)) return chatCategories == null ? 0 : chatCategories.unread(tabId);
                     ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
                     if (tabId < 0 || tabId >= dialogFilters.size()) {
                         return 0;
                     }
-                    return getMessagesController().getVisibleFilterUnreadCount(getMessagesController().getDialogFilters().get(tabId));
+                    return getMessagesController().getDialogFilters().get(tabId).unreadCount;
                 }
 
                 @Override
                 public boolean didSelectTab(FilterTabsView.TabView tabView, boolean selected) {
-                    if (initialDialogsType != DIALOGS_TYPE_DEFAULT
-                            && (!supportsLocalChatCategories() || !org.telegram.ui.ayu.OxChatCategories.isLocalTab(tabView.getId()))) {
+                    if (initialDialogsType != DIALOGS_TYPE_DEFAULT) {
                         return false;
                     }
                     if (actionBar.isActionModeShowed() || storiesOverscroll != 0) {
@@ -3857,24 +3721,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         filterOptions.dismiss();
                         filterOptions = null;
                         return false;
-                    }
-
-                    if (org.telegram.ui.ayu.OxChatCategories.isLocalTab(tabView.getId())) {
-                        final int category = tabView.getId();
-                        final int categoryAccount = currentAccount;
-                        filterOptions = ItemOptions.makeOptions(DialogsActivity.this, tabView)
-                                .addIf(!isForwardCategorySurface() && hasUnreadLocalCategory(category), R.drawable.msg_markread, LocaleController.getString(R.string.MarkAllAsRead), () -> markLocalCategoryAsRead(categoryAccount, category))
-                                .add(R.drawable.msg_archive_hide, LocaleController.getString(category == org.telegram.ui.ayu.OxChatCategories.ALL ? R.string.OxChatHideCategories : R.string.OxChatHideCategory), () -> {
-                                    org.telegram.ui.ayu.OxChatCategoryConfig config = org.telegram.ui.ayu.OxChatCategoryConfig.forAccount(currentAccount);
-                                    if (category == org.telegram.ui.ayu.OxChatCategories.ALL) config.setEnabled(isForwardCategorySurface(), false);
-                                    else config.setVisible(category, isForwardCategorySurface(), false);
-                                })
-                                .add(R.drawable.msg_settings, LocaleController.getString(R.string.OxChatTabSettings), () -> presentFragment(new org.telegram.ui.ayu.OxChatCategorySettingsActivity(currentAccount)))
-                                .add(R.drawable.msg_edit, LocaleController.getString(R.string.OxChatEditFolders), () -> presentFragment(new FiltersSetupActivity()))
-                                .setDimAlpha(0x60)
-                                .setGravity(Gravity.LEFT)
-                                .show();
-                        return true;
                     }
 
                     final MessagesController.DialogFilter dialogFilter;
@@ -4021,7 +3867,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                 @Override
                 public void onDeletePressed(int id) {
-                    if (org.telegram.ui.ayu.OxChatCategories.isLocalTab(id)) return;
                     showDeleteAlert(getMessagesController().getDialogFilters().get(id));
                 }
             });
@@ -4155,7 +4000,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     });
                     showDialog(sheet);
                 } else if (id == remove_from_folder) {
-                    if (org.telegram.ui.ayu.OxChatCategories.isLocalTab(viewPages[0].selectedType)) return;
                     MessagesController.DialogFilter filter = getMessagesController().getDialogFilters().get(viewPages[0].selectedType);
                     ArrayList<Long> neverShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, selectedDialogs, false, false);
 
@@ -4234,7 +4078,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         };
 
-        int pagesCount = (folderId == 0 || supportsLocalChatCategories()) && communityId == 0 && (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) ? 2 : 1;
+        int pagesCount = folderId == 0 && communityId == 0 && (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) ? 2 : 1;
         viewPages = new ViewPage[pagesCount];
         for (int a = 0; a < pagesCount; a++) {
             final ViewPage viewPage = new ViewPage(context);
@@ -4248,9 +4092,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             viewPage.addView(viewPage.progressView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER));
 
             viewPage.listView = new DialogsRecyclerView(context, viewPage);
-            viewPage.listView.addEdgeEffectListener(() -> {
-                if (contentView != null) contentView.postInvalidateOnAnimation();
-            });
+            viewPage.listView.addEdgeEffectListener(() -> viewPage.listView.postOnAnimation(this::blur3_InvalidateBlur));
             viewPage.scroller = new RecyclerListViewScroller(viewPage.listView);
             viewPage.listView.setAllowStopHeaveOperations(true);
             viewPage.listView.setAccessibilityEnabled(false);
@@ -4320,30 +4162,28 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                 boolean lastDragging;
 
+                ValueAnimator storiesOverscrollAnimator;
                 @Override
                 public void onScrollStateChanged(int state) {
                     super.onScrollStateChanged(state);
-                    if (viewPage.storiesOverscrollAnimator != null) {
-                        viewPage.storiesOverscrollAnimator.removeAllUpdateListeners();
-                        viewPage.storiesOverscrollAnimator.removeAllListeners();
-                        viewPage.storiesOverscrollAnimator.cancel();
-                        viewPage.storiesOverscrollAnimator = null;
+                    if (storiesOverscrollAnimator != null) {
+                        storiesOverscrollAnimator.removeAllListeners();
+                        storiesOverscrollAnimator.cancel();
                     }
                     if (viewPage.listView.getScrollState() != RecyclerView.SCROLL_STATE_DRAGGING) {
-                        viewPage.storiesOverscrollAnimator = ValueAnimator.ofFloat(storiesOverscroll, 0);
-                        viewPage.storiesOverscrollAnimator.addUpdateListener(animation -> {
+                        storiesOverscrollAnimator = ValueAnimator.ofFloat(storiesOverscroll, 0);
+                        storiesOverscrollAnimator.addUpdateListener(animation -> {
                             setStoriesOvercroll(viewPage, (float) animation.getAnimatedValue());
                         });
-                        viewPage.storiesOverscrollAnimator.addListener(new AnimatorListenerAdapter() {
+                        storiesOverscrollAnimator.addListener(new AnimatorListenerAdapter() {
                             @Override
                             public void onAnimationEnd(Animator animation) {
                                 setStoriesOvercroll(viewPage, 0);
-                                viewPage.storiesOverscrollAnimator = null;
                             }
                         });
-                        viewPage.storiesOverscrollAnimator.setDuration(200);
-                        viewPage.storiesOverscrollAnimator.setInterpolator(CubicBezierInterpolator.DEFAULT);
-                        viewPage.storiesOverscrollAnimator.start();
+                        storiesOverscrollAnimator.setDuration(200);
+                        storiesOverscrollAnimator.setInterpolator(CubicBezierInterpolator.DEFAULT);
+                        storiesOverscrollAnimator.start();
                     }
                 }
 
@@ -4379,7 +4219,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (hasStories && !rightSlidingDialogContainer.hasFragment() && !fixScrollYAfterArchiveOpened) {
                         pTop -= dp(DialogStoriesCell.HEIGHT_IN_DP);
                     }
-                    boolean hasHiddenArchive = !fixScrollYAfterArchiveOpened && viewPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN;
+                    boolean hasHiddenArchive = !fixScrollYAfterArchiveOpened && viewPage.dialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0 && communityId == 0 && getMessagesController().hasHiddenArchive() && viewPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN;
                     if ((hasHiddenArchive || (hasStories && !rightSlidingDialogContainer.hasFragment())) && dy < 0) {
                         viewPage.listView.setOverScrollMode(View.OVER_SCROLL_ALWAYS);
                         int currentPosition = viewPage.layoutManager.findFirstVisibleItemPosition();
@@ -4679,6 +4519,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         disableActionBarScrolling = false;
                         if (waitingForScrollFinished) {
                             waitingForScrollFinished = false;
+                            if (updatePullAfterScroll) {
+                                viewPage.listView.updatePullState();
+                                updatePullAfterScroll = false;
+                            }
                             viewPage.dialogsAdapter.notifyDataSetChanged();
                         }
                         checkAutoscrollToStories(viewPage);
@@ -4775,7 +4619,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             }
                         }
                     }
-                    // The parent was invalidated above; dispatchDraw captures the updated blur once.
+                    if (fragmentView != null) {
+                        blur3_InvalidateBlur();
+                    }
                     if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment() && viewPage.listView != null) {
                         viewPage.listView.invalidate();
                     }
@@ -4934,7 +4780,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                 for (int i = 0; i < selectedDialogs.size(); i++) {
-                    topicKeys.add(getSelectedTopicKey(selectedDialogs.get(i)));
+                    topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
                 }
                 delegate.didSelectDialogs(DialogsActivity.this, topicKeys, null, false, notify, scheduleDate, scheduleRepeatPeriod, null);
             } else {
@@ -5016,8 +4862,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             fragmentContextView = new FragmentContextView(context, this, false) {
                 @Override
                 public void setVisibility(int visibility) {
-                    topPanelLayout.setViewVisible(fragmentContextViewWrapper, visibility == VISIBLE,
-                        visibility == VISIBLE || !isMusicPlayerReplacedByIsland());
+                    topPanelLayout.setViewVisible(fragmentContextViewWrapper, visibility == VISIBLE);
                 }
             };
             fragmentContextViewWrapper.addView(fragmentContextView);
@@ -5142,7 +4987,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
                     ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                     for (int i = 0; i < selectedDialogs.size(); i++) {
-                        topicKeys.add(getSelectedTopicKey(selectedDialogs.get(i)));
+                        topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
                     }
                     delegate.didSelectDialogs(DialogsActivity.this, topicKeys, message, false, notify, scheduleDate, scheduleRepeatPeriod, null);
                 }
@@ -5318,7 +5163,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                 for (int i = 0; i < selectedDialogs.size(); i++) {
-                    topicKeys.add(getSelectedTopicKey(selectedDialogs.get(i)));
+                    topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
                 }
                 delegate.didSelectDialogs(DialogsActivity.this, topicKeys, commentView.getFieldText(), false, notify, scheduleDate, scheduleRepeatPeriod, null);
             });
@@ -5336,7 +5181,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             BlurredBackgroundDrawable filterTabsViewBackground = iBlur3FactoryLiquidGlass.create(filterTabsView, BlurredBackgroundProviderImpl.topPanel(resourceProvider));
             filterTabsViewBackground.setRadius(dp(18));
             filterTabsViewBackground.setPadding(dp(6.666f));
-            filterTabsView.setPadding(0, dp(hasLocalChatCategories() ? 1 : 7), 0, dp(hasLocalChatCategories() ? 1 : 7));
+            filterTabsView.setPadding(0, dp(7), 0, dp(7));
             filterTabsView.setBlurredBackground(filterTabsViewBackground);
             contentView.addView(filterTabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36 + 7 + 7, Gravity.TOP, 4, 0, 4, 0));
         }
@@ -6969,7 +6814,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
         for (int i = 0; i < filters.size(); ++i) {
             if (filters.get(i).id == fid) {
-                index = hasLocalChatCategories() ? filterTabsView.getPositionForId(filters.get(i).isDefault() ? org.telegram.ui.ayu.OxChatCategories.ALL : i) : i;
+                index = i;
                 break;
             }
         }
@@ -6990,16 +6835,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             viewPages[a].listView.stopScroll();
         }
         int a = animated && viewPages.length > 1 ? 1 : 0;
-        if (hasLocalChatCategories() && org.telegram.ui.ayu.OxChatCategories.isLocalTab(viewPages[a].selectedType)) {
-            viewPages[a].dialogsType = viewPages[a].selectedType == org.telegram.ui.ayu.OxChatCategories.ALL ? initialDialogsType : viewPages[a].selectedType;
-            viewPages[a].isLocked = false;
-            viewPages[a].listView.updatePullState();
-            viewPages[a].listView.setScrollEnabled(true);
-            viewPages[a].dialogsAdapter.setDialogsType(viewPages[a].dialogsType);
-            viewPages[a].layoutManager.scrollToPositionWithOffset(viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
-            checkListLoad(viewPages[a]);
-            return;
-        }
         if (viewPages[a].selectedType < 0 || viewPages[a].selectedType >= getMessagesController().getDialogFilters().size()) {
             return;
         }
@@ -7044,121 +6879,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
     }
 
-    private void updateLocalCategoryTabs(boolean force, boolean animated) {
-        chatCategoryConfig = org.telegram.ui.ayu.OxChatCategoryConfig.forAccount(currentAccount);
-        boolean forward = isForwardCategorySurface();
-        boolean preferencesChanged = renderedChatCategoryConfig != chatCategoryConfig || renderedChatCategoryState != chatCategoryConfig.stateKey(forward);
-        if (!force && !preferencesChanged) return;
-        boolean categoriesEnabled = chatCategoryConfig.isEnabled(forward);
-        if (categoriesEnabled && (chatCategories == null || renderedChatCategoryConfig != chatCategoryConfig)) {
-            chatCategories = new org.telegram.ui.ayu.OxChatCategories();
-            rebuildChatCategorySources();
-        }
-        renderedChatCategoryConfig = chatCategoryConfig;
-        renderedChatCategoryState = chatCategoryConfig.stateKey(forward);
-        boolean wasEmpty = filterTabsView.isEmpty();
-        int oldId = filterTabsView.getCurrentTabId();
-        int stableId = filterTabsView.getCurrentTabStableId();
-        boolean animateItems = animated && filterTabsView.getVisibility() == View.VISIBLE;
-        cancelCategoryTabTransition();
-        filterTabsView.removeTabs();
-        ArrayList<MessagesController.DialogFilter> filters = folderId == 0 ? getMessagesController().getDialogFilters() : new ArrayList<>();
-        int defaultId = 0;
-        boolean hasCustomFolders = false;
-        for (int i = 0; i < filters.size(); i++) {
-            if (filters.get(i).isDefault()) defaultId = i;
-            else hasCustomFolders = true;
-        }
-        canShowFilterTabsView = categoriesEnabled || hasCustomFolders;
-        if (categoriesEnabled) {
-            defaultId = org.telegram.ui.ayu.OxChatCategories.ALL;
-            filterTabsView.addLocalCategoryTab(defaultId, LocaleController.getString(R.string.OxChatsAll), R.drawable.msg_discussion, true);
-            addVisibleCategoryTab(org.telegram.ui.ayu.OxChatCategories.PERSONAL, R.string.OxChatsPersonal, R.drawable.msg_contacts);
-            addVisibleCategoryTab(org.telegram.ui.ayu.OxChatCategories.GROUPS, R.string.OxChatsGroups, R.drawable.msg_groups);
-            addVisibleCategoryTab(org.telegram.ui.ayu.OxChatCategories.CHANNELS, R.string.OxChatsChannels, R.drawable.msg_channel);
-            addVisibleCategoryTab(org.telegram.ui.ayu.OxChatCategories.BOTS, R.string.OxChatsBots, R.drawable.msg_bot);
-        }
-        for (int i = 0; i < filters.size(); i++) {
-            MessagesController.DialogFilter filter = filters.get(i);
-            if (filter.isDefault()) {
-                if (!categoriesEnabled && hasCustomFolders) filterTabsView.addTab(i, 0, LocaleController.getString(R.string.FilterAllChats), null, false, true, false);
-            } else {
-                filterTabsView.addTab(i, filter.localId, filter.name, filter.entities, filter.title_noanimate, false, filter.locked);
-            }
-        }
-        int defaultStableId = categoriesEnabled ? org.telegram.ui.ayu.OxChatCategories.ALL : 0;
-        if (stableId == 0 || stableId == org.telegram.ui.ayu.OxChatCategories.ALL) stableId = defaultStableId;
-        if (wasEmpty || !filterTabsView.selectTabWithStableId(stableId)) filterTabsView.selectTabWithStableId(defaultStableId);
-        if (filterTabsView.isLocked(filterTabsView.getCurrentTabId())) filterTabsView.selectTabWithStableId(defaultStableId);
-        int selected = canShowFilterTabsView ? filterTabsView.getCurrentTabId() : defaultId;
-        boolean switchPage = wasEmpty || oldId != selected || viewPages[0].selectedType != selected;
-        viewPages[0].selectedType = selected;
-        for (int i = 0; i < viewPages.length; i++) {
-            ViewPage page = viewPages[i];
-            if (i > 0 || !canShowFilterTabsView) {
-                boolean resetScroll = page.dialogsType != initialDialogsType;
-                page.selectedType = defaultId;
-                page.dialogsType = initialDialogsType;
-                page.isLocked = false;
-                page.dialogsAdapter.setDialogsType(initialDialogsType);
-                page.dialogsAdapter.notifyDataSetChanged();
-                page.listView.updatePullState();
-                page.listView.setScrollEnabled(true);
-                if (resetScroll) page.layoutManager.scrollToPositionWithOffset(hasHiddenArchive() && page.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
-            }
-            page.listView.setScrollingTouchSlop(canShowFilterTabsView ? RecyclerView.TOUCH_SLOP_PAGING : RecyclerView.TOUCH_SLOP_DEFAULT);
-        }
-        if (canShowFilterTabsView) {
-            if (selected == defaultId) {
-                switchPage |= viewPages[0].dialogsType != initialDialogsType;
-            } else if (org.telegram.ui.ayu.OxChatCategories.isCategory(selected)) {
-                switchPage |= viewPages[0].dialogsType != selected;
-            } else if (selected >= 0 && selected < filters.size()) {
-                switchPage |= (viewPages[0].dialogsType != 7 && viewPages[0].dialogsType != 8)
-                        || getMessagesController().selectedDialogFilter[viewPages[0].dialogsType - 7] != filters.get(selected);
-            }
-        } else {
-            filterTabsView.setIsEditing(false);
-            showDoneItem(false);
-            filterTabsView.resetTabId();
-        }
-        filterTabsView.finishAddingTabs(animateItems);
-        updateFilterTabsVisibility(animated);
-        if (switchPage && canShowFilterTabsView) switchToCurrentSelectedMode(false);
-        if (categoriesEnabled) scheduleChatCategoriesUpdate();
-        updateCounters(false);
-    }
-
-    private void addVisibleCategoryTab(int category, int label, int icon) {
-        if (chatCategoryConfig.isVisible(category, isForwardCategorySurface())) {
-            filterTabsView.addLocalCategoryTab(category, LocaleController.getString(label), icon, false);
-        }
-    }
-
-    private void cancelCategoryTabTransition() {
-        if (tabsAnimation != null) {
-            tabsAnimation.removeAllListeners();
-            tabsAnimation.cancel();
-            tabsAnimation = null;
-        }
-        tabsAnimationInProgress = false;
-        startedTracking = false;
-        maybeStartTracking = false;
-        actionBar.setEnabled(true);
-        filterTabsView.stopAnimatingIndicator();
-        for (int i = 0; i < viewPages.length; i++) {
-            viewPages[i].listView.stopScroll();
-            viewPages[i].setTranslationX(0);
-            if (i > 0) {
-                viewPages[i].setVisibility(View.GONE);
-                viewPages[i].dialogsAdapter.pause();
-            } else if (!isPaused) {
-                viewPages[i].dialogsAdapter.resume();
-            }
-        }
-        showScrollbars(true);
-    }
-
     private void updateFilterTabs(boolean force, boolean animated) {
         if (filterTabsView == null || inPreviewMode || searchIsShowed || (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment())) {
             return;
@@ -7166,10 +6886,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (filterOptions != null) {
             filterOptions.dismiss();
             filterOptions = null;
-        }
-        if (supportsLocalChatCategories()) {
-            updateLocalCategoryTabs(force, animated);
-            return;
         }
         final ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
         if (filters.size() > 1) {
@@ -7335,8 +7051,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public void onResume() {
         super.onResume();
         updateAyuMenuItems();
-        if (supportsLocalChatCategories()) updateFilterTabs(false, false);
-        scheduleChatCategoriesUpdate();
         if (dialogStoriesCell != null) {
             dialogStoriesCell.onResume();
         }
@@ -7751,7 +7465,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         if (selectedDialogs.contains(did)) {
             selectedDialogs.remove(did);
-            selectedForwardTopics.remove(did);
             if (cell instanceof DialogCell) {
                 ((DialogCell) cell).setChecked(false, true);
             } else if (cell instanceof ProfileSearchCell) {
@@ -7767,40 +7480,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             return true;
         }
-    }
-
-    public boolean isForwardMultiSelect() {
-        return forwardMultiSelect;
-    }
-
-    public void setForwardOptions(boolean hideSender, boolean hideCaption, boolean hasCaption, boolean canHideSender) {
-        forwardHideSender = hideSender;
-        forwardHideCaption = hideCaption;
-        forwardHasCaption = hasCaption;
-        forwardCanHideSender = canHideSender;
-    }
-
-    public boolean isForwardSenderHidden() { return forwardHideSender; }
-    public boolean isForwardCaptionHidden() { return forwardHideCaption; }
-
-    public boolean validateForwardTargets(ArrayList<MessagesStorage.TopicKey> targets) {
-        if (!forwardMultiSelect || isFinished || targets == null || targets.isEmpty()) return false;
-        for (MessagesStorage.TopicKey key : targets) {
-            if (org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(key.dialogId)
-                    || !checkCanWrite(key.dialogId) || !validateSlowModeDialog(key.dialogId)
-                    || forwardTargetNeedsTopic(key.dialogId) && !getMessagesController().isCommunity(key.dialogId) && key.topicId == 0) return false;
-        }
-        return true;
-    }
-
-    private MessagesStorage.TopicKey getSelectedTopicKey(long did) {
-        return MessagesStorage.TopicKey.of(did, forwardMultiSelect ? selectedForwardTopics.get(did, 0L) : 0);
-    }
-
-    private boolean forwardTargetNeedsTopic(long did) {
-        return canSelectTopics && (getMessagesController().isCommunity(did)
-                || getMessagesController().isForum(did) && !isBotForumWithEmptyTopics(did)
-                || getMessagesController().isMonoForumWithManageRights(did));
     }
 
     public void search(String query, boolean animated) {
@@ -8167,11 +7846,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         boolean loadArchivedFromCache = false;
         boolean load = false;
         boolean loadFromCache = false;
-        if (folderId == 0 && !isForwardCategorySurface() && org.telegram.ui.ayu.OxChatCategories.isCategory(viewPage.dialogsType)
-                && lastVisibleItem >= getDialogsArray(currentAccount, viewPage.dialogsType, folderId, dialogsListFrozen).size() - 10) {
-            loadArchivedFromCache = !getMessagesController().isDialogsEndReached(1);
-            loadArchived = loadArchivedFromCache || !getMessagesController().isServerDialogsEndReached(1);
-        }
         if (viewPage.dialogsType == DIALOGS_TYPE_FOLDER1 || viewPage.dialogsType == DIALOGS_TYPE_FOLDER2) {
             ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
             if (viewPage.selectedType >= 0 && viewPage.selectedType < dialogFilters.size()) {
@@ -8188,7 +7862,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         }
         if (visibleItemCount > 0 && lastVisibleItem >= getDialogsArray(currentAccount, viewPage.dialogsType, folderId, dialogsListFrozen).size() - 10 ||
-                visibleItemCount == 0 && (viewPage.dialogsType == 7 || viewPage.dialogsType == 8 || org.telegram.ui.ayu.OxChatCategories.isCategory(viewPage.dialogsType)) && !getMessagesController().isDialogsEndReached(folderId)) {
+                visibleItemCount == 0 && (viewPage.dialogsType == 7 || viewPage.dialogsType == 8) && !getMessagesController().isDialogsEndReached(folderId)) {
             loadFromCache = !getMessagesController().isDialogsEndReached(folderId);
             if (loadFromCache || !getMessagesController().isServerDialogsEndReached(folderId)) {
                 load = true;
@@ -8356,21 +8030,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (!validateSlowModeDialog(dialogId)) {
                 return;
             }
-            if (forwardMultiSelect && parentForwardDialogFragment != null && !forwardTargetNeedsTopic(dialogId)) {
-                didSelectResult(dialogId, 0, false, false);
-                return;
-            }
 
-            if (forwardMultiSelect && selectedDialogs.contains(dialogId) && forwardTargetNeedsTopic(dialogId)) {
-                selectedDialogs.remove(dialogId);
-                selectedForwardTopics.remove(dialogId);
-                findAndUpdateCheckBox(dialogId, false);
-                if (view instanceof DialogCell) ((DialogCell) view).setChecked(false, true);
-                if (view instanceof ProfileSearchCell) ((ProfileSearchCell) view).setChecked(false, true);
-                updateSelectedCount();
-                return;
-            }
-            if ((!getMessagesController().isForum(dialogId) && !getMessagesController().isCommunity(dialogId) || isBotForumWithEmptyTopics(dialogId)) && (!forwardMultiSelect || !forwardTargetNeedsTopic(dialogId)) && (forwardMultiSelect || !selectedDialogs.isEmpty() || (initialDialogsType == DIALOGS_TYPE_FORWARD && selectAlertString != null))) {
+
+            if ((!getMessagesController().isForum(dialogId) && !getMessagesController().isCommunity(dialogId) || isBotForumWithEmptyTopics(dialogId)) && (!selectedDialogs.isEmpty() || (initialDialogsType == DIALOGS_TYPE_FORWARD && selectAlertString != null))) {
                 if (!selectedDialogs.contains(dialogId) && !checkCanWrite(dialogId)) {
                     return;
                 }
@@ -8385,7 +8047,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     Bundle bundle = new Bundle(arguments);
                     bundle.putLong("community_id", -dialogId);
                     DialogsActivity dialogsFragment = new DialogsActivity(bundle);
-                    dialogsFragment.setCurrentAccount(currentAccount);
                     dialogsFragment.parentForwardDialogFragment = this;
                     dialogsFragment.setDelegate(delegate);
                     presentFragment(dialogsFragment);
@@ -8398,7 +8059,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     bundle.putBoolean("quote", isQuote);
                     bundle.putBoolean("reply_to", isReplyTo);
                     TopicsFragment topicsFragment = new TopicsFragment(bundle);
-                    topicsFragment.setCurrentAccount(currentAccount);
                     topicsFragment.setForwardFromDialogFragment(DialogsActivity.this);
                     presentFragment(topicsFragment);
                 } else {
@@ -8749,10 +8409,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         if (onlySelect) {
-            if (forwardMultiSelect) {
-                onItemClick(view, position, adapter, x, y);
-                return true;
-            }
             if (initialDialogsType != DIALOGS_TYPE_FORWARD && !clickSelectsDialog()) {
                 return false;
             }
@@ -8987,27 +8643,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         final BaseFragment[] previewActivity = new BaseFragment[1];
         previewMenu[0] = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, getResourceProvider(), flags);
 
-        if (!isCommunityCell) {
-            ActionBarMenuSubItem hideChatItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
-            hideChatItem.setTextAndIcon(getString(R.string.OxHiddenHideChat), R.drawable.msg_secret);
-            hideChatItem.setMinimumWidth(160);
-            hideChatItem.setOnClickListener(v -> {
-                finishPreviewFragment();
-                AndroidUtilities.runOnUIThread(new Runnable() {
-                    private int retries;
-                    @Override public void run() {
-                        if (isFinished || getParentActivity() == null) return;
-                        if (parentLayout != null && parentLayout.isTransitionAnimationInProgress() && retries++ < 20) {
-                            AndroidUtilities.runOnUIThread(this, 50);
-                            return;
-                        }
-                        org.telegram.ui.ayu.hidden.HiddenChatsUi.hideChat(DialogsActivity.this, dialogId);
-                    }
-                }, 220);
-            });
-            previewMenu[0].addView(hideChatItem);
-        }
-
         if (hasFolders) {
             foldersMenu[0] = previewMenu[0].addViewToSwipeBack(foldersMenuView);
             ActionBarMenuSubItem addToFolderItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
@@ -9056,13 +8691,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 (containsFilter = (viewPages[0].dialogsType == 7 || viewPages[0].dialogsType == 8) && (!actionBar.isActionModeShowed() || actionBar.isActionModeShowed(null))) ?
                         getMessagesController().selectedDialogFilter[viewPages[0].dialogsType == 8 ? 1 : 0] : null
         );
-        final int pinFolderId = filter == null && dialog != null && org.telegram.ui.ayu.OxChatCategories.isCategory(viewPages[0].dialogsType) ? dialog.folder_id : folderId;
         if (!isDialogPinned(dialog)) {
             int pinnedCount = 0;
             int pinnedSecretCount = 0;
             int newPinnedCount = 0;
             int newPinnedSecretCount = 0;
-            ArrayList<TLRPC.Dialog> dialogs = getMessagesController().getDialogs(pinFolderId);
+            ArrayList<TLRPC.Dialog> dialogs = getMessagesController().getDialogs(folderId);
             for (int a = 0, N = dialogs.size(); a < N; a++) {
                 TLRPC.Dialog dialog1 = dialogs.get(a);
                 if (dialog1 instanceof TLRPC.TL_dialogFolder) {
@@ -9092,7 +8726,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             int maxPinnedCount;
             if (containsFilter && filter != null) {
                 maxPinnedCount = 100 - filter.alwaysShow.size();
-            } else if (pinFolderId != 0 || filter != null) {
+            } else if (folderId != 0 || filter != null) {
                 if (getUserConfig().isPremium()) {
                     maxPinnedCount = getMessagesController().maxFolderPinnedDialogsCountPremium;
                 } else {
@@ -9155,7 +8789,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (filter != null) {
                         FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, false, false, true, true, false, DialogsActivity.this, null);
                     }
-                    getMessagesController().reorderPinnedDialogs(pinFolderId, null, 0);
+                    getMessagesController().reorderPinnedDialogs(folderId, null, 0);
                     updateCounters(true);
                     if (viewPages != null) {
                         for (int a = 0; a < viewPages.length; a++) {
@@ -9296,10 +8930,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     public boolean hasHiddenArchive() {
-        return !onlySelect && initialDialogsType == DIALOGS_TYPE_DEFAULT && communityId == 0 && folderId == 0
-                && !org.telegram.ui.ayu.OxUnreadByThemConfig.isActive(currentAccount,
-                org.telegram.ui.ayu.OxUnreadByThemConfig.scope(DIALOGS_TYPE_DEFAULT, null))
-                && getMessagesController().hasHiddenArchive();
+        return !onlySelect && initialDialogsType == DIALOGS_TYPE_DEFAULT && communityId == 0 && folderId == 0 && getMessagesController().hasHiddenArchive();
     }
 
     private boolean waitingForDialogsAnimationEnd(ViewPage viewPage) {
@@ -9396,7 +9027,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         }
 
-        if (!isOpen && parentForwardDialogFragment != null && !forwardMultiSelect) {
+        if (!isOpen && parentForwardDialogFragment != null) {
             parentForwardDialogFragment.removeSelfFromStack();
         }
 
@@ -9493,14 +9124,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             movingDialogFilters.clear();
         }
         if (movingWas) {
-            if (movingCategoryFolders.isEmpty()) {
-                getMessagesController().reorderPinnedDialogs(folderId, null, 0);
-            } else {
-                for (int movedFolder : movingCategoryFolders) getMessagesController().reorderPinnedDialogs(movedFolder, null, 0);
-                movingCategoryFolders.clear();
-            }
+            getMessagesController().reorderPinnedDialogs(folderId, null, 0);
             movingWas = false;
-            scheduleChatCategoriesUpdate();
         }
         updateCounters(true);
         if (viewPages != null) {
@@ -9512,18 +9137,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getPinnedCount() {
-        if (org.telegram.ui.ayu.OxChatCategories.isCategory(viewPages[0].dialogsType)) {
-            int mainPinned = 0, archivePinned = 0;
-            ArrayList<TLRPC.Dialog> category = getDialogsArray(currentAccount, viewPages[0].dialogsType, folderId, dialogsListFrozen);
-            for (int i = 0; i < category.size(); i++) {
-                TLRPC.Dialog dialog = category.get(i);
-                if (dialog.pinned) {
-                    if (dialog.folder_id == 0) mainPinned++;
-                    else if (dialog.folder_id == 1) archivePinned++;
-                }
-            }
-            return Math.max(mainPinned, archivePinned);
-        }
         int pinnedCount = 0;
         ArrayList<TLRPC.Dialog> dialogs;
         boolean containsFilter = (viewPages[0].dialogsType == 7 || viewPages[0].dialogsType == 8) && (!actionBar.isActionModeShowed() || actionBar.isActionModeShowed(null));
@@ -9567,64 +9180,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         performSelectedDialogsAction(selectedDialogs, action, alert, longPress, null);
     }
 
-    private void performCategoryPinAction(ArrayList<Long> selectedDialogs) {
-        boolean pin = canPinCount != 0;
-        HashSet<Integer> affectedFolders = new HashSet<>();
-        for (int i = 0; i < selectedDialogs.size(); i++) {
-            TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(selectedDialogs.get(i));
-            if (dialog != null && dialog.pinned != pin) affectedFolders.add(dialog.folder_id);
-        }
-        if (pin) {
-            for (int sourceFolder : affectedFolders) {
-                int regular = 0, secret = 0;
-                ArrayList<TLRPC.Dialog> dialogs = getMessagesController().getDialogs(sourceFolder);
-                for (int i = 0; i < dialogs.size(); i++) {
-                    TLRPC.Dialog dialog = dialogs.get(i);
-                    if (dialog.pinned && !DialogObject.isFolderDialogId(dialog.id)) {
-                        if (DialogObject.isEncryptedDialog(dialog.id)) secret++;
-                        else regular++;
-                    }
-                }
-                HashSet<Long> counted = new HashSet<>();
-                for (int i = 0; i < selectedDialogs.size(); i++) {
-                    TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(selectedDialogs.get(i));
-                    if (dialog == null || dialog.folder_id != sourceFolder || dialog.pinned || !counted.add(dialog.id)) continue;
-                    if (DialogObject.isEncryptedDialog(dialog.id)) secret++;
-                    else regular++;
-                }
-                int limit = sourceFolder == 0
-                        ? (getUserConfig().isPremium() ? getMessagesController().maxPinnedDialogsCountPremium : getMessagesController().maxPinnedDialogsCountDefault)
-                        : (getUserConfig().isPremium() ? getMessagesController().maxFolderPinnedDialogsCountPremium : getMessagesController().maxFolderPinnedDialogsCountDefault);
-                if (regular > limit || secret > limit) {
-                    if (sourceFolder == 0) {
-                        showDialog(new LimitReachedBottomSheet(this, getParentActivity(), LimitReachedBottomSheet.TYPE_PIN_DIALOGS, currentAccount, null));
-                    } else {
-                        AlertsCreator.showSimpleAlert(this, LocaleController.formatString("PinFolderLimitReached", R.string.PinFolderLimitReached, LocaleController.formatPluralString("Chats", limit)));
-                    }
-                    return;
-                }
-            }
-        }
-        int changed = 0;
-        for (int i = 0; i < selectedDialogs.size(); i++) {
-            TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(selectedDialogs.get(i));
-            if (dialog != null && dialog.pinned != pin && getMessagesController().pinDialog(dialog.id, pin, null, -1)) changed++;
-        }
-        for (int sourceFolder : affectedFolders) getMessagesController().reorderPinnedDialogs(sourceFolder, null, 0);
-        scheduleChatCategoriesUpdate();
-        UndoView undoView = getUndoView();
-        if (searchIsShowed && changed > 0 && undoView != null) {
-            undoView.showWithAction(0, pin ? UndoView.ACTION_PIN_DIALOGS : UndoView.ACTION_UNPIN_DIALOGS, changed);
-        }
-        hideActionMode(false);
-    }
-
     private void performSelectedDialogsAction(ArrayList<Long> selectedDialogs, int action, boolean alert, boolean longPress, HashSet<Long> dialogsIdsToRevoke) {
         if (getParentActivity() == null) {
-            return;
-        }
-        if ((action == pin || action == pin2) && org.telegram.ui.ayu.OxChatCategories.isCategory(viewPages[0].dialogsType)) {
-            performCategoryPinAction(selectedDialogs);
             return;
         }
         MessagesController.DialogFilter filter;
@@ -9657,7 +9214,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             } else {
                 ArrayList<TLRPC.Dialog> dialogs = getMessagesController().getDialogs(folderId);
-                if (folderId == 1 && viewPages != null && dialogs.isEmpty() && !hasStories) {
+                if (viewPages != null && dialogs.isEmpty() && !hasStories) {
                     viewPages[0].listView.setEmptyView(null);
                     viewPages[0].progressView.setVisibility(View.INVISIBLE);
                     finishFragment();
@@ -9779,7 +9336,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 performSelectedDialogsAction(didsCopy, action, false, false, param ? dialogsIdsPossibleToRevoke : null);
                                 getMessagesController().setDialogsInTransaction(false);
                                 getMessagesController().checkIfFolderEmpty(folderId);
-                                if (folderId != 0 && getMessagesController().getDialogs(folderId).isEmpty()) {
+                                if (folderId != 0 && getDialogsArray(currentAccount, viewPages[0].dialogsType, folderId, false).size() == 0) {
                                     viewPages[0].listView.setEmptyView(null);
                                     viewPages[0].progressView.setVisibility(View.INVISIBLE);
                                     finishFragment();
@@ -9902,7 +9459,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             if (action == clear && ChatObject.isChannel(chat) && (!chat.megagroup || ChatObject.isPublic(chat))) {
                                 getMessagesController().deleteDialog(selectedDialog, 2, param);
                             } else {
-                                if (action == delete && folderId != 0 && getMessagesController().getDialogs(folderId).size() == 1) {
+                                if (action == delete && folderId != 0 && getDialogsArray(currentAccount, viewPages[0].dialogsType, folderId, false).size() == 1) {
                                     viewPages[0].progressView.setVisibility(View.INVISIBLE);
                                 }
 
@@ -10048,8 +9605,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         // ghost mode: an explicit "mark as read" chosen by the user is always delivered to the server,
         // so allow the receipt up-front (mentions + history) and flush whatever was suppressed before
-        if (!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets) {
-            org.telegram.messenger.ayu.AyuState.setAllowReadPacket(currentAccount, did, true, false);
+        if (!org.telegram.messenger.ayu.AyuConfig.sendReadPackets) {
+            org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, true, false);
         }
         getMessagesController().markMentionsAsRead(did, 0);
         getMessagesController().markDialogAsRead(did, dialog.top_message, dialog.top_message, dialog.last_message_date, false, 0, 0, true, 0);
@@ -10066,56 +9623,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         getMessagesController().markDialogAsUnread(did, null, 0);
     }
 
-    private ArrayList<TLRPC.Dialog> localCategoryReadSource(int category) {
-        if (category == org.telegram.ui.ayu.OxChatCategories.ALL) return getMessagesController().getDialogs(folderId);
-        org.telegram.ui.ayu.OxChatCategories snapshot = new org.telegram.ui.ayu.OxChatCategories();
-        snapshot.rebuild(getMessagesController(), getUserConfig().getClientUserId(), folderId, getMediaDataController());
-        return snapshot.dialogs(category);
-    }
-
-    private boolean hasUnreadLocalCategory(int category) {
-        if (!supportsLocalChatCategories() || isForwardCategorySurface() || !org.telegram.ui.ayu.OxChatCategories.isLocalTab(category)) return false;
-        ArrayList<TLRPC.Dialog> dialogs = localCategoryReadSource(category);
-        for (int i = 0; i < dialogs.size(); i++) {
-            TLRPC.Dialog dialog = dialogs.get(i);
-            if (!DialogObject.isFolderDialogId(dialog.id) && (dialog.unread_count > 0 || dialog.unread_mark)) return true;
-        }
-        return false;
-    }
-
-    private void markLocalCategoryAsRead(int account, int category) {
-        if (account != currentAccount || isFinished || !supportsLocalChatCategories() || isForwardCategorySurface()
-                || !org.telegram.ui.ayu.OxChatCategories.isLocalTab(category)) return;
-        ArrayList<TLRPC.Dialog> source = localCategoryReadSource(category);
-        ArrayList<TLRPC.Dialog> unread = new ArrayList<>();
-        HashSet<Long> seen = new HashSet<>();
-        for (int i = 0; i < source.size(); i++) {
-            TLRPC.Dialog dialog = source.get(i);
-            if (dialog.id == 0 || DialogObject.isFolderDialogId(dialog.id) || !seen.add(dialog.id)
-                    || dialog.unread_count == 0 && !dialog.unread_mark) continue;
-            TLRPC.Dialog target = new TLRPC.TL_dialog();
-            target.id = dialog.id;
-            target.top_message = dialog.top_message;
-            target.last_message_date = dialog.last_message_date;
-            unread.add(target);
-        }
-        debugLastUpdateAction = 2;
-        for (int i = 0; i < unread.size(); i++) {
-            TLRPC.Dialog dialog = unread.get(i);
-            long did = dialog.id;
-            if (!org.telegram.messenger.ayu.AyuGhostConfig.get(account).sendReadPackets) {
-                org.telegram.messenger.ayu.AyuState.setAllowReadPacket(account, did, true, false);
-            }
-            if (getMessagesController().isForum(did) || getMessagesController().isMonoForumWithManageRights(did)) {
-                getMessagesController().markAllTopicsAsRead(did);
-            }
-            getMessagesController().markMentionsAsRead(did, 0);
-            getMessagesController().markDialogAsRead(did, dialog.top_message, dialog.top_message, dialog.last_message_date, false, 0, 0, true, 0);
-            org.telegram.messenger.ayu.AyuGhostHelper.onManualMarkAsRead(account, did);
-        }
-        scheduleChatCategoriesUpdate();
-    }
-
     private void markDialogsAsRead(ArrayList<TLRPC.Dialog> dialogs) {
         debugLastUpdateAction = 2;
         int selectedDialogIndex = -1;
@@ -10128,8 +9635,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (getMessagesController().isForum(did) || getMessagesController().isMonoForumWithManageRights(did)) {
                 getMessagesController().markAllTopicsAsRead(did);
             }
-            if (!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets) {
-                org.telegram.messenger.ayu.AyuState.setAllowReadPacket(currentAccount, did, true, false);
+            if (!org.telegram.messenger.ayu.AyuConfig.sendReadPackets) {
+                org.telegram.messenger.ayu.AyuState.setAllowReadPacket(did, true, false);
             }
             getMessagesController().markMentionsAsRead(did, 0);
             getMessagesController().markDialogAsRead(did, dialog.top_message, dialog.top_message, dialog.last_message_date, false, 0, 0, true, 0);
@@ -10464,7 +9971,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         }
         if (removeFromFolderItem != null) {
-            boolean cantRemoveFromFolder = filterTabsView == null || filterTabsView.getVisibility() != View.VISIBLE || filterTabsView.currentTabIsDefault() || org.telegram.ui.ayu.OxChatCategories.isLocalTab(viewPages[0].selectedType);
+            boolean cantRemoveFromFolder = filterTabsView == null || filterTabsView.getVisibility() != View.VISIBLE || filterTabsView.currentTabIsDefault();
             if (!cantRemoveFromFolder) {
                 try {
                     final int dialogsCount = getDialogsArray(currentAccount, viewPages[0].dialogsAdapter.getDialogsType(), folderId, dialogsListFrozen).size();
@@ -10763,7 +10270,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             final boolean visible = org.telegram.messenger.ayu.AyuConfig.showGhostToggleInDrawer;
             ayuGhostItem.setVisibility(visible ? View.VISIBLE : View.GONE);
             if (visible) {
-                final boolean active = org.telegram.messenger.ayu.AyuConfig.isGhostModeActive(currentAccount);
+                final boolean active = org.telegram.messenger.ayu.AyuConfig.isGhostModeActive();
                 final int defaultIconColor = getThemedColor(Theme.key_actionBarDefaultIcon);
                 ayuGhostItem.setIconColor(active
                         ? getThemedColor(Theme.key_chats_actionBackground)
@@ -10777,8 +10284,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void onAyuGhostToggleClicked() {
-        org.telegram.messenger.ayu.AyuConfig.toggleGhostMode(currentAccount);
-        final boolean enabled = org.telegram.messenger.ayu.AyuConfig.isGhostModeActive(currentAccount);
+        org.telegram.messenger.ayu.AyuConfig.toggleGhostMode();
+        final boolean enabled = org.telegram.messenger.ayu.AyuConfig.isGhostModeActive();
         updateAyuMenuItems();
         if (BulletinFactory.canShowBulletin(this)) {
             BulletinFactory.of(this)
@@ -10817,8 +10324,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         // setGhostMode() flushes the online state (AyuGhostHelper.onOnlineSettingsChanged) and
         // posts ayuGhostModeChanged itself, which repaints the ghost button in the action bar
         addOcoderXToggle(io, R.drawable.msg_ghost, getString(R.string.AyuDrawerGhostMode),
-                org.telegram.messenger.ayu.AyuConfig.isGhostModeActive(currentAccount),
-                enabled -> org.telegram.messenger.ayu.AyuConfig.setGhostMode(currentAccount, enabled));
+                org.telegram.messenger.ayu.AyuConfig.isGhostModeActive(),
+                org.telegram.messenger.ayu.AyuConfig::setGhostMode);
         addOcoderXToggle(io, R.drawable.msg_delete, getString(R.string.AyuDrawerAntiDelete),
                 org.telegram.messenger.ayu.AyuConfig.saveDeletedMessages,
                 org.telegram.messenger.ayu.AyuConfig::setSaveDeletedMessages);
@@ -11201,22 +10708,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @SuppressWarnings("unchecked")
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.ayuConfigChanged && supportsLocalChatCategories()) {
-            updateFilterTabs(false, false);
-            return;
-        }
-        if (account == currentAccount && chatCategories != null) {
-            if (id == NotificationCenter.dialogsNeedReload || id == NotificationCenter.chatInfoDidLoad || id == NotificationCenter.dialogFiltersUpdated) {
-                scheduleChatCategoriesUpdate();
-            } else if (id == NotificationCenter.updateInterfaces && args.length > 0) {
-                int mask = (Integer) args[0];
-                if ((mask & (MessagesController.UPDATE_MASK_NAME | MessagesController.UPDATE_MASK_CHAT | MessagesController.UPDATE_MASK_CHAT_NAME | MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE | MessagesController.UPDATE_MASK_NEW_MESSAGE | MessagesController.UPDATE_MASK_REORDER)) != 0) scheduleChatCategoriesUpdate();
-            }
-        }
         if (id == NotificationCenter.dialogsNeedReload) {
-            if (searchViewPager != null && searchViewPager.dialogsSearchAdapter != null) {
-                searchViewPager.dialogsSearchAdapter.notifyDataSetChanged();
-            }
             if (viewPages == null || dialogsListFrozen) {
                 return;
             }
@@ -11293,7 +10785,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         } else if (id == NotificationCenter.updateInterfaces) {
             Integer mask = (Integer) args[0];
             updateVisibleRows(mask);
-            if ((mask & (MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE | MessagesController.UPDATE_MASK_SEND_STATE | MessagesController.UPDATE_MASK_NEW_MESSAGE | MessagesController.UPDATE_MASK_CHAT | MessagesController.UPDATE_MASK_MESSAGE_TEXT)) != 0 && viewPages != null && org.telegram.ui.ayu.OxUnreadByThemConfig.hasActive(currentAccount)) {
+            if ((mask & (MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE | MessagesController.UPDATE_MASK_SEND_STATE)) != 0 && viewPages != null && !DialogsAdapter.unreadByThemFolders.isEmpty()) {
                 //perf: read receipts arrive in bursts; rebuild the filtered list once, 250 ms after the last one
                 AndroidUtilities.cancelRunOnUIThread(unreadByThemRefreshRunnable);
                 AndroidUtilities.runOnUIThread(unreadByThemRefreshRunnable, 250);
@@ -11317,7 +10809,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             updateStatus(UserConfig.getInstance(account).getCurrentUser(), true);
         } else if (id == NotificationCenter.appDidLogout) {
-            org.telegram.ui.ayu.OxUnreadByThemConfig.clear(currentAccount);
             dialogsLoaded[currentAccount] = false;
         } else if (id == NotificationCenter.encryptedChatUpdated) {
             updateVisibleRows(0);
@@ -11656,7 +11147,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             frozenDialogsList = null;
         }
         dialogsListFrozen = frozen;
-        if (!frozen && chatCategoriesUpdateDeferred) scheduleChatCategoriesUpdate();
         viewPages[0].dialogsAdapter.setDialogsListFrozen(frozen);
         if (!frozen && notify) {
             if (viewPages[0].listView.isComputingLayout()) {
@@ -11702,33 +11192,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private ArrayList<TLRPC.Dialog> botShareDialogs;
 
-    private final org.telegram.ui.ayu.OxUnreadByThemConfig.Projection unreadByThemProjection = new org.telegram.ui.ayu.OxUnreadByThemConfig.Projection();
-
-    public boolean supportsUnreadByThem(int type, int folder) {
-        return initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && requestPeerType == null
-                && folderId == 0 && communityId == 0 && TextUtils.isEmpty(searchString) && folder == 0
-                && (type == DIALOGS_TYPE_DEFAULT || org.telegram.ui.ayu.OxChatCategories.isCategory(type)
-                || (type == 7 || type == 8) && getMessagesController().selectedDialogFilter[type - 7] != null);
-    }
-
-    private long unreadByThemScope(int account, int type, int folder) {
-        if (account != currentAccount || !supportsUnreadByThem(type, folder)) return org.telegram.ui.ayu.OxUnreadByThemConfig.NO_SCOPE;
-        return org.telegram.ui.ayu.OxUnreadByThemConfig.scope(type,
-                type == 7 || type == 8 ? getMessagesController().selectedDialogFilter[type - 7] : null);
-    }
-
-    /** Called before the adapter builds rows, never from binding/drawing/list lookup. */
-    public void prepareUnreadByThemDialogs(int account, int type, int folder, boolean frozen) {
-        if (frozen && frozenDialogsList != null) return;
-        long scope = unreadByThemScope(account, type, folder);
-        if (scope != org.telegram.ui.ayu.OxUnreadByThemConfig.NO_SCOPE) {
-            unreadByThemProjection.rebuild(account, scope, getDialogsArraySource(account, type, folder, false));
-        }
-    }
-
     /** ox: coalesced refresh of the pages whose "unread by them" filter is switched on */
     private final Runnable unreadByThemRefreshRunnable = () -> {
-        if (viewPages == null || dialogsListFrozen || !org.telegram.ui.ayu.OxUnreadByThemConfig.hasActive(currentAccount)) {
+        if (viewPages == null || DialogsAdapter.unreadByThemFolders.isEmpty()) {
             return;
         }
         for (ViewPage page : viewPages) {
@@ -11740,20 +11206,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     @NonNull
     public ArrayList<TLRPC.Dialog> getDialogsArray(int currentAccount, int dialogsType, int folderId, boolean frozen) {
-        if (frozen && frozenDialogsList != null) return frozenDialogsList;
-        long scope = unreadByThemScope(currentAccount, dialogsType, folderId);
-        if (org.telegram.ui.ayu.OxUnreadByThemConfig.isActive(currentAccount, scope)) {
-            return unreadByThemProjection.get(currentAccount, scope);
-        }
-        return getDialogsArraySource(currentAccount, dialogsType, folderId, frozen);
-    }
-
-    @NonNull
-    private ArrayList<TLRPC.Dialog> getDialogsArraySource(int currentAccount, int dialogsType, int folderId, boolean frozen) {
         if (frozen && frozenDialogsList != null) {
             return frozenDialogsList;
         }
-        if (chatCategories != null && currentAccount == this.currentAccount && folderId == this.folderId && org.telegram.ui.ayu.OxChatCategories.isCategory(dialogsType)) return chatCategories.dialogs(dialogsType);
         MessagesController messagesController = AccountInstance.getInstance(currentAccount).getMessagesController();
         if (dialogsType == DIALOGS_TYPE_DEFAULT) {
             return messagesController.getDialogs(folderId);
@@ -11800,6 +11255,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
                     return dialogFilter.dialogsForward;
+                }
+                if (initialDialogsType == DIALOGS_TYPE_DEFAULT && DialogsAdapter.isUnreadByThemActive(dialogFilter)) {
+                    return DialogsAdapter.filterUnreadByThem(currentAccount, dialogFilter.dialogs);
                 }
                 return dialogFilter.dialogs;
             }
@@ -12324,7 +11782,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     DialogsActivity.this.scheduleDate = scheduleDate;
                     final ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                     for (int i = 0; i < selectedDialogs.size(); i++) {
-                        topicKeys.add(getSelectedTopicKey(selectedDialogs.get(i)));
+                        topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
                     }
                     PhotoViewer.getInstance().closePhoto(true, false);
                     delegate.didSelectDialogs(DialogsActivity.this, topicKeys, commentView.getFieldText(), false, notify, scheduleDate, scheduleRepeatPeriod, null);
@@ -12476,44 +11934,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     public void didSelectResult(final long dialogId, long topicId, boolean useAlert, final boolean param, TopicsFragment topicsFragment) {
         if (!checkCanWrite(dialogId)) {
-            return;
-        }
-        if (forwardMultiSelect) {
-            if (topicId == 0 && topicsFragment == null && forwardTargetNeedsTopic(dialogId)) {
-                Bundle bundle = new Bundle();
-                if (getMessagesController().isCommunity(dialogId)) {
-                    bundle.putAll(arguments);
-                    bundle.putLong("community_id", -dialogId);
-                    DialogsActivity child = new DialogsActivity(bundle);
-                    child.setCurrentAccount(currentAccount);
-                    child.parentForwardDialogFragment = this;
-                    child.setDelegate(delegate);
-                    presentFragment(child);
-                } else {
-                    bundle.putLong("chat_id", -dialogId);
-                    bundle.putBoolean("for_select", true);
-                    bundle.putBoolean("forward_to", true);
-                    TopicsFragment child = new TopicsFragment(bundle);
-                    child.setCurrentAccount(currentAccount);
-                    child.setForwardFromDialogFragment(this);
-                    presentFragment(child);
-                }
-                return;
-            }
-            DialogsActivity owner = this;
-            while (owner.parentForwardDialogFragment != null) owner = owner.parentForwardDialogFragment;
-            if (!owner.validateSlowModeDialog(dialogId) || org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(dialogId)) {
-                return;
-            }
-            if (!owner.selectedDialogs.contains(dialogId)) owner.selectedDialogs.add(dialogId);
-            owner.selectedForwardTopics.put(dialogId, topicId);
-            owner.findAndUpdateCheckBox(dialogId, true);
-            owner.updateSelectedCount();
-            if (topicsFragment != null) topicsFragment.finishFragment();
-            if (owner != this) {
-                if (topicsFragment != null) removeSelfFromStack();
-                else finishFragment();
-            }
             return;
         }
         if (initialDialogsType == DIALOGS_TYPE_IMPORT_HISTORY_GROUPS || initialDialogsType == DIALOGS_TYPE_IMPORT_HISTORY_USERS || initialDialogsType == DIALOGS_TYPE_IMPORT_HISTORY) {
@@ -12742,14 +12162,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         final boolean onlyMyselfFinal = onlyMyself;
 
         ItemOptions.makeOptions(this, view)
-            .addCheckedIf(forwardMultiSelect && forwardCanHideSender, forwardHideSender, getString(R.string.HideSendersName), () -> {
-                forwardHideSender = !forwardHideSender;
-                if (!forwardHideSender) forwardHideCaption = false;
-            })
-            .addCheckedIf(forwardMultiSelect && forwardHasCaption && (forwardCanHideSender || forwardHideSender), forwardHideCaption, getString(R.string.HideCaption), () -> {
-                forwardHideCaption = !forwardHideCaption;
-                if (forwardHideCaption) forwardHideSender = true;
-            })
             .add(R.drawable.input_notify_off, getString(R.string.SendWithoutSound), () -> {
                 this.notify = false;
                 if (delegate == null || selectedDialogs.isEmpty()) {
@@ -12757,7 +12169,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 final ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                 for (int i = 0; i < selectedDialogs.size(); i++)
-                    topicKeys.add(getSelectedTopicKey(selectedDialogs.get(i)));
+                    topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
                 delegate.didSelectDialogs(DialogsActivity.this, topicKeys, commentView.getFieldText(), false, notify, scheduleDate, scheduleRepeatPeriod, null);
             })
             .addIf(canSchedule, R.drawable.msg_calendar2, LocaleController.getString(R.string.ScheduleMessage), () -> {
@@ -12771,7 +12183,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         }
                         ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                         for (int i = 0; i < selectedDialogs.size(); i++) {
-                            topicKeys.add(getSelectedTopicKey(selectedDialogs.get(i)));
+                            topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
                         }
                         delegate.didSelectDialogs(DialogsActivity.this, topicKeys, commentView.getFieldText(), false, notify, scheduleDate, scheduleRepeatPeriod, null);
                     }
@@ -13871,12 +13283,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (!validateSlowModeDialog(did)) {
                         return;
                     }
-                    if (forwardMultiSelect && parentForwardDialogFragment != null) {
-                        didSelectResult(did, 0, false, false);
-                        return;
-                    }
-                    if ((forwardMultiSelect && !forwardTargetNeedsTopic(did)) || !forwardMultiSelect && !selectedDialogs.isEmpty()) {
-                        if (!selectedDialogs.contains(did) && !checkCanWrite(did)) return;
+                    if (!selectedDialogs.isEmpty()) {
                         boolean checked = addOrRemoveSelectedDialog(did, null);
                         findAndUpdateCheckBox(did, checked);
                         updateSelectedCount();
@@ -14651,13 +14058,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 Bundle args = new Bundle();
                 presentFragment(new GroupCreateActivity(args));
             });
-            if (!org.telegram.messenger.ayu.hidden.HiddenChatsController.getInstance(currentAccount).isHidden(getUserConfig().getClientUserId())) {
-                io.add(R.drawable.outline_saved_24, getString(R.string.SavedMessages), () -> {
-                    Bundle args = new Bundle();
-                    args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
-                    presentFragment(new ChatActivity(args));
-                });
-            }
+            io.add(R.drawable.outline_saved_24, getString(R.string.SavedMessages), () -> {
+                Bundle args = new Bundle();
+                args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
+                presentFragment(new ChatActivity(args));
+            });
         }
         if (ApplicationLoader.applicationLoaderInstance != null) {
             ApplicationLoader.applicationLoaderInstance.addItemOptions(io);
@@ -14691,11 +14096,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (getUserConfig().showCallsTab && !getUserConfig().isBotAccount()) {
             io.add(R.drawable.msg_settings_old, getString(R.string.Settings), () -> {
                 presentFragment(new SettingsActivity());
-            });
-            io.getLast().setOnLongClickListener(v -> {
-                io.dismiss();
-                org.telegram.ui.ayu.hidden.HiddenChatsUi.open(this);
-                return true;
             });
         }
 

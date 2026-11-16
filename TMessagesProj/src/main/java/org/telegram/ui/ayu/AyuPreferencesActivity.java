@@ -132,8 +132,6 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.ayuGhostModeChanged && args.length > 0
-                && args[0] instanceof Integer && (Integer) args[0] != currentAccount) return;
         if (id == NotificationCenter.ayuGhostModeChanged || id == NotificationCenter.ayuConfigChanged) {
             if (listView != null && listView.adapter != null) {
                 listView.adapter.update(true);
@@ -186,13 +184,13 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
         // ------------- ghost -------------
         items.add(UItem.asHeader(getString(R.string.AyuGhostEssentials)));
         items.add(UItem.asExpandableSwitch(GHOST_MASTER, getString(R.string.AyuGhostMode),
-                        String.format(Locale.US, "%d/5", AyuConfig.getGhostModeSelectedCount(currentAccount)))
-                .setChecked(AyuConfig.isGhostModeActive(currentAccount))
+                        String.format(Locale.US, "%d/5", AyuConfig.getGhostModeSelectedCount()))
+                .setChecked(AyuConfig.isGhostModeActive())
                 .setCollapsed(!ghostExpanded)
                 .setClickCallback(v -> {
-                    AyuConfig.toggleGhostMode(currentAccount);
+                    AyuConfig.toggleGhostMode();
                     if (v instanceof TextCheckCell2) {
-                        ((TextCheckCell2) v).setChecked(AyuConfig.isGhostModeActive(currentAccount));
+                        ((TextCheckCell2) v).setChecked(AyuConfig.isGhostModeActive());
                     }
                     if (listView != null && listView.adapter != null) {
                         listView.adapter.update(true);
@@ -201,15 +199,15 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
                 }));
         if (ghostExpanded) {
             items.add(UItem.asRoundCheckbox(GHOST_READ, getString(R.string.AyuGhostDontReadMessages))
-                    .setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets).setPad(1));
+                    .setChecked(!AyuConfig.sendReadPackets).setPad(1));
             items.add(UItem.asRoundCheckbox(GHOST_STORIES, getString(R.string.AyuGhostDontReadStories))
-                    .setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories).setPad(1));
+                    .setChecked(!AyuConfig.sendReadStories).setPad(1));
             items.add(UItem.asRoundCheckbox(GHOST_ONLINE, getString(R.string.AyuGhostDontSendOnline))
-                    .setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets).setPad(1));
+                    .setChecked(!AyuConfig.sendOnlinePackets).setPad(1));
             items.add(UItem.asRoundCheckbox(GHOST_TYPING, getString(R.string.AyuGhostDontSendTyping))
-                    .setChecked(!org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress).setPad(1));
+                    .setChecked(!AyuConfig.sendUploadProgress).setPad(1));
             items.add(UItem.asRoundCheckbox(GHOST_OFFLINE_AFTER_ONLINE, getString(R.string.AyuGhostSendOfflineAfterOnline))
-                    .setChecked(org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOfflinePacketAfterOnline).setPad(1));
+                    .setChecked(AyuConfig.sendOfflinePacketAfterOnline).setPad(1));
         }
         items.add(UItem.asSettingsCell(GHOST_MORE, 0, getString(R.string.AyuGhostSettings)));
         items.add(UItem.asShadow(getString(R.string.AyuGhostModeInfo)));
@@ -250,7 +248,6 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
         // ------------- quality of life -------------
         items.add(UItem.asHeader(getString(R.string.AyuQualityOfLife)));
         items.add(UItem.asCheck(QOL_KEEP_ALIVE, getString(R.string.AyuKeepAliveService)).setChecked(AyuConfig.keepAliveService));
-        items.add(UItem.asShadow(getString(R.string.OxBackgroundReceiveInfo)));
         items.add(UItem.asCheck(QOL_DISABLE_ADS, getString(R.string.AyuDisableAds)).setChecked(AyuConfig.disableAds));
         items.add(UItem.asCheck(QOL_DISABLE_PROXY_SPONSOR, getString(R.string.AyuDisableProxySponsor)).setChecked(AyuConfig.disableProxySponsor));
         items.add(UItem.asCheck(QOL_HIDE_STORIES, getString(R.string.AyuHideStories)).setChecked(AyuConfig.hideStories));
@@ -290,12 +287,8 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
         items.add(UItem.asHeader(getString(R.string.AyuDynamicIsland)));
         items.add(UItem.asSettingsCell(DYNAMIC_ISLAND, 0, getString(R.string.AyuDynamicIsland),
                 getString(AyuConfig.dynamicIsland ? R.string.AyuEnabled : R.string.AyuDisabled)));
+        items.add(UItem.asSettingsCell(NETWORK_DIAGNOSTICS, 0, getString(R.string.AyuNetDiagTitle), getString(R.string.AyuNetDiagSubtitle)));
         items.add(UItem.asShadow(getString(R.string.AyuDynamicIslandInfo)));
-
-        // ------------- network diagnostics -------------
-        items.add(UItem.asHeader(getString(R.string.AyuNetDiagTitle)));
-        items.add(UItem.asSettingsCell(NETWORK_DIAGNOSTICS, 0, getString(R.string.AyuNetDiagTitle)));
-        items.add(UItem.asShadow(getString(R.string.AyuNetDiagSubtitle)));
 
         // ------------- file explorer -------------
         items.add(UItem.asHeader(getString(R.string.AyuFileExplorer)));
@@ -343,31 +336,31 @@ public class AyuPreferencesActivity extends UniversalFragment implements Notific
             case GHOST_MASTER:
                 ghostExpanded = !ghostExpanded;
                 if (view instanceof TextCheckCell2) {
-                    ((TextCheckCell2) view).setChecked(AyuConfig.isGhostModeActive(currentAccount));
+                    ((TextCheckCell2) view).setChecked(AyuConfig.isGhostModeActive());
                 }
                 if (listView != null && listView.adapter != null) {
                     listView.adapter.update(true);
                 }
                 break;
             case GHOST_READ:
-                AyuConfig.setSendReadPackets(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets);
-                toggleCheckbox(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadPackets);
+                AyuConfig.setSendReadPackets(!AyuConfig.sendReadPackets);
+                toggleCheckbox(view, !AyuConfig.sendReadPackets);
                 break;
             case GHOST_STORIES:
-                AyuConfig.setSendReadStories(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories);
-                toggleCheckbox(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories);
+                AyuConfig.setSendReadStories(!AyuConfig.sendReadStories);
+                toggleCheckbox(view, !AyuConfig.sendReadStories);
                 break;
             case GHOST_ONLINE:
-                AyuConfig.setSendOnlinePackets(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets);
-                toggleCheckbox(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOnlinePackets);
+                AyuConfig.setSendOnlinePackets(!AyuConfig.sendOnlinePackets);
+                toggleCheckbox(view, !AyuConfig.sendOnlinePackets);
                 break;
             case GHOST_TYPING:
-                AyuConfig.setSendUploadProgress(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress);
-                toggleCheckbox(view, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendUploadProgress);
+                AyuConfig.setSendUploadProgress(!AyuConfig.sendUploadProgress);
+                toggleCheckbox(view, !AyuConfig.sendUploadProgress);
                 break;
             case GHOST_OFFLINE_AFTER_ONLINE:
-                AyuConfig.setSendOfflinePacketAfterOnline(currentAccount, !org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOfflinePacketAfterOnline);
-                toggleCheckbox(view, org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendOfflinePacketAfterOnline);
+                AyuConfig.setSendOfflinePacketAfterOnline(!AyuConfig.sendOfflinePacketAfterOnline);
+                toggleCheckbox(view, AyuConfig.sendOfflinePacketAfterOnline);
                 break;
             case GHOST_MORE:
                 presentFragment(new GhostPreferencesActivity());

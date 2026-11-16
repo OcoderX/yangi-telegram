@@ -45,7 +45,6 @@ import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.SerializedData;
 import org.telegram.tgnet.tl.TL_iv;
-import org.telegram.tgnet.tl.TL_keyboard;
 import org.telegram.ui.ActionBar.FloatingToolbar;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextSelectionHelper;
@@ -98,7 +97,6 @@ public class RichEditorListView extends UniversalRecyclerView {
     final ArrayList<BlockRow> rows = new ArrayList<>();
 
     final HashMap<Long, TL_iv.RichText> quoteAuthors = new HashMap<>();
-    private final HashMap<Long, TL_iv.RichText> conversionQuoteAuthors = new HashMap<>();
 
     TextSelectionHelper.ArticleTextSelectionHelper textSelectionHelper;
     TextSelectionHelper.TextSelectionOverlay textSelectionOverlay;
@@ -342,7 +340,6 @@ public class RichEditorListView extends UniversalRecyclerView {
 
     public void clearContent() {
         destroy();
-        conversionQuoteAuthors.clear();
         loadedRichMessage = null;
         pendingMediaRow = null;
         pendingInsertRow = null;
@@ -465,24 +462,16 @@ public class RichEditorListView extends UniversalRecyclerView {
     }
 
     public CharSequence toSimpleMessage() {
-        return RichMessageConvert.rowsToSimpleMessage(rows);
+        return RichMessageConvert.rowsToCharSequence(rows);
     }
 
     public void convertToSimple() {
-        applySimpleConversion(RichMessageConvert.rowsToSimpleMessage(rows));
-    }
-
-    public void applySimpleConversion(CharSequence simple) {
-        if (hasPendingUploads()) return;
-        if (history != null) {
-            history.flush();
-            history.record();
-        }
-        conversionQuoteAuthors.putAll(quoteAuthors);
+        if (history != null) history.record();
+        final CharSequence simple = RichMessageConvert.rowsToSimpleMessage(rows);
         destroy();
         rows.clear();
         quoteAuthors.clear();
-        // History retains the old rows; keep their media lookup available when they are undone.
+        loadedRichMessage = null;
         flattenBlocks(rows, RichMessageConvert.blocksFromCharSequence(simple), quoteAuthors);
         adapter.update(false);
         if (history != null) history.record();
@@ -2968,13 +2957,6 @@ public class RichEditorListView extends UniversalRecyclerView {
         textSelectionHelper.clear();
         rows.clear();
         rows.addAll(newRows);
-        for (BlockRow row : newRows) {
-            for (Long quoteId : row.quoteIds) {
-                if (!quoteAuthors.containsKey(quoteId) && conversionQuoteAuthors.containsKey(quoteId)) {
-                    quoteAuthors.put(quoteId, conversionQuoteAuthors.get(quoteId));
-                }
-            }
-        }
         renumberAllRuns();
         adapter.update(false);
         if (focus != null && focus.rowId >= 0) {
@@ -5182,14 +5164,6 @@ public class RichEditorListView extends UniversalRecyclerView {
         for (int i = 0; i < rows.size(); i++) {
             BlockRow r = rows.get(i);
             if (!RichTextCell.readPlainText(r.block).isEmpty()) return true;
-            if (r.block instanceof TL_iv.pageBlockDocument || r.block instanceof TL_iv.pageBlockUnsupported) return true;
-            if (r.block instanceof TL_iv.pageBlockButtonRow) {
-                final ArrayList<TL_keyboard.PageButton> buttons = ((TL_iv.pageBlockButtonRow) r.block).buttons;
-                if (buttons == null) continue;
-                for (TL_keyboard.PageButton button : buttons) {
-                    if (button != null && !RichTextStyle.isEmpty(button.text)) return true;
-                }
-            }
             if (isMedia(r.block) || r.block instanceof TL_iv.pageBlockAudio) {
                 for (MediaUploadState ms : mediasOf(r)) {
                     if (ms.isReady() || ms.isPending()) return true;

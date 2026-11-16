@@ -1,7 +1,5 @@
 package org.telegram.ui.Stories;
 
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
-
 import static org.telegram.messenger.LocaleController.getString;
 
 import android.content.Intent;
@@ -191,9 +189,10 @@ public class StoriesController {
     }
 
     public void loadAllStories() {
-        if (UserConfig.getInstance(currentAccount).isBotAccount()) return;
-        loadStories();
-        loadStoriesRead();
+        if (!firstLoad) {
+            loadStories();
+            loadStoriesRead();
+        }
     }
 
     private void loadStoriesRead() {
@@ -288,28 +287,24 @@ public class StoriesController {
     }
 
     public void loadStories() {
-        if (UserConfig.getInstance(currentAccount).isBotAccount() || loadingFromDatabase) {
-            return;
-        }
         if (firstLoad) {
-            firstLoad = false;
             loadingFromDatabase = true;
             storiesStorage.getAllStories(allStories -> {
                 loadingFromDatabase = false;
                 if (allStories != null) {
                     processAllStoriesResponse(allStories, false, true, false);
+                    loadFromServer(false);
+                    loadFromServer(true);
+                } else {
+                    cleanup();
+                    loadStories();
                 }
-                // Persisted cursors can outlive the cached peers (expiry, eviction or a failed
-                // database read). Start this process with a full snapshot, not NotModified.
-                state = stateHidden = "";
-                hasMore = hasMoreHidden = false;
-                loadFromServer(false);
-                loadFromServer(true);
             });
         } else {
             loadFromServer(false);
             loadFromServer(true);
         }
+        firstLoad = false;
     }
 
     public void loadHiddenStories() {
@@ -381,10 +376,6 @@ public class StoriesController {
     }
 
     private void loadFromServer(boolean hidden) {
-        loadFromServer(hidden, false);
-    }
-
-    private void loadFromServer(boolean hidden, boolean nextPage) {
         if ((hidden && loadingFromServerHidden) || (!hidden && loadingFromServer) || loadingFromDatabase) {
             return;
         }
@@ -401,7 +392,7 @@ public class StoriesController {
             req.flags |= 1;
         }
         boolean isNext = false;
-        if (nextPage && hasMore && !TextUtils.isEmpty(state)) {
+        if (hasMore && !TextUtils.isEmpty(state)) {
             isNext = req.next = true;
         }
         req.include_hidden = hidden;
@@ -1307,7 +1298,7 @@ public class StoriesController {
             if (!profile) {
                 storiesStorage.updateMaxReadId(dialogId, newReadId);
             }
-            if (org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories) {
+            if (AyuConfig.sendReadStories) {
                 TL_stories.TL_stories_readStories req = new TL_stories.TL_stories_readStories();
                 req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
                 req.max_id = storyItem.id;
@@ -1567,7 +1558,7 @@ public class StoriesController {
 
     public void loadNextStories(boolean hidden) {
         if (hidden ? hasMoreHidden : hasMore) {
-            loadFromServer(hidden, true);
+            loadFromServer(hidden);
         }
     }
 
@@ -3047,7 +3038,7 @@ public class StoriesController {
 
     }
 
-    public static class SearchStoriesList extends StoriesList implements NotificationCenter.NotificationCenterDelegate {
+    public static class SearchStoriesList extends StoriesList {
 
         public final String query;
         public final String username;
@@ -3096,50 +3087,9 @@ public class StoriesController {
         private String last_offset = "";
         private int reqId;
         private int count;
-        private int rawLoadedCount;
-        private int hiddenEmptyPages;
-        private final HashSet<Integer> privacyLinks = new HashSet<>();
-
-        public void removeHiddenResults() {
-            if (!messageObjects.removeIf(message -> HiddenChatsController.getInstance(currentAccount).isHidden(message.getDialogId()))) return;
-            fakeDays.clear();
-            for (int i = 0; i < messageObjects.size(); i++) {
-                messageObjects.get(i).storyItem.messageId = i;
-                messageObjects.get(i).messageOwner.id = i;
-                ArrayList<Integer> day = new ArrayList<>();
-                day.add(i);
-                fakeDays.add(day);
-            }
-        }
-
-        @Override
-        public int link() {
-            int id = super.link();
-            if (privacyLinks.isEmpty()) NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogsNeedReload);
-            privacyLinks.add(id);
-            removeHiddenResults();
-            return id;
-        }
-
-        @Override
-        public void unlink(int id) {
-            privacyLinks.remove(id);
-            if (privacyLinks.isEmpty()) NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.dialogsNeedReload);
-            super.unlink(id);
-        }
-
-        @Override
-        public void didReceivedNotification(int id, int account, Object... args) {
-            if (id == NotificationCenter.dialogsNeedReload) {
-                removeHiddenResults();
-                AndroidUtilities.cancelRunOnUIThread(super.notify);
-                AndroidUtilities.runOnUIThread(super.notify);
-            }
-        }
 
         @Override
         public boolean load(boolean force, int count, List<Integer> ids) {
-            removeHiddenResults();
             if (loading) return false;
             if (last_offset == null) return false;
 
@@ -3191,7 +3141,6 @@ public class StoriesController {
                     MessagesController.getInstance(currentAccount).putChats(r.chats, false);
                     for (TL_stories.TL_foundStory s : r.stories) {
                         s.storyItem.dialogId = DialogObject.getPeerDialogId(s.peer);
-                        if (HiddenChatsController.getInstance(currentAccount).isHidden(s.storyItem.dialogId)) continue;
                         s.storyItem.messageId = messageObjects.size();
                         MessageObject msg = new MessageObject(currentAccount, s.storyItem);
                         msg.generateThumbs(false);
@@ -3204,12 +3153,8 @@ public class StoriesController {
                     if (r.stories.isEmpty()) {
                         this.count = messageObjects.size();
                     }
-                    rawLoadedCount += r.stories.size();
-                    last_offset = rawLoadedCount >= r.count || r.stories.isEmpty() ? null : r.next_offset;
+                    last_offset = messageObjects.size() >= r.count || r.stories.isEmpty() ? null : r.next_offset;
                     this.loading = false;
-                    if (messageObjects.isEmpty() && last_offset != null && hiddenEmptyPages++ < 4) {
-                        AndroidUtilities.runOnUIThread(() -> load(force, count, ids), 1);
-                    }
 
                     AndroidUtilities.cancelRunOnUIThread(super.notify);
                     AndroidUtilities.runOnUIThread(super.notify);
@@ -3221,7 +3166,7 @@ public class StoriesController {
 
         @Override
         public int getCount() {
-            return HiddenChatsController.getInstance(currentAccount).hasHiddenChats() ? messageObjects.size() : count;
+            return count;
         }
 
         @Override
@@ -3783,7 +3728,7 @@ public class StoriesController {
             if (seenStories.contains(storyId)) return false;
             seenStories.add(storyId);
             saveCache();
-            if (org.telegram.messenger.ayu.AyuGhostConfig.get(currentAccount).sendReadStories) {
+            if (AyuConfig.sendReadStories) {
                 TL_stories.TL_stories_incrementStoryViews req = new TL_stories.TL_stories_incrementStoryViews();
                 req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
                 req.id.add(storyId);

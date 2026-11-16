@@ -1,8 +1,6 @@
 package org.telegram.messenger.ayu.upload;
 
 import android.text.TextUtils;
-import android.os.Looper;
-import android.os.SystemClock;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -27,11 +25,12 @@ import java.util.Iterator;
  * AyuGram Upload Accelerator: the background upload queue.
  * <p>
  * One instance per account. {@code FileLoader.uploadFile()} reports every enqueued upload here, and
- * native upload callbacks retain the operation and account owner identity:
+ * everything else is learned from the regular {@code NotificationCenter} upload events, so nothing in
+ * the send pipeline had to be duplicated:
  * <ul>
- *     <li>upload progress → progress + speed</li>
- *     <li>upload completion → item done</li>
- *     <li>upload failure → item failed (the message itself is marked as "send error" by
+ *     <li>{@code fileUploadProgressChanged} → progress + speed</li>
+ *     <li>{@code fileUploaded} → item done</li>
+ *     <li>{@code fileUploadFailed} → item failed (the message itself is marked as "send error" by
  *     SendMessagesHelper exactly as before)</li>
  *     <li>{@code didUpdateConnectionState} → auto pause when the network is gone, auto resume when
  *     it is back</li>
@@ -77,7 +76,6 @@ public class AyuUploadManager {
     }
 
     private final int currentAccount;
-    private long ownerId = Long.MIN_VALUE;
 
     /** live items, main thread only */
     private final ArrayList<UploadQueueItem> items = new ArrayList<>();
@@ -115,11 +113,14 @@ public class AyuUploadManager {
             return;
         }
         try {
-            ensureOwner();
-            if (id == NotificationCenter.didUpdateConnectionState) {
+            if (id == NotificationCenter.fileUploadProgressChanged) {
+                onProgress((String) args[0], (Long) args[1], (Long) args[2], (Boolean) args[3]);
+            } else if (id == NotificationCenter.fileUploaded) {
+                onUploaded((String) args[0]);
+            } else if (id == NotificationCenter.fileUploadFailed) {
+                onFailed((String) args[0], (Boolean) args[1]);
+            } else if (id == NotificationCenter.didUpdateConnectionState) {
                 onConnectionStateChanged();
-            } else if (id == NotificationCenter.appDidLogout) {
-                notifyChanged();
             }
         } catch (Throwable e) {
             FileLog.e(e);
@@ -131,80 +132,16 @@ public class AyuUploadManager {
             return;
         }
         observersAdded = true;
-        ensureOwner();
-        if (ownerId != 0) {
-            loadRestored();
-        }
+        loadRestored();
         try {
             NotificationCenter center = NotificationCenter.getInstance(currentAccount);
+            center.addObserver(delegate, NotificationCenter.fileUploadProgressChanged);
+            center.addObserver(delegate, NotificationCenter.fileUploaded);
+            center.addObserver(delegate, NotificationCenter.fileUploadFailed);
             center.addObserver(delegate, NotificationCenter.didUpdateConnectionState);
-            center.addObserver(delegate, NotificationCenter.appDidLogout);
         } catch (Throwable e) {
             FileLog.e(e);
         }
-    }
-
-    /** Main-thread owner boundary; account slots can be logged out and reused without a restart. */
-    private void ensureOwner() {
-        final long currentOwner = UserConfig.getInstance(currentAccount).getClientUserId();
-        if (ownerId == currentOwner) {
-            return;
-        }
-        ownerId = currentOwner;
-        AndroidUtilities.cancelRunOnUIThread(saveRunnable);
-        saveScheduled = false;
-        for (int i = 0; i < items.size(); i++) {
-            items.get(i).live = false;
-        }
-        items.clear();
-        itemsByKey.clear();
-        restored.clear();
-        pausedActiveBig = pausedActiveSmall = 0;
-        restoredLoaded = restorePending = false;
-        if (observersAdded && ownerId != 0) {
-            loadRestored();
-        }
-    }
-
-    private boolean isCurrentItem(UploadQueueItem item) {
-        ensureOwner();
-        return item != null && ownerId != 0 && item.ownerId == ownerId
-                && itemsByKey.get(item.operationKey) == item;
-    }
-
-    private boolean canControlItem(UploadQueueItem item) {
-        if (!isCurrentItem(item)) {
-            return false;
-        }
-        final FileUploadOperation operation = FileLoader.getInstance(currentAccount).getUploadOperation(item.path, item.encrypted);
-        return operation == null || operation == item.operation;
-    }
-
-    /** Runtime queue membership, independent of ACK speed or time spent waiting for a slot. */
-    public boolean isLiveUpload(UploadQueueItem item) {
-        if (!isCurrentItem(item) || !item.live || item.operation == null) {
-            return false;
-        }
-        if (item.state != UploadQueueItem.STATE_WAITING && item.state != UploadQueueItem.STATE_ACTIVE
-                && item.state != UploadQueueItem.STATE_PAUSED) {
-            return false;
-        }
-        final FileUploadOperation currentOp = FileLoader.getInstance(currentAccount).getUploadOperation(item.path, item.encrypted);
-        if (currentOp != item.operation || item.operation.isFinishedOrFailed()) {
-            item.live = false;
-            return false;
-        }
-        return true;
-    }
-
-    public boolean hasLiveUploads() {
-        ensureOwner();
-        for (int i = 0; i < items.size(); i++) {
-            if (isLiveUpload(items.get(i))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** called once from ApplicationLoader so that the queue is restored before the first re-send */
@@ -220,85 +157,27 @@ public class AyuUploadManager {
      * Called from {@code FileLoader.uploadFile()} for every upload that is handed to the file loader,
      * no matter whether it starts right away or waits in the queue.
      */
-    public static void onUploadEnqueued(int account, String path, boolean encrypted, boolean small, int type,
-                                        long estimatedSize, FileUploadOperation operation, long ownerId) {
-        if (TextUtils.isEmpty(path) || operation == null || ownerId == 0) {
+    public static void onUploadEnqueued(int account, String path, boolean encrypted, boolean small, int type, long estimatedSize) {
+        if (TextUtils.isEmpty(path)) {
             return;
         }
-        getInstance(account).enqueue(path, encrypted, small, type, estimatedSize, operation, ownerId);
+        getInstance(account).enqueue(path, encrypted, small, type, estimatedSize);
     }
 
-    public static void onUploadProgress(int account, String path, boolean encrypted, FileUploadOperation operation,
-                                       long ownerId, long uploaded, long total) {
+    private void enqueue(String path, boolean encrypted, boolean small, int type, long estimatedSize) {
         AndroidUtilities.runOnUIThread(() -> {
-            final AyuUploadManager manager = getInstance(account);
-            final UploadQueueItem item = manager.findOperation(path, encrypted, operation, ownerId);
-            if (item != null) {
-                manager.onProgress(item, uploaded, total);
-            }
-        });
-    }
-
-    /** A queued upload may have been paused before it acquired its native running slot. */
-    public static void onUploadStarted(int account, String path, boolean encrypted, FileUploadOperation operation,
-                                       long ownerId) {
-        AndroidUtilities.runOnUIThread(() -> {
-            final AyuUploadManager manager = getInstance(account);
-            final UploadQueueItem item = manager.findOperation(path, encrypted, operation, ownerId);
-            if (item != null && item.state == UploadQueueItem.STATE_PAUSED) {
-                manager.applyPause(item);
-            }
-        });
-    }
-
-    public static void onUploadFinished(int account, String path, boolean encrypted, FileUploadOperation operation,
-                                       long ownerId, boolean success) {
-        AndroidUtilities.runOnUIThread(() -> {
-            final AyuUploadManager manager = getInstance(account);
-            final UploadQueueItem item = manager.findOperation(path, encrypted, operation, ownerId);
-            if (item != null) {
-                if (success) {
-                    manager.onUploaded(item);
-                } else {
-                    manager.onFailed(item);
-                }
-            }
-        });
-    }
-
-    private UploadQueueItem findOperation(String path, boolean encrypted, FileUploadOperation operation, long expectedOwner) {
-        ensureOwner();
-        final UploadQueueItem item = itemsByKey.get(UploadQueueItem.key(path, encrypted));
-        if (item == null) {
-            return null;
-        }
-        if (operation != null && item.operation != null && item.operation != operation) {
-            return null;
-        }
-        if (expectedOwner != 0 && item.ownerId != 0 && expectedOwner != item.ownerId) {
-            return null;
-        }
-        return item;
-    }
-
-    private void enqueue(String path, boolean encrypted, boolean small, int type, long estimatedSize,
-                         FileUploadOperation operation, long expectedOwner) {
-        AndroidUtilities.runOnUIThread(() -> {
-            ensureOwner();
-            if (expectedOwner != ownerId || ownerId == 0) {
-                return;
-            }
             final String key = UploadQueueItem.key(path, encrypted);
             UploadQueueItem item = itemsByKey.get(key);
-            if (item != null && item.operation == operation) {
+            if (item != null) {
+                item.live = true;
+                if (item.state == UploadQueueItem.STATE_ERROR || item.state == UploadQueueItem.STATE_DONE) {
+                    item.state = UploadQueueItem.STATE_WAITING;
+                }
+                notifyChanged();
                 return;
             }
-            final UploadQueueItem replaced = item;
-            if (replaced != null) {
-                removeItem(replaced);
-            }
             item = new UploadQueueItem(path, encrypted, small, type, estimatedSize);
-            if (small && item.totalBytes > 0 && item.totalBytes < MIN_TRACKED_SIZE && estimatedSize == 0) {
+            if (item.totalBytes > 0 && item.totalBytes < MIN_TRACKED_SIZE && estimatedSize == 0) {
                 // a thumbnail or a tiny sticker: not worth its own queue row
                 return;
             }
@@ -311,9 +190,6 @@ public class AyuUploadManager {
                 }
             }
             item.live = true;
-            item.ownerId = ownerId;
-            item.operation = operation;
-            item.operationKey = key;
             items.add(item);
             itemsByKey.put(key, item);
             sortItems();
@@ -336,22 +212,23 @@ public class AyuUploadManager {
 
     // ------------------------------------------------------- upload callbacks
 
-    private void onProgress(UploadQueueItem item, long uploaded, long total) {
+    private void onProgress(String path, long uploaded, long total, boolean encrypted) {
+        final UploadQueueItem item = itemsByKey.get(UploadQueueItem.key(path, encrypted));
+        if (item == null) {
+            return;
+        }
         if (uploaded < 0 || total < 0) {
-            // Invalidated native progress is terminal; never retain a phantom live operation.
+            // SendMessagesHelper posts (-1, -1) when a message is cancelled
             removeItem(item);
             notifyChanged();
             return;
         }
-        item.lastProgressTime = SystemClock.elapsedRealtime();
         final long now = System.currentTimeMillis();
         if (item.lastSpeedTime != 0 && now > item.lastSpeedTime + 700) {
             final long delta = uploaded - item.lastSpeedBytes;
             if (delta > 0) {
                 final long speed = delta * 1000L / (now - item.lastSpeedTime);
                 item.speed = item.speed == 0 ? speed : (item.speed * 2 + speed) / 3;
-            } else {
-                item.speed = 0;
             }
             item.lastSpeedTime = now;
             item.lastSpeedBytes = uploaded;
@@ -371,17 +248,30 @@ public class AyuUploadManager {
         notifyChanged();
     }
 
-    private void onUploaded(UploadQueueItem item) {
+    private void onUploaded(String path) {
+        UploadQueueItem item = itemsByKey.get(UploadQueueItem.key(path, false));
+        if (item == null) {
+            item = itemsByKey.get(UploadQueueItem.key(path, true));
+        }
+        if (item == null) {
+            return;
+        }
         item.state = UploadQueueItem.STATE_DONE;
         item.uploadedBytes = item.totalBytes;
         removeItem(item);
         notifyChanged();
     }
 
-    private void onFailed(UploadQueueItem item) {
-        if (item.state != UploadQueueItem.STATE_PAUSED) {
-            item.state = UploadQueueItem.STATE_ERROR;
+    private void onFailed(String path, boolean encrypted) {
+        final UploadQueueItem item = itemsByKey.get(UploadQueueItem.key(path, encrypted));
+        if (item == null) {
+            return;
         }
+        if (item.state == UploadQueueItem.STATE_PAUSED) {
+            // a paused operation reports a failure when it is cancelled; keep the row
+            return;
+        }
+        item.state = UploadQueueItem.STATE_ERROR;
         item.live = false;
         item.speed = 0;
         releasePausedSlot(item);
@@ -424,12 +314,10 @@ public class AyuUploadManager {
 
     /** live queue, main thread only; the returned list must not be modified */
     public ArrayList<UploadQueueItem> getItems() {
-        ensureOwner();
         return items;
     }
 
     public int getActiveCount() {
-        ensureOwner();
         int count = 0;
         for (int a = 0; a < items.size(); a++) {
             if (items.get(a).state == UploadQueueItem.STATE_ACTIVE) {
@@ -440,12 +328,11 @@ public class AyuUploadManager {
     }
 
     public boolean isEmpty() {
-        ensureOwner();
         return items.isEmpty();
     }
 
     public void setPaused(UploadQueueItem item, boolean paused, boolean automatic) {
-        if (!canControlItem(item)) {
+        if (item == null) {
             return;
         }
         if (paused) {
@@ -479,7 +366,7 @@ public class AyuUploadManager {
 
     private void applyPause(UploadQueueItem item) {
         final FileUploadOperation operation = FileLoader.getInstance(currentAccount).getUploadOperation(item.path, item.encrypted);
-        if (operation == null || operation != item.operation) {
+        if (operation == null) {
             return;
         }
         final boolean wasRunning = operation.isStarted();
@@ -499,9 +386,6 @@ public class AyuUploadManager {
 
     private void applyResume(UploadQueueItem item) {
         final FileUploadOperation operation = FileLoader.getInstance(currentAccount).getUploadOperation(item.path, item.encrypted);
-        if (operation != null && operation != item.operation) {
-            return;
-        }
         if (operation == null) {
             releasePausedSlot(item);
             retryFailed(item);
@@ -534,11 +418,12 @@ public class AyuUploadManager {
             removeItem(item);
             return;
         }
+        item.live = true;
         FileLoader.getInstance(currentAccount).uploadFile(item.path, item.encrypted, item.small, item.estimatedSize, item.type, false);
     }
 
     public void cancel(UploadQueueItem item) {
-        if (!canControlItem(item)) {
+        if (item == null) {
             return;
         }
         releasePausedSlot(item);
@@ -547,14 +432,14 @@ public class AyuUploadManager {
             // un-pause first, otherwise cancel() would leave the operation half stopped
             operation.resumeUpload();
         }
-        FileLoader.getInstance(currentAccount).cancelFileUpload(item.path, item.encrypted, item.operation);
+        FileLoader.getInstance(currentAccount).cancelFileUpload(item.path, item.encrypted);
         removeItem(item);
         FileLoader.getInstance(currentAccount).checkUploadQueue();
         notifyChanged();
     }
 
     public void moveToTop(UploadQueueItem item) {
-        if (!canControlItem(item) || items.isEmpty()) {
+        if (item == null || items.isEmpty()) {
             return;
         }
         long min = item.order;
@@ -563,13 +448,12 @@ public class AyuUploadManager {
         }
         item.order = min - 1;
         sortItems();
-        FileLoader.getInstance(currentAccount).moveUploadOperationToTop(item.path, item.encrypted, item.operation);
+        FileLoader.getInstance(currentAccount).moveUploadOperationToTop(item.path, item.encrypted);
         scheduleSave();
         notifyChanged();
     }
 
     private void removeItem(UploadQueueItem item) {
-        item.live = false;
         releasePausedSlot(item);
         items.remove(item);
         itemsByKey.remove(item.key());
@@ -588,7 +472,6 @@ public class AyuUploadManager {
 
     /** the whole queue is dropped (used by "clear finished / cancel all") */
     public void cancelAll() {
-        ensureOwner();
         final ArrayList<UploadQueueItem> copy = new ArrayList<>(items);
         for (int a = 0; a < copy.size(); a++) {
             cancel(copy.get(a));
@@ -598,7 +481,6 @@ public class AyuUploadManager {
     // ------------------------------------------------------------- listeners
 
     public void addListener(Listener listener) {
-        ensureOwner();
         if (listener != null && !listeners.contains(listener)) {
             listeners.add(listener);
         }
@@ -641,37 +523,24 @@ public class AyuUploadManager {
         }
     }
 
-    private static boolean isCleaningZombies;
-
     /** true when at least one account still has something to upload */
     public static boolean hasActiveUploads() {
         if (!AyuUploadConfig.keepAliveWhileUploading) {
             return false;
         }
-        boolean hasActive = false;
         for (int a = 0; a < instances.length; a++) {
             final AyuUploadManager manager = instances[a];
-            if (manager == null || !UserConfig.getInstance(a).isClientActivated()) {
+            if (manager == null) {
                 continue;
             }
-            ArrayList<UploadQueueItem> zombies = null;
             for (int b = 0; b < manager.items.size(); b++) {
-                final UploadQueueItem item = manager.items.get(b);
-                final int state = item.state;
+                final int state = manager.items.get(b).state;
                 if (state == UploadQueueItem.STATE_ACTIVE || state == UploadQueueItem.STATE_WAITING) {
-                    if (manager.isLiveUpload(item)) {
-                        hasActive = true;
-                    } else {
-                        if (zombies == null) {
-                            zombies = new ArrayList<>();
-                        }
-                        zombies.add(item);
-                    }
+                    return true;
                 }
             }
-            cleanupZombies(manager, zombies);
         }
-        return hasActive;
+        return false;
     }
 
     /** aggregated progress over every account, 0..100, or -1 when nothing is known */
@@ -679,12 +548,12 @@ public class AyuUploadManager {
         long uploaded = 0, total = 0;
         for (int a = 0; a < instances.length; a++) {
             final AyuUploadManager manager = instances[a];
-            if (manager == null || !UserConfig.getInstance(a).isClientActivated()) {
+            if (manager == null) {
                 continue;
             }
             for (int b = 0; b < manager.items.size(); b++) {
                 final UploadQueueItem item = manager.items.get(b);
-                if (manager.isLiveUpload(item) && (item.state == UploadQueueItem.STATE_ACTIVE || item.state == UploadQueueItem.STATE_WAITING)) {
+                if (item.state == UploadQueueItem.STATE_ACTIVE || item.state == UploadQueueItem.STATE_WAITING) {
                     uploaded += item.uploadedBytes;
                     total += Math.max(item.totalBytes, item.uploadedBytes);
                 }
@@ -701,52 +570,17 @@ public class AyuUploadManager {
         int count = 0;
         for (int a = 0; a < instances.length; a++) {
             final AyuUploadManager manager = instances[a];
-            if (manager == null || !UserConfig.getInstance(a).isClientActivated()) {
+            if (manager == null) {
                 continue;
             }
-            ArrayList<UploadQueueItem> zombies = null;
             for (int b = 0; b < manager.items.size(); b++) {
-                final UploadQueueItem item = manager.items.get(b);
-                final int state = item.state;
+                final int state = manager.items.get(b).state;
                 if (state == UploadQueueItem.STATE_ACTIVE || state == UploadQueueItem.STATE_WAITING) {
-                    if (manager.isLiveUpload(item)) {
-                        count++;
-                    } else {
-                        if (zombies == null) {
-                            zombies = new ArrayList<>();
-                        }
-                        zombies.add(item);
-                    }
+                    count++;
                 }
             }
-            cleanupZombies(manager, zombies);
         }
         return count;
-    }
-
-    private static void cleanupZombies(final AyuUploadManager manager, final ArrayList<UploadQueueItem> zombies) {
-        if (manager == null || zombies == null || zombies.isEmpty() || isCleaningZombies) {
-            return;
-        }
-        final Runnable cleanup = () -> {
-            if (isCleaningZombies) {
-                return;
-            }
-            isCleaningZombies = true;
-            try {
-                for (int i = 0; i < zombies.size(); i++) {
-                    manager.removeItem(zombies.get(i));
-                }
-                manager.notifyChanged();
-            } finally {
-                isCleaningZombies = false;
-            }
-        };
-        if (Thread.currentThread() == Looper.getMainLooper().getThread()) {
-            cleanup.run();
-        } else {
-            AndroidUtilities.runOnUIThread(cleanup);
-        }
     }
 
     /** re-checks every account's file loader after the concurrency setting changed */
@@ -763,7 +597,7 @@ public class AyuUploadManager {
     // ---------------------------------------------------------- persistence
 
     private String prefsKey() {
-        return "queue_" + currentAccount + "_" + ownerId;
+        return "queue_" + currentAccount;
     }
 
     /**
@@ -778,25 +612,23 @@ public class AyuUploadManager {
         }
         restoredLoaded = true;
         restorePending = true;
-        final long expectedOwner = ownerId;
-        final String key = prefsKey();
         Utilities.globalQueue.postRunnable(() -> {
             ArrayList<UploadQueueItem> parsed;
             try {
-                parsed = parseRestored(key);
+                parsed = parseRestored();
             } catch (Throwable e) {
                 FileLog.e(e);
                 parsed = new ArrayList<>();
             }
             final ArrayList<UploadQueueItem> result = parsed;
-            AndroidUtilities.runOnUIThread(() -> applyRestored(result, expectedOwner));
+            AndroidUtilities.runOnUIThread(() -> applyRestored(result));
         });
     }
 
     /** background queue: JSON parse + the "is the file still there" check */
-    private ArrayList<UploadQueueItem> parseRestored(String key) {
+    private ArrayList<UploadQueueItem> parseRestored() {
         final ArrayList<UploadQueueItem> result = new ArrayList<>();
-        final String json = AyuUploadConfig.getString(key, null);
+        final String json = AyuUploadConfig.getString(prefsKey(), null);
         if (TextUtils.isEmpty(json)) {
             return result;
         }
@@ -825,11 +657,7 @@ public class AyuUploadManager {
     }
 
     /** main thread: publish what {@link #parseRestored()} found */
-    private void applyRestored(ArrayList<UploadQueueItem> parsed, long expectedOwner) {
-        ensureOwner();
-        if (expectedOwner != ownerId || ownerId == 0) {
-            return;
-        }
+    private void applyRestored(ArrayList<UploadQueueItem> parsed) {
         restorePending = false;
         if (parsed == null || parsed.isEmpty()) {
             return;
@@ -876,11 +704,7 @@ public class AyuUploadManager {
     }
 
     private void saveNow() {
-        ensureOwner();
         saveScheduled = false;
-        if (ownerId == 0) {
-            return;
-        }
         if (restorePending) {
             //perf: the persisted queue has not been parsed back yet, saving now would drop it
             scheduleSave();

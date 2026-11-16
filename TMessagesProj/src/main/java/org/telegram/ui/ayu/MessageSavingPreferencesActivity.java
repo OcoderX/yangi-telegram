@@ -14,7 +14,6 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.ayu.AyuConfig;
-import org.telegram.messenger.ayu.AyuChatCapturePolicy;
 import org.telegram.messenger.ayu.antidelete.AyuAntiDeleteConfig;
 import org.telegram.messenger.ayu.edithistory.AyuEditHistoryConfig;
 import org.telegram.ui.ActionBar.BottomSheet;
@@ -37,14 +36,15 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
     private static final int SAVE_MEDIA = 1;
     private static final int SAVE_FORMATTING = 2;
     private static final int SAVE_REACTIONS = 3;
+    private static final int SAVE_FOR_BOTS = 4;
     private static final int SAVE_SELF_DESTRUCTING = 5;
-    private static final int SAVED_TIMED_PHOTOS = 6;
 
     // ---- anti delete ----
     private static final int SHOW_DELETED_LABEL = 10;
     private static final int KEEP_ON_CLEAR_HISTORY = 11;
     private static final int KEEP_ON_DELETE_DIALOG = 12;
     private static final int RESTORE_MEDIA_TO_CACHE = 13;
+    private static final int CLEAR_EXCLUSIONS = 14;
     private static final int DIM_DELETED_MESSAGES = 15;
 
     // ---------------- edit history ----------------
@@ -55,10 +55,6 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
     private static final int EH_TAP_TO_OPEN = 24;
     private static final int EH_WORD_DIFF = 25;
     private static final int EH_EXPAND_FULL = 26;
-
-    private static final int CAPTURE_ENABLED_CHAT = 30;
-    private static final int CAPTURE_DISABLED_CHAT = 31;
-    private static final int CAPTURE_LEGACY_CHAT = 32;
 
     public MessageSavingPreferencesActivity() {
         super();
@@ -104,16 +100,14 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asHeader(getString(R.string.AyuMessageSaving)));
-        items.add(UItem.asShadow(getString(R.string.OxCaptureScopeInfo)));
         items.add(UItem.asCheck(SAVE_MEDIA, getString(R.string.AyuSaveMedia)).setChecked(AyuConfig.saveMedia));
         items.add(UItem.asCheck(SAVE_FORMATTING, getString(R.string.AyuSaveFormatting)).setChecked(AyuConfig.saveFormatting));
         items.add(UItem.asCheck(SAVE_REACTIONS, getString(R.string.AyuSaveReactions)).setChecked(AyuConfig.saveReactions));
-        items.add(UItem.asShadow(getString(R.string.OxCaptureMediaInfo)));
+        items.add(UItem.asCheck(SAVE_FOR_BOTS, getString(R.string.AyuSaveForBots)).setChecked(AyuConfig.saveForBots));
+        items.add(UItem.asShadow(getString(R.string.AyuSaveMediaInfo)));
 
-        items.add(UItem.asCheck(SAVE_SELF_DESTRUCTING, getString(R.string.OxSaveTimedPhotos)).setChecked(AyuConfig.saveSelfDestructingMedia));
-        items.add(UItem.asShadow(getString(R.string.OxSaveTimedPhotosInfo)));
-        items.add(UItem.asButton(SAVED_TIMED_PHOTOS, R.drawable.msg_photos, getString(R.string.OxSavedTimedPhotos)));
-        items.add(UItem.asShadow(getString(R.string.OxSavedTimedPhotosInfo)));
+        items.add(UItem.asCheck(SAVE_SELF_DESTRUCTING, getString(R.string.AyuSaveSelfDestructingMedia)).setChecked(AyuConfig.saveSelfDestructingMedia));
+        items.add(UItem.asShadow(getString(R.string.AyuSaveSelfDestructingMediaInfo)));
 
         // ---------------- anti delete ----------------
         items.add(UItem.asHeader(getString(R.string.AyuAntiDelete)));
@@ -139,29 +133,17 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
         items.add(UItem.asCheck(EH_EXPAND_FULL, getString(R.string.AyuEditHistoryExpandByDefault)).setChecked(AyuEditHistoryConfig.expandFullTextByDefault));
         items.add(UItem.asShadow(getString(R.string.AyuEditHistoryOnLoadInfo)));
 
-        addCaptureChats(items, true);
-        addCaptureChats(items, false);
-
+        items.add(UItem.asHeader(getString(R.string.AyuExcludedChats)));
         final long[] excluded = AyuAntiDeleteConfig.getExcludedDialogs();
-        if (excluded.length != 0) {
-            items.add(UItem.asHeader(getString(R.string.OxCaptureLegacyChats)));
+        if (excluded.length == 0) {
+            items.add(UItem.asShadow(getString(R.string.AyuExcludedChatsEmpty) + "\n\n" + getString(R.string.AyuExcludedChatsInfo)));
+        } else {
             for (int a = 0; a < excluded.length; a++) {
-                items.add(UItem.asFilterChat(false, excluded[a]).setId(CAPTURE_LEGACY_CHAT));
+                items.add(UItem.asFilterChat(false, excluded[a]));
             }
-            items.add(UItem.asShadow(getString(R.string.OxCaptureLegacyInfo)));
+            items.add(UItem.asButton(CLEAR_EXCLUSIONS, getString(R.string.AyuExcludedChatsClear)).red());
+            items.add(UItem.asShadow(getString(R.string.AyuExcludedChatsInfo)));
         }
-    }
-
-    private void addCaptureChats(ArrayList<UItem> items, boolean enabled) {
-        final long[] dialogs = AyuChatCapturePolicy.getExplicitDialogs(currentAccount, enabled);
-        if (dialogs.length == 0) {
-            return;
-        }
-        items.add(UItem.asHeader(getString(enabled ? R.string.OxCaptureEnabledChats : R.string.OxCaptureDisabledChats)));
-        for (long dialogId : dialogs) {
-            items.add(UItem.asFilterChat(enabled, dialogId).setId(enabled ? CAPTURE_ENABLED_CHAT : CAPTURE_DISABLED_CHAT));
-        }
-        items.add(UItem.asShadow(getString(enabled ? R.string.OxCaptureEnabledChatsInfo : R.string.OxCaptureDisabledChatsInfo)));
     }
 
     @Override
@@ -185,12 +167,13 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
                 AyuConfig.setSaveReactions(!AyuConfig.saveReactions);
                 toggleSwitch(view, AyuConfig.saveReactions);
                 break;
+            case SAVE_FOR_BOTS:
+                AyuConfig.setSaveForBots(!AyuConfig.saveForBots);
+                toggleSwitch(view, AyuConfig.saveForBots);
+                break;
             case SAVE_SELF_DESTRUCTING:
                 AyuConfig.setSaveSelfDestructingMedia(!AyuConfig.saveSelfDestructingMedia);
                 toggleSwitch(view, AyuConfig.saveSelfDestructingMedia);
-                break;
-            case SAVED_TIMED_PHOTOS:
-                presentFragment(new SavedTimedPhotosActivity(currentAccount));
                 break;
             case SHOW_DELETED_LABEL:
                 AyuAntiDeleteConfig.setShowDeletedLabel(!AyuAntiDeleteConfig.showDeletedLabel);
@@ -240,16 +223,21 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
                 AyuEditHistoryConfig.setExpandFullTextByDefault(!AyuEditHistoryConfig.expandFullTextByDefault);
                 toggleSwitch(view, AyuEditHistoryConfig.expandFullTextByDefault);
                 break;
-            case CAPTURE_ENABLED_CHAT:
-            case CAPTURE_DISABLED_CHAT:
-            case CAPTURE_LEGACY_CHAT:
-                final boolean enabled = item.id != CAPTURE_ENABLED_CHAT;
-                AyuChatCapturePolicy.setEnabled(currentAccount, item.dialogId, enabled);
+            case CLEAR_EXCLUSIONS:
+                AyuAntiDeleteConfig.clearExcluded();
                 if (listView != null && listView.adapter != null) {
                     listView.adapter.update(true);
                 }
-                BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip,
-                    getString(enabled ? R.string.OxCaptureEnabledInfo : R.string.OxCaptureDisabledInfo)).show();
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip, getString(R.string.AyuExcludedChatsCleared)).show();
+                break;
+            default:
+                if (item.viewType == UniversalAdapter.VIEW_TYPE_FILTER_CHAT && item.dialogId != 0) {
+                    // tapping an excluded chat puts it back under "save deleted messages"
+                    AyuAntiDeleteConfig.setExcluded(item.dialogId, false);
+                    if (listView != null && listView.adapter != null) {
+                        listView.adapter.update(true);
+                    }
+                }
                 break;
         }
     }
@@ -285,7 +273,7 @@ public class MessageSavingPreferencesActivity extends UniversalFragment implemen
         final TextView info = new TextView(context);
         info.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         info.setTextColor(Theme.getColor(Theme.key_dialogTextGray2, resourceProvider));
-        info.setText(getString(R.string.OxCaptureMediaInfo));
+        info.setText(getString(R.string.AyuSaveMediaInfo));
         info.setPadding(dp(22), dp(4), dp(22), dp(8));
         container.addView(info, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 

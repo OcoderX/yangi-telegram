@@ -738,12 +738,22 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
                 }
             } else if (position == accountsAllRow) {
                 SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
-                enabled = SharedConfig.showNotificationsForAllAccounts;
+                enabled = preferences.getBoolean("AllAccounts", true);
                 SharedPreferences.Editor editor = preferences.edit();
                 editor.putBoolean("AllAccounts", !enabled);
                 editor.commit();
                 SharedConfig.showNotificationsForAllAccounts = !enabled;
-                NotificationsController.refreshAccountNotifications();
+                for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                    if (SharedConfig.showNotificationsForAllAccounts) {
+                        NotificationsController.getInstance(a).showNotifications();
+                    } else {
+                        if (a == currentAccount) {
+                            NotificationsController.getInstance(a).showNotifications();
+                        } else {
+                            NotificationsController.getInstance(a).hideNotifications();
+                        }
+                    }
+                }
             } else if (position == notificationsServiceRow) {
                 SharedPreferences preferences = MessagesController.getNotificationsSettings(currentAccount);
                 enabled = preferences.getBoolean("pushService", getMessagesController().keepAliveService);
@@ -1022,7 +1032,7 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
                     } else if (position == callsVibrateRow) {
                         checkCell.setTextAndCheck(getString("Vibrate", R.string.Vibrate), preferences.getBoolean("EnableCallVibrate", true), true);
                     } else if (position == accountsAllRow) {
-                        checkCell.setTextAndCheck(getString("AllAccounts", R.string.AllAccounts), SharedConfig.showNotificationsForAllAccounts, false);
+                        checkCell.setTextAndCheck(getString("AllAccounts", R.string.AllAccounts), MessagesController.getGlobalNotificationsSettings().getBoolean("AllAccounts", true), false);
                     }
                     break;
                 }

@@ -24,7 +24,6 @@ import android.widget.RemoteViewsService;
 import androidx.collection.LongSparseArray;
 
 import org.telegram.tgnet.TLRPC;
-import org.telegram.messenger.ayu.hidden.HiddenChatsController;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.ForegroundColorSpanThemable;
@@ -98,11 +97,6 @@ class ChatsRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory {
             return rv;
         }
         Long id = dids.get(position);
-        if (HiddenChatsController.getInstance(accountInstance.getCurrentAccount()).isHidden(id)) {
-            RemoteViews empty = new RemoteViews(mContext.getPackageName(), R.layout.widget_edititem);
-            empty.setTextViewText(R.id.widget_edititem_text, "");
-            return empty;
-        }
         String name = "";
 
         TLRPC.FileLocation photoPath = null;
@@ -399,20 +393,10 @@ class ChatsRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory {
         ArrayList<TLRPC.Chat> chats = new ArrayList<>();
         LongSparseArray<TLRPC.Message> messages = new LongSparseArray<>();
         accountInstance.getMessagesStorage().getWidgetDialogs(appWidgetId, 0, dids, dialogs, messages, users, chats);
-        HiddenChatsController hidden = HiddenChatsController.getInstance(accountInstance.getCurrentAccount());
-        for (int i = dids.size() - 1; i >= 0; i--) {
-            long id = dids.get(i);
-            if (hidden.isHidden(id)) {
-                dids.remove(i);
-                dialogs.remove(id);
-                messages.remove(id);
-            }
-        }
         accountInstance.getMessagesController().putUsers(users, true);
         accountInstance.getMessagesController().putChats(chats, true);
         messageObjects.clear();
         for (int a = 0, N = messages.size(); a < N; a++) {
-            if (hidden.isHidden(messages.keyAt(a))) continue;
             MessageObject messageObject = new MessageObject(accountInstance.getCurrentAccount(), messages.valueAt(a), (LongSparseArray<TLRPC.User>) null, null, false, true);
             messageObjects.put(messages.keyAt(a), messageObject);
         }
