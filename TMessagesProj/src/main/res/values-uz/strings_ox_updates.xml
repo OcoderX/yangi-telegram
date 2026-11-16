@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="OxUpdatesBarUpdate">Ox-gramni yangilash</string>
+    <string name="OxUpdatesBarProgress">Yuklanmoqda · %1$d%%</string>
+    <string name="OxUpdatesTitle">Ilova yangilanishlari</string>
+    <string name="OxUpdatesAvailable">Yangilanish mavjud</string>
+    <string name="OxUpdatesNewVersion">Ox-gram %1$s</string>
+    <string name="OxUpdatesInstalled">O‘rnatilgan: %1$s</string>
+    <string name="OxUpdatesView">Yangilanishni ko‘rish</string>
+    <string name="OxUpdatesLater">Keyinroq</string>
+    <string name="OxUpdatesCheck">Yangilanishni tekshirish</string>
+    <string name="OxUpdatesChecking">Yangilanish tekshirilmoqda…</string>
+    <string name="OxUpdatesDownloading">Yangilanish yuklanmoqda…</string>
+    <string name="OxUpdatesVerifying">Yuklangan yangilanish tekshirilmoqda…</string>
+    <string name="OxUpdatesReady">O‘rnatishga tayyor</string>
+    <string name="OxUpdatesLatest">Sizda eng so‘nggi versiya o‘rnatilgan</string>
+    <string name="OxUpdatesCanceled">Yuklab olish bekor qilindi</string>
+    <string name="OxUpdatesDescription">Ox-gram yangilanishlarini shu yerda tekshiring va o‘rnating.</string>
+    <string name="OxUpdatesProgress">%1$d%% · %2$s yuklandi</string>
+    <string name="OxUpdatesInstall">Yangilanishni o‘rnatish</string>
+    <string name="OxUpdatesDownload">Yangilash</string>
+    <string name="OxUpdatesRetry">Qayta yuklab olish</string>
+    <string name="OxUpdatesCancelDownload">Yuklab olishni bekor qilish</string>
+    <string name="OxUpdatesChanges">Nimalar yangi</string>
+    <string name="OxUpdatesNetworkError">Yangilanish manbasiga ulanib bo‘lmadi. Qayta urinib ko‘ring.</string>
+    <string name="OxUpdatesManifestError">Yangilanish ma’lumoti mavjud emas yoki yaroqsiz. Keyinroq qayta urinib ko‘ring.</string>
+    <string name="OxUpdatesInvalidApk">Yangilanishni tekshirib bo‘lmadi. Uni qayta yuklab oling.</string>
+    <string name="OxUpdatesStorageError">Xotira yetarli emas yoki yangilanishni saqlab bo‘lmadi. Joy bo‘shatib, qayta urinib ko‘ring.</string>
+    <string name="OxUpdatesInstallPermission">Ox-gram yangilanishlariga ruxsat berish</string>
+    <string name="OxUpdatesInstallPermissionInfo">Android sozlamalarida Ox-gram orqali o‘rnatishga ruxsat bering, so‘ng o‘rnatishni davom ettirish uchun qayting.</string>
+    <string name="OxUpdatesOpenSettings">Sozlamalarni ochish</string>
+    <string name="OxUpdatesInstallerError">Android o‘rnatish oynasini ochib bo‘lmadi. Qayta urinish uchun Yangilanishni o‘rnatish tugmasini bosing.</string>
+</resources>

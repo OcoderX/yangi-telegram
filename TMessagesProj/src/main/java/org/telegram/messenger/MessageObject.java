@@ -177,9 +177,6 @@ public class MessageObject {
         if (msg == null || msg.isEmpty()) {
             return msg;
         }
-        if (msg.contains("audio/ogg") || msg.contains("/storage/emulated/0/Android/data") || msg.contains("org.tel")) {
-            return "";
-        }
         boolean hasCorruptChars = false;
         for (int i = 0; i < msg.length(); i++) {
             char c = msg.charAt(i);

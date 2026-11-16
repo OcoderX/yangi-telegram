@@ -55,6 +55,10 @@ The library remains unminified until the application optimization pass. Resource
 
 ### APK signing for distribution
 
+OX26 keeps the `performance` variant's package name and signing configuration so it can update OX22 in place. The version code is increased to 72979. Verify the actual APK's package, certificate and version before publishing it; a source version bump alone does not publish an update.
+
+Run `powershell -File Tools/check_ox26.ps1` for the account-slot, message-text and installer-path regressions. This also compiles the native account factory with the configured Android NDK. These focused checks do not replace assembling the APK and testing installation over OX22 on Android.
+
 The bundled `TMessagesProj/config/release.keystore` is a public dummy key. APKs signed with it are suitable only for local development. The existing `debug`, `performance` and `release` signing configurations remain unchanged for compatibility; use the separate `distribution` variant for an APK signed with your private key.
 
 Set these four values in the ignored root `local.properties`, or as environment variables. Environment variables take precedence. Keep the private keystore outside the repository, and do not commit or share its passwords.

@@ -156,6 +156,7 @@ import me.vkryl.android.animator.FactorAnimator;
 public class SettingsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, ImageUpdater.ImageUpdaterDelegate, MainTabsActivity.TabFragmentDelegate, FactorAnimator.Target {
 
     private static final int ANIMATOR_ID_SEARCH_PAGE_VISIBLE = 0;
+    private static final int ROW_APP_UPDATES = 33;
 
     private final BoolAnimator animatorSearchPageVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_PAGE_VISIBLE,
             this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
@@ -750,6 +751,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(getString(R.string.SettingsHelp)));
+        if (ApplicationLoader.applicationLoaderInstance.isCustomUpdate()) {
+            items.add(SettingCell.Factory.of(ROW_APP_UPDATES, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_data, getString(R.string.OxUpdatesTitle)));
+        }
         items.add(SettingCell.Factory.of(17, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_ask, getString(R.string.AskAQuestion)));
         items.add(SettingCell.Factory.of(18, IconBackgroundColors.BLUE_LIGHT.top, IconBackgroundColors.BLUE_LIGHT.bottom, R.drawable.settings_faq, getString(R.string.TelegramFAQ)));
         items.add(SettingCell.Factory.of(23, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_features, getString(R.string.TelegramFeatures)));
@@ -863,6 +867,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 break;
             case 32:
                 openAddAccount(true);
+                break;
+            case ROW_APP_UPDATES:
+                presentSettingFragment(new org.telegram.ui.ayu.update.OxUpdatesActivity());
                 break;
 
             case 11:

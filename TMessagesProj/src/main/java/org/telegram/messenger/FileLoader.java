@@ -277,21 +277,53 @@ public class FileLoader extends BaseController {
     private String forceLoadingFile;
 
     private static SparseArray<File> mediaDirs = null;
-    private FileLoaderDelegate delegate = null;
+    interface FileLoaderDelegateFactory {
+        FileLoaderDelegate create(int account);
+    }
+
+    private volatile FileLoaderDelegate delegate = null;
+    private volatile boolean delegateInitialized;
 
     private int lastReferenceId;
     private final ConcurrentHashMap<Integer, Object> parentObjectReferences = new ConcurrentHashMap<>();
 
-    private static final FileLoader[] Instance = new FileLoader[UserConfig.MAX_ACCOUNT_COUNT];
+    private static final java.util.concurrent.atomic.AtomicReferenceArray<FileLoader> Instance =
+            new java.util.concurrent.atomic.AtomicReferenceArray<>(UserConfig.MAX_ACCOUNT_COUNT);
+    private static volatile FileLoaderDelegateFactory delegateFactory;
+
+    static void setDelegateFactory(FileLoaderDelegateFactory factory) {
+        synchronized (FileLoader.class) {
+            delegateFactory = factory;
+            for (int account = 0; account < Instance.length(); account++) {
+                FileLoader loader = Instance.get(account);
+                if (loader != null) loader.initDelegate();
+            }
+        }
+    }
+
+    private void initDelegate() {
+        // The factory only creates callbacks; it must not initialize controllers.
+        if (!delegateInitialized && delegateFactory != null) {
+            delegate = delegateFactory.create(currentAccount);
+            delegateInitialized = true;
+        }
+    }
 
     public static FileLoader getInstance(int num) {
-        FileLoader localInstance = Instance[num];
+        FileLoader localInstance = Instance.get(num);
         if (localInstance == null) {
             synchronized (FileLoader.class) {
-                localInstance = Instance[num];
+                localInstance = Instance.get(num);
                 if (localInstance == null) {
-                    Instance[num] = localInstance = new FileLoader(num);
+                    localInstance = new FileLoader(num);
+                    localInstance.initDelegate();
+                    Instance.set(num, localInstance);
                 }
+            }
+        }
+        if (!localInstance.delegateInitialized && delegateFactory != null) {
+            synchronized (FileLoader.class) {
+                localInstance.initDelegate();
             }
         }
         return localInstance;
@@ -1361,7 +1393,10 @@ public class FileLoader extends BaseController {
     }
 
     public void setDelegate(FileLoaderDelegate fileLoaderDelegate) {
-        delegate = fileLoaderDelegate;
+        synchronized (FileLoader.class) {
+            delegate = fileLoaderDelegate;
+            delegateInitialized = true;
+        }
     }
 
     public static String getMessageFileName(TLRPC.Message message) {

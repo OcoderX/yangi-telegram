@@ -1,5 +1,6 @@
 .idea/
 .gradle/
+/buildSrc/.kotlin/
 build/
 obj/
 *.iml

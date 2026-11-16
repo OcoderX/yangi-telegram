@@ -391,6 +391,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private FrameMetricsOverlayView frameMetricsOverlayView;
+    private org.telegram.ui.ayu.update.OxUpdateHost oxUpdateHost;
     // private RefreshRateController refreshRateController;
 
     @Override
@@ -443,6 +444,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         flagSecureReason.attach();
 
         super.onCreate(savedInstanceState);
+        if (ApplicationLoader.applicationLoaderInstance.isCustomUpdate()) {
+            oxUpdateHost = new org.telegram.ui.ayu.update.OxUpdateHost(this, savedInstanceState);
+        }
         if (Build.VERSION.SDK_INT >= 24) {
             AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
         }
@@ -618,6 +622,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             }
                             case "settings2": {
                                 actionBarLayout.addFragmentToStack(new SettingsActivity());
+                                break;
+                            }
+                            case "ox_updates": {
+                                org.telegram.ui.ayu.update.OxUpdatesActivity updates = new org.telegram.ui.ayu.update.OxUpdatesActivity();
+                                actionBarLayout.addFragmentToStack(updates);
+                                updates.restoreSelfArgs(savedInstanceState);
                                 break;
                             }
                             case "group":
@@ -5961,7 +5971,34 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private boolean firstAppUpdateCheck = true;
+    public void installOxUpdate() {
+        if (oxUpdateHost != null) oxUpdateHost.install();
+    }
+
+    public void startOxUpdate(int version) {
+        if (oxUpdateHost != null) oxUpdateHost.startUserUpdate(version);
+    }
+
+    public void cancelOxUpdate() {
+        if (oxUpdateHost != null) oxUpdateHost.cancelUserUpdate();
+    }
+
+    public void setOxUpdatePageVisible(boolean visible) {
+        if (oxUpdateHost != null) oxUpdateHost.setUpdatePageVisible(visible);
+    }
+
+    public void offerOxUpdate() {
+        if (oxUpdateHost != null && (passcodeDialog == null || passcodeDialog.passcodeView.getVisibility() != View.VISIBLE)) {
+            oxUpdateHost.offerUpdate();
+        }
+    }
+
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
+        if (oxUpdateHost != null) {
+            oxUpdateHost.check(force);
+            if (progress != null) progress.end();
+            return;
+        }
         if (!ApplicationLoader.isStandaloneBuild() && !ApplicationLoader.isBetaBuild()) {
             return;
         }
@@ -6734,6 +6771,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     protected void onPause() {
         super.onPause();
+        if (oxUpdateHost != null) oxUpdateHost.onPause();
         isResumed = false;
         pipActivityHandler.onPause();
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 4096);
@@ -6853,6 +6891,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onDestroy() {
+        if (oxUpdateHost != null) oxUpdateHost.destroy();
         isActive = false;
         activeInstanceCount--;
         unregisterReceiver(batteryReceiver);
@@ -6964,6 +7003,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     protected void onResume() {
         super.onResume();
         isResumed = true;
+        if (oxUpdateHost != null) oxUpdateHost.onResume();
         pipActivityHandler.onResume();
         if (onResumeStaticCallback != null) {
             onResumeStaticCallback.run();
@@ -7027,7 +7067,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         if (UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService != null) {
             showTosActivity(UserConfig.selectedAccount, UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService);
-        } else if (SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
+        } else if (!ApplicationLoader.applicationLoaderInstance.isCustomUpdate() && SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
             showUpdateActivity(UserConfig.selectedAccount, SharedConfig.pendingAppUpdate, true);
         }
         checkAppUpdate(false, null);
@@ -8253,6 +8293,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     protected void onSaveInstanceState(Bundle outState) {
         try {
             super.onSaveInstanceState(outState);
+            if (oxUpdateHost != null) oxUpdateHost.save(outState);
             BaseFragment lastFragment = null;
             if (AndroidUtilities.isTablet()) {
                 if (layersActionBarLayout != null && !layersActionBarLayout.getFragmentStack().isEmpty()) {
@@ -8291,6 +8332,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     outState.putString("fragment", "channel");
                 } else if (lastFragment instanceof SettingsActivity) {
                     outState.putString("fragment", "settings2");
+                } else if (lastFragment instanceof org.telegram.ui.ayu.update.OxUpdatesActivity) {
+                    outState.putString("fragment", "ox_updates");
                 }
                 lastFragment.saveSelfArgs(outState);
             }

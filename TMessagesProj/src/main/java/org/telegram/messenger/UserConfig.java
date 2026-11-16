@@ -86,6 +86,9 @@ public class UserConfig extends BaseController {
 
     private static volatile UserConfig[] Instance = new UserConfig[UserConfig.MAX_ACCOUNT_COUNT];
     public static UserConfig getInstance(int num) {
+        if (!isValidAccountIndex(num)) {
+            throw new IllegalArgumentException("Invalid account index: " + num);
+        }
         UserConfig localInstance = Instance[num];
         if (localInstance == null) {
             synchronized (UserConfig.class) {
@@ -323,6 +326,9 @@ public class UserConfig extends BaseController {
             SharedPreferences preferences = getPreferences();
             if (currentAccount == 0) {
                 selectedAccount = preferences.getInt("selectedAccount", 0);
+                if (!isValidAccountIndex(selectedAccount)) {
+                    selectedAccount = 0;
+                }
             }
             registeredForPush = preferences.getBoolean("registeredForPush", false);
             lastSendMessageId = preferences.getInt("lastSendMessageId", -210000);

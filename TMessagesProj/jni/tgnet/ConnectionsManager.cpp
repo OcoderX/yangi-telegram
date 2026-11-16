@@ -17,6 +17,7 @@
 #include <openssl/rand.h>
 #include <zlib.h>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <cinttypes>
 #include "ConnectionsManager.h"
@@ -136,24 +137,15 @@ ConnectionsManager::~ConnectionsManager() {
 }
 
 ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
-    switch (instanceNum) {
-        case 0:
-            static ConnectionsManager instance0(0);
-            return instance0;
-        case 1:
-            static ConnectionsManager instance1(1);
-            return instance1;
-        case 2:
-            static ConnectionsManager instance2(2);
-            return instance2;
-        case 3:
-            static ConnectionsManager instance3(3);
-            return instance3;
-        case 4:
-        default:
-            static ConnectionsManager instance4(4);
-            return instance4;
+    if (instanceNum < 0 || instanceNum >= MAX_ACCOUNT_COUNT) {
+        std::abort();
     }
+    static std::unique_ptr<ConnectionsManager> instances[MAX_ACCOUNT_COUNT];
+    static std::once_flag initialized[MAX_ACCOUNT_COUNT];
+    std::call_once(initialized[instanceNum], [instanceNum] {
+        instances[instanceNum] = std::unique_ptr<ConnectionsManager>(new ConnectionsManager(instanceNum));
+    });
+    return *instances[instanceNum];
 }
 
 int ConnectionsManager::callEvents(int64_t now) {
@@ -2200,7 +2192,7 @@ void ConnectionsManager::failNotRunningRequest(int32_t token) {
                 if (LOGS_ENABLED) DEBUG_D("cancelled queued rpc request %p - %s", request->rawRequest, typeid(*request->rawRequest).name());
                 requestsQueue.erase(iter);
                 removeRequestFromGuid(token);
-                return true;
+                return;
             }
         }
     });

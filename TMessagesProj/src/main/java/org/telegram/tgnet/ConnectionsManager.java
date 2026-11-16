@@ -191,7 +191,13 @@ public class ConnectionsManager extends BaseController {
     private static int lastClassGuid = 1;
     
     private static final ConnectionsManager[] Instance = new ConnectionsManager[UserConfig.MAX_ACCOUNT_COUNT];
+    public static synchronized boolean isInstanceCreated(int num) {
+        return UserConfig.isValidAccountIndex(num) && Instance[num] != null;
+    }
     public static ConnectionsManager getInstance(int num) {
+        if (!UserConfig.isValidAccountIndex(num)) {
+            throw new IllegalArgumentException("Invalid account index: " + num);
+        }
         ConnectionsManager localInstance = Instance[num];
         if (localInstance == null) {
             synchronized (ConnectionsManager.class) {
@@ -694,7 +700,9 @@ public class ConnectionsManager extends BaseController {
     public static void setLangCode(String langCode) {
         langCode = langCode.replace('_', '-').toLowerCase();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            native_setLangCode(a, langCode);
+            if (isInstanceCreated(a)) {
+                native_setLangCode(a, langCode);
+            }
         }
     }
 
@@ -708,17 +716,21 @@ public class ConnectionsManager extends BaseController {
         }
         if (TextUtils.isEmpty(pushString)) {
             String tag = type == PushListenerController.PUSH_TYPE_FIREBASE ? "FIREBASE" : "HUAWEI";
-            pushString = SharedConfig.pushStringStatus = "__" + tag + "_GENERATING_SINCE_" + getInstance(0).getCurrentTime() + "__";
+            pushString = SharedConfig.pushStringStatus = "__" + tag + "_GENERATING_SINCE_" + getInstance(UserConfig.selectedAccount).getCurrentTime() + "__";
         }
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            native_setRegId(a, pushString);
+            if (isInstanceCreated(a)) {
+                native_setRegId(a, pushString);
+            }
         }
     }
 
     public static void setSystemLangCode(String langCode) {
         langCode = langCode.replace('_', '-').toLowerCase();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            native_setSystemLangCode(a, langCode);
+            if (isInstanceCreated(a)) {
+                native_setSystemLangCode(a, langCode);
+            }
         }
     }
 
@@ -984,6 +996,9 @@ public class ConnectionsManager extends BaseController {
         }
 
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (!isInstanceCreated(a)) {
+                continue;
+            }
             if (enabled && !TextUtils.isEmpty(address)) {
                 native_setProxySettings(a, address, port, username, password, secret);
             } else {
