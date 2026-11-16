@@ -2944,6 +2944,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         }
     }
 
+    public void cancelMultiselect() {
+        multiSelectionGesture = false;
+        multiSelectionGestureStarted = false;
+        cancelMultiselectScroll();
+    }
+
     public void startMultiselect(int positionFrom, boolean useRelativePositions, onMultiSelectionChanged multiSelectionListener) {
         if (!multiSelectionGesture) {
             listPaddings = new int[2];

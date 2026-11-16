@@ -1759,10 +1759,10 @@ public class ChatActivity extends BaseFragment implements
                     outside = !((ChatMessageCell) view).isInsideBackground(x, y);
                 }
                 processRowSelect(view, outside, x, y);
-            }
-            if (view instanceof ChatMessageCell && (((ChatMessageCell) view).getMessageObject() != null && ((ChatMessageCell) view).getMessageObject().type != MessageObject.TYPE_JOINED_CHANNEL)) {
-                startMultiselect(position);
-                result = true;
+                if (view instanceof ChatMessageCell && (((ChatMessageCell) view).getMessageObject() != null && ((ChatMessageCell) view).getMessageObject().type != MessageObject.TYPE_JOINED_CHANNEL)) {
+                    startMultiselect(position);
+                    result = true;
+                }
             }
             return result;
         }
@@ -1773,7 +1773,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void startMultiselect(int position) {
-        if (isInsideContainer) {
+        if (isInsideContainer || actionBar == null || !actionBar.isActionModeShowed()) {
             return;
         }
         int indexOfMessage = position - chatAdapter.messagesStartRow;
@@ -31340,6 +31340,9 @@ public class ChatActivity extends BaseFragment implements
             bottomViewsVisibilityController.setViewVisible(MESSAGE_ACTION_CONTAINER, false, true);
             actionBar.hideActionMode();
         }
+        if (chatListView != null) {
+            chatListView.cancelMultiselect();
+        }
         cantDeleteMessagesCount = 0;
         canEditMessagesCount = 0;
         cantForwardMessagesCount = 0;
@@ -33019,6 +33022,7 @@ public class ChatActivity extends BaseFragment implements
                 showMenu.run();
             }
             chatListView.stopScroll();
+            chatListView.cancelMultiselect();
             chatLayoutManager.setCanScrollVertically(false);
             dimBehindView(v, true);
             hideHints(false);
@@ -41344,6 +41348,7 @@ public class ChatActivity extends BaseFragment implements
             scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP, scrimPopupX = popupX, scrimPopupY = popupY);
 
             chatListView.stopScroll();
+            chatListView.cancelMultiselect();
             chatLayoutManager.setCanScrollVertically(false);
             scrimViewReaction = null;
             scrimViewTask = task.id;
@@ -41494,7 +41499,6 @@ public class ChatActivity extends BaseFragment implements
         @Override
         public void didLongPress(ChatMessageCell cell, float x, float y) {
             createMenu(cell, false, false, x, y, false);
-            startMultiselect(chatListView.getChildAdapterPosition(cell));
         }
 
         @Override
@@ -46330,6 +46334,7 @@ public class ChatActivity extends BaseFragment implements
             scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP, scrimPopupX = popupX, scrimPopupY = popupY);
 
             chatListView.stopScroll();
+            chatListView.cancelMultiselect();
             chatLayoutManager.setCanScrollVertically(false);
             scrimViewTask = null;
             scrimViewReaction = reaction.reaction.hashCode();
