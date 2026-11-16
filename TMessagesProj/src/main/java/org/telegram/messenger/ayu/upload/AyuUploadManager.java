@@ -1,6 +1,7 @@
 package org.telegram.messenger.ayu.upload;
 
 import android.text.TextUtils;
+import android.os.Looper;
 import android.os.SystemClock;
 
 import org.json.JSONArray;
@@ -741,7 +742,7 @@ public class AyuUploadManager {
                 isCleaningZombies = false;
             }
         };
-        if (AndroidUtilities.isMainThread()) {
+        if (Thread.currentThread() == Looper.getMainLooper().getThread()) {
             cleanup.run();
         } else {
             AndroidUtilities.runOnUIThread(cleanup);
