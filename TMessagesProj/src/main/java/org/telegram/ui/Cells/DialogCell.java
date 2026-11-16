@@ -2321,12 +2321,13 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                     } else {
                         nameString = AndroidUtilities.escape(chat.title);
                     }
-                } else if (user != null) {
-                    if (UserObject.isReplyUser(user)) {
+                } else if (user != null || currentDialogId == UserConfig.getInstance(currentAccount).getClientUserId()) {
+                    final boolean isSelfUser = currentDialogId == UserConfig.getInstance(currentAccount).getClientUserId() || (user != null && UserObject.isUserSelf(user));
+                    if (user != null && UserObject.isReplyUser(user)) {
                         nameString = getString(R.string.RepliesTitle);
-                    } else if (UserObject.isAnonymous(user)) {
+                    } else if (user != null && UserObject.isAnonymous(user)) {
                         nameString = getString(R.string.AnonymousForward);
-                    } else if (UserObject.isUserSelf(user) && !isMonoForumTopicDialog) {
+                    } else if (isSelfUser && !isMonoForumTopicDialog) {
                         if (isSavedDialog) {
                             nameString = getString(R.string.MyNotes);
                         } else if (useMeForMyMessages) {
@@ -2343,12 +2344,23 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                         }
                         topicIconInName[0] = null;
                         nameString = showTopicIconInName ? ForumUtilities.getTopicSpannedName(forumTopic, Theme.dialogs_namePaint[paintIndex], topicIconInName, false) : AndroidUtilities.escape(forumTopic.title);
-                    } else {
+                    } else if (user != null) {
                         nameString = AndroidUtilities.escape(UserObject.getUserName(user));
+                    } else {
+                        nameString = "";
                     }
+                } else if (DialogObject.isUserDialog(currentDialogId)) {
+                    MessagesController.getInstance(currentAccount).ensureUserLoaded(currentDialogId);
                 }
                 if (nameString != null && nameString.length() == 0) {
-                    nameString = getString(R.string.HiddenName);
+                    if (currentDialogId == UserConfig.getInstance(currentAccount).getClientUserId()) {
+                        nameString = getString(R.string.SavedMessages);
+                    } else {
+                        nameString = getString(R.string.HiddenName);
+                        if (DialogObject.isUserDialog(currentDialogId)) {
+                            MessagesController.getInstance(currentAccount).ensureUserLoaded(currentDialogId);
+                        }
+                    }
                 }
             }
         }
@@ -3686,6 +3698,13 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                         avatarDrawable.setInfo(currentAccount, chat);
                         avatarImage.setForUserOrChat(chat, avatarDrawable);
                     }
+                } else if (dialogId == UserConfig.getInstance(currentAccount).getClientUserId()) {
+                    if (isSavedDialog) {
+                        avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_MY_NOTES);
+                    } else {
+                        avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_SAVED);
+                    }
+                    avatarImage.setImage(null, null, avatarDrawable, null, null, 0);
                 }
             }
 

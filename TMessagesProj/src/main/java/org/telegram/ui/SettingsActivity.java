@@ -5,6 +5,7 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.messenger.AndroidUtilities.replaceSingleTag;
 import static org.telegram.messenger.LocaleController.formatString;
 import static org.telegram.messenger.LocaleController.getString;
+import static org.telegram.ui.Components.Premium.LimitReachedBottomSheet.TYPE_ACCOUNTS;
 import static org.telegram.ui.Stars.StarGiftSheet.replaceUnderstood;
 
 import android.animation.Animator;
@@ -98,6 +99,7 @@ import org.telegram.ui.ActionBar.INavigationLayout;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.SettingsSearchCell;
+import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AvatarDrawable;
@@ -690,6 +692,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             for (int i = 0; i < accountNumbers.size(); ++i) {
                 items.add(AccountCell.Factory.of(i, accountNumbers.get(i)));
             }
+            if (UserConfig.getActivatedAccountsCount() < UserConfig.MAX_ACCOUNT_COUNT) {
+                items.add(SettingCell.Factory.of(31, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.msg_addbot, getString(R.string.AddAccount)));
+                items.add(SettingCell.Factory.of(32, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_bot, getString(R.string.AyuBotAddAccount)));
+            }
             items.add(UItem.asShadow(null));
         }
 
@@ -852,6 +858,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             case 30:
                 presentSettingFragment(new org.telegram.ui.ayu.AyuPreferencesActivity());
                 break;
+            case 31:
+                openAddAccount(false);
+                break;
+            case 32:
+                openAddAccount(true);
+                break;
 
             case 11:
                 presentSettingFragment(new PremiumPreviewFragment("settings"));
@@ -896,6 +908,26 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 }
                 break;
             }
+        }
+    }
+
+    private void openAddAccount(boolean botToken) {
+        Integer availableAccount = null;
+        for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
+            if (!UserConfig.getInstance(a).isClientActivated()) {
+                if (availableAccount == null) {
+                    availableAccount = a;
+                }
+            }
+        }
+        if (availableAccount != null) {
+            final LoginActivity loginActivity = new LoginActivity(availableAccount);
+            if (botToken) {
+                loginActivity.startWithBotToken();
+            }
+            presentFragment(loginActivity);
+        } else {
+            showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
         }
     }
 

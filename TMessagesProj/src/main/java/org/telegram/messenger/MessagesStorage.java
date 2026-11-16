@@ -385,6 +385,16 @@ public class MessagesStorage extends BaseController {
                 }
             }
             databaseCreated = true;
+            try {
+                android.content.SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences("ox_fixes", android.content.Context.MODE_PRIVATE);
+                if (!prefs.getBoolean("ox25_clean_cache_v1", false)) {
+                    database.executeFast("DELETE FROM users WHERE length(data) < 12").stepThis().dispose();
+                    database.executeFast("DELETE FROM messages_v2 WHERE length(data) < 12").stepThis().dispose();
+                    prefs.edit().putBoolean("ox25_clean_cache_v1", true).apply();
+                }
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
         } catch (Exception e) {
             FileLog.e(e);
             if (openTries < 3 && e.getMessage() != null && e.getMessage().contains("malformed")) {
@@ -10849,8 +10859,10 @@ public class MessagesStorage extends BaseController {
             }
         }
         if (!userIds.isEmpty()) {
-            SQLiteCursor cursor = database.queryFinalized(String.format(Locale.US, "SELECT data, status FROM users WHERE uid IN(%s)", TextUtils.join(",", userIds)));
+            HashSet<Long> loadedIds = new HashSet<>();
+            SQLiteCursor cursor = database.queryFinalized(String.format(Locale.US, "SELECT data, status, uid FROM users WHERE uid IN(%s)", TextUtils.join(",", userIds)));
             while (cursor.next()) {
+                long uid = cursor.longValue(2);
                 try {
                     NativeByteBuffer data = cursor.byteBufferValue(0);
                     if (data != null) {
@@ -10864,13 +10876,33 @@ public class MessagesStorage extends BaseController {
                             if (userIds.size() > 50 && putUnknown) {
                                 getMessagesController().putUser(user, true, false);
                             }
+                            loadedIds.add(user.id);
+                        } else {
+                            try { database.executeFast("DELETE FROM users WHERE uid = " + uid).stepThis().dispose(); } catch (Throwable ignore) {}
                         }
+                    } else {
+                        try { database.executeFast("DELETE FROM users WHERE uid = " + uid).stepThis().dispose(); } catch (Throwable ignore) {}
                     }
                 } catch (Exception e) {
                     checkSQLException(e);
+                    try { database.executeFast("DELETE FROM users WHERE uid = " + uid).stepThis().dispose(); } catch (Throwable ignore) {}
                 }
             }
             cursor.dispose();
+            if (loadedIds.size() < userIds.size()) {
+                final ArrayList<Long> missing = new ArrayList<>();
+                for (int i = 0; i < userIds.size(); i++) {
+                    long id = userIds.get(i);
+                    if (!loadedIds.contains(id)) {
+                        missing.add(id);
+                    }
+                }
+                if (!missing.isEmpty()) {
+                    AndroidUtilities.runOnUIThread(() -> {
+                        getMessagesController().onMissingUsersFromCache(missing);
+                    });
+                }
+            }
         }
     }
 

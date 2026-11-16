@@ -6972,6 +6972,54 @@ public class MessagesController extends BaseController implements NotificationCe
         return false;
     }
 
+    private final androidx.collection.LongSparseArray<Long> lastUserReloadTimes = new androidx.collection.LongSparseArray<>();
+
+    public void ensureUserLoaded(long userId) {
+        if (userId <= 0) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        Long lastTime = lastUserReloadTimes.get(userId);
+        if (lastTime != null && now - lastTime < 10000) {
+            return;
+        }
+        lastUserReloadTimes.put(userId, now);
+
+        TLRPC.User existing = getUser(userId);
+        if (existing != null && (!android.text.TextUtils.isEmpty(existing.first_name) || !android.text.TextUtils.isEmpty(existing.last_name) || existing.deleted)) {
+            return;
+        }
+
+        if (userId == getUserConfig().getClientUserId()) {
+            getUserConfig().resetDialogsLoadOffsets(0);
+            loadDialogs(0, 0, 100, false);
+            return;
+        }
+
+        TLRPC.InputUser inputPeer = getInputUser(userId);
+        if (inputPeer == null || inputPeer instanceof TLRPC.TL_inputUserEmpty || inputPeer.access_hash == 0) {
+            getUserConfig().resetDialogsLoadOffsets(0);
+            loadDialogs(0, 0, 100, false);
+            return;
+        }
+        reloadUser(userId);
+    }
+
+    public void onMissingUsersFromCache(ArrayList<Long> missing) {
+        if (missing == null || missing.isEmpty()) return;
+        boolean needDialogsReload = false;
+        long clientUserId = getUserConfig().getClientUserId();
+        for (int i = 0; i < missing.size(); i++) {
+            long uid = missing.get(i);
+            if (uid == clientUserId || dialogs_dict.get(uid) != null) {
+                needDialogsReload = true;
+                break;
+            }
+        }
+        if (needDialogsReload) {
+            getUserConfig().resetDialogsLoadOffsets(0);
+            loadDialogs(0, 0, 100, false);
+        }
+    }
+
     public void reloadUser(long userId) {
         TLRPC.TL_users_getUsers req = new TLRPC.TL_users_getUsers();
         TLRPC.InputUser inputPeer = getInputUser(userId);
@@ -13677,6 +13725,24 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
                 putUsers(dialogsRes.users, loadType == DIALOGS_LOAD_TYPE_CACHE);
                 putChats(dialogsRes.chats, loadType == DIALOGS_LOAD_TYPE_CACHE);
+                if (loadType == DIALOGS_LOAD_TYPE_CACHE && folderId == 0) {
+                    boolean missingActiveUsers = false;
+                    for (int a = 0; a < dialogsRes.dialogs.size(); a++) {
+                        TLRPC.Dialog d = dialogsRes.dialogs.get(a);
+                        if (DialogObject.isUserDialog(d.id)) {
+                            TLRPC.User u = users.get(d.id);
+                            if (u == null || (android.text.TextUtils.isEmpty(u.first_name) && android.text.TextUtils.isEmpty(u.last_name) && !u.deleted)) {
+                                missingActiveUsers = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (missingActiveUsers || users.get(getUserConfig().getClientUserId()) == null) {
+                        FileLog.d("Ox-gram: Cache contains missing/corrupted users, triggering fresh load from server");
+                        getUserConfig().resetDialogsLoadOffsets(folderId);
+                        AndroidUtilities.runOnUIThread(() -> loadDialogs(folderId, 0, 100, false), 300);
+                    }
+                }
                 if (fullUsers != null) {
                     for (int i = 0; i < fullUsers.size(); i++) {
                         long did = fullUsers.get(i).id;

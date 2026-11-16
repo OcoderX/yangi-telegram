@@ -297,6 +297,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
     private static final int INFO_BIRTHDAY = 9;
     private static final int BUTTON_ADD_ACCOUNT = 10;
     private static final int BUTTON_LOGOUT = 11;
+    private static final int BUTTON_ADD_BOT_ACCOUNT = 12;
 
     private final ArrayList<Integer> accountNumbers = new ArrayList<>();
     private void updateAccounts() {
@@ -423,11 +424,10 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         if (hasAddAccount) {
             addAccountRow = items.size();
             items.add(InfoCell.Factory.of(BUTTON_ADD_ACCOUNT, R.drawable.outline_add_account, getString(R.string.AddAccount), null, 0).accent());
+            items.add(InfoCell.Factory.of(BUTTON_ADD_BOT_ACCOUNT, R.drawable.msg_bot, getString(R.string.AyuBotAddAccount), null, 0).accent());
         }
         if (!accountNumbers.isEmpty()) {
-            if (!hasAddAccount) {
-                items.add(UItem.asHeader(getString(R.string.SettingsAccounts)));
-            }
+            items.add(UItem.asHeader(getString(R.string.SettingsAccounts)));
             for (int i = 0; i < accountNumbers.size(); ++i) {
                 items.add(SettingsActivity.AccountCell.Factory.of(i, accountNumbers.get(i)));
             }
@@ -470,23 +470,22 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
 
     @Override
     protected void onClick(UItem item, View view, int position, float x, float y) {
-        if (item.id == BUTTON_ADD_ACCOUNT) {
-            int freeAccounts = 0;
+        if (item.id == BUTTON_ADD_ACCOUNT || item.id == BUTTON_ADD_BOT_ACCOUNT) {
             Integer availableAccount = null;
             for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
                 if (!UserConfig.getInstance(a).isClientActivated()) {
-                    freeAccounts++;
                     if (availableAccount == null) {
                         availableAccount = a;
                     }
                 }
             }
-            if (!UserConfig.hasPremiumOnAccounts()) {
-                freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-            }
-            if (freeAccounts > 0 && availableAccount != null) {
-                presentFragment(new LoginActivity(availableAccount));
-            } else if (!UserConfig.hasPremiumOnAccounts()) {
+            if (availableAccount != null) {
+                LoginActivity loginActivity = new LoginActivity(availableAccount);
+                if (item.id == BUTTON_ADD_BOT_ACCOUNT) {
+                    loginActivity.startWithBotToken();
+                }
+                presentFragment(loginActivity);
+            } else {
                 showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
             }
         } else if (item.instanceOf(SettingsActivity.AccountCell.Factory.class)) {

@@ -583,26 +583,21 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     /** Opens the login screen in a free slot; with {@code botToken} it starts on the bot token page. */
     private void openAddAccount(boolean botToken) {
-        int freeAccounts = 0;
         Integer availableAccount = null;
         for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
             if (!UserConfig.getInstance(a).isClientActivated()) {
-                freeAccounts++;
                 if (availableAccount == null) {
                     availableAccount = a;
                 }
             }
         }
-        if (!UserConfig.hasPremiumOnAccounts()) {
-            freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-        }
-        if (freeAccounts > 0 && availableAccount != null) {
+        if (availableAccount != null) {
             final LoginActivity loginActivity = new LoginActivity(availableAccount);
             if (botToken) {
                 loginActivity.startWithBotToken();
             }
             presentFragment(loginActivity);
-        } else if (!UserConfig.hasPremiumOnAccounts()) {
+        } else {
             showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
         }
     }

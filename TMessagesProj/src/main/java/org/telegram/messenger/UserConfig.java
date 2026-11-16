@@ -24,8 +24,8 @@ import java.util.Arrays;
 public class UserConfig extends BaseController {
 
     public static int selectedAccount;
-    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 3;
-    public final static int MAX_ACCOUNT_COUNT = 4;
+    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 25;
+    public final static int MAX_ACCOUNT_COUNT = 25;
 
     private final Object sync = new Object();
     private volatile boolean configLoaded;
@@ -122,7 +122,20 @@ public class UserConfig extends BaseController {
     }
 
     public static int getMaxAccountCount() {
-        return hasPremiumOnAccounts() ? 5 : 3;
+        return MAX_ACCOUNT_COUNT;
+    }
+
+    public static boolean isValidAccountIndex(int account) {
+        return account >= 0 && account < MAX_ACCOUNT_COUNT;
+    }
+
+    public static int findFreeAccount() {
+        for (int account = 0; account < MAX_ACCOUNT_COUNT; account++) {
+            if (!getInstance(account).isClientActivated()) {
+                return account;
+            }
+        }
+        return -1;
     }
 
     public int getNewMessageId() {
@@ -576,6 +589,10 @@ public class UserConfig extends BaseController {
         editor.putLong("2dialogsLoadOffsetAccess" + (folderId == 0 ? "" : folderId), dialogsLoadOffsetAccess);
         editor.putBoolean("hasValidDialogLoadIds", true);
         editor.commit();
+    }
+
+    public void resetDialogsLoadOffsets(int folderId) {
+        setDialogsLoadOffset(folderId, 0, 0, 0, 0, 0, 0);
     }
 
     public void setShowCallsTab(boolean show) {

@@ -112,6 +112,7 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
     private static final int ID_ALL_SETTINGS = 22;
     private static final int ID_MY_PROFILE = 23;
     private static final int ID_CHANGE_STATUS = 24;
+    private static final int ID_ADD_BOT_ACCOUNT = 25;
 
     private SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow selectAnimatedEmojiDialog;
 
@@ -283,6 +284,7 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
             }
             if (UserConfig.getActivatedAccountsCount() < UserConfig.MAX_ACCOUNT_COUNT) {
                 items.add(Item.action(ID_ADD_ACCOUNT, R.drawable.msg_addbot, getString(R.string.AddAccount)));
+                items.add(Item.action(ID_ADD_BOT_ACCOUNT, R.drawable.msg_bot, getString(R.string.AyuBotAddAccount)));
             }
             items.add(Item.divider());
         }
@@ -391,7 +393,10 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
                 toggleNightMode(view);
                 break;
             case ID_ADD_ACCOUNT:
-                openAddAccount();
+                openAddAccount(false);
+                break;
+            case ID_ADD_BOT_ACCOUNT:
+                openAddAccount(true);
                 break;
             case ID_NEW_GROUP: {
                 presentFragment(new GroupCreateActivity(new Bundle()));
@@ -580,25 +585,27 @@ public class OcoderXMenuFragment extends BaseFragment implements NotificationCen
     }
 
     /** Opens the login screen in a free account slot, exactly like the classic "Add account" row. */
-    private void openAddAccount() {
-        int freeAccounts = 0;
+    private void openAddAccount(boolean botToken) {
         Integer availableAccount = null;
-        for (int a = UserConfig.MAX_ACCOUNT_COUNT - 1; a >= 0; a--) {
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             if (!UserConfig.getInstance(a).isClientActivated()) {
-                freeAccounts++;
-                if (availableAccount == null) {
-                    availableAccount = a;
-                }
+                availableAccount = a;
+                break;
             }
         }
-        if (!UserConfig.hasPremiumOnAccounts()) {
-            freeAccounts -= (UserConfig.MAX_ACCOUNT_COUNT - UserConfig.MAX_ACCOUNT_DEFAULT_COUNT);
-        }
-        if (freeAccounts > 0 && availableAccount != null) {
-            presentFragment(new LoginActivity(availableAccount));
-        } else if (!UserConfig.hasPremiumOnAccounts() && getContext() != null) {
+        if (availableAccount != null) {
+            final LoginActivity loginActivity = new LoginActivity(availableAccount);
+            if (botToken) {
+                loginActivity.startWithBotToken();
+            }
+            presentFragment(loginActivity);
+        } else if (getContext() != null) {
             showDialog(new LimitReachedBottomSheet(this, getContext(), TYPE_ACCOUNTS, currentAccount, null));
         }
+    }
+
+    private void openAddAccount() {
+        openAddAccount(false);
     }
 
     private void showSelectStatusDialog(View anchorView) {

@@ -173,6 +173,34 @@ public class MessageObject {
     public static final int TYPE_ARTICLE = 36;
     public static final int TYPE_COMMUNITY_CHANGED = 37;
 
+    public static String sanitizeCorruptedMessage(String msg) {
+        if (msg == null || msg.isEmpty()) {
+            return msg;
+        }
+        if (msg.contains("audio/ogg") || msg.contains("/storage/emulated/0/Android/data") || msg.contains("org.tel")) {
+            return "";
+        }
+        boolean hasCorruptChars = false;
+        for (int i = 0; i < msg.length(); i++) {
+            char c = msg.charAt(i);
+            if (c < 32 && c != '\n' && c != '\r' && c != '\t') {
+                hasCorruptChars = true;
+                break;
+            }
+        }
+        if (hasCorruptChars) {
+            StringBuilder sb = new StringBuilder(msg.length());
+            for (int i = 0; i < msg.length(); i++) {
+                char c = msg.charAt(i);
+                if (c >= 32 || c == '\n' || c == '\r' || c == '\t') {
+                    sb.append(c);
+                }
+            }
+            return sb.toString().trim();
+        }
+        return msg;
+    }
+
     public int localType;
     public String localName;
     public String localUserName;
@@ -5921,6 +5949,11 @@ public class MessageObject {
                 messageText = formatRichMessage(messageOwner.rich_message, isOutOwner());
                 messageText = AndroidUtilities.replaceNewLines(messageText);
             } else if (!isMediaEmpty() && !isSponsored()) {
+                if (messageOwner.media != null && messageOwner.message != null) {
+                    if (messageOwner.message.contains("audio/ogg") || messageOwner.message.contains("/storage/emulated") || messageOwner.message.contains("org.tel")) {
+                        messageOwner.message = "";
+                    }
+                }
 //                messageText = getMediaTitle(getMedia(messageOwner)); // I'm afraid doing this
                 if (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaGiveaway) {
                     boolean isChannel;
@@ -6048,6 +6081,7 @@ public class MessageObject {
                 }
             } else {
                 if (messageOwner.message != null) {
+                    messageOwner.message = sanitizeCorruptedMessage(messageOwner.message);
                     try {
                         if (messageOwner.message.length() > 200) {
                             messageText = AndroidUtilities.BAD_CHARS_MESSAGE_LONG_PATTERN.matcher(messageOwner.message).replaceAll("\u200C");

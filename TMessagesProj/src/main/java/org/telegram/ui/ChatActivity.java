@@ -2797,8 +2797,20 @@ public class ChatActivity extends BaseFragment implements
                 }
                 if (currentUser != null) {
                     getMessagesController().putUser(currentUser, true);
+                } else if (userId == getUserConfig().getClientUserId()) {
+                    currentUser = getUserConfig().getCurrentUser();
+                    if (currentUser == null) {
+                        currentUser = new TLRPC.TL_user();
+                        currentUser.id = userId;
+                        currentUser.self = true;
+                        currentUser.first_name = "";
+                    }
+                    getMessagesController().putUser(currentUser, true);
                 } else {
-                    return false;
+                    currentUser = new TLRPC.TL_user();
+                    currentUser.id = userId;
+                    getMessagesController().putUser(currentUser, true);
+                    getMessagesController().ensureUserLoaded(userId);
                 }
             }
             dialog_id = userId;
@@ -2851,7 +2863,10 @@ public class ChatActivity extends BaseFragment implements
                 if (currentUser != null) {
                     getMessagesController().putUser(currentUser, true);
                 } else {
-                    return false;
+                    currentUser = new TLRPC.TL_user();
+                    currentUser.id = currentEncryptedChat.user_id;
+                    getMessagesController().putUser(currentUser, true);
+                    getMessagesController().ensureUserLoaded(currentEncryptedChat.user_id);
                 }
             }
             dialog_id = DialogObject.makeEncryptedDialogId(encId);
