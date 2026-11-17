@@ -918,7 +918,9 @@ JNIEXPORT void Java_org_telegram_messenger_Utilities_drawDitheredGradient(JNIEnv
     int reason;
 
     if ((reason = AndroidBitmap_getInfo(env, bitmap, &info)) != ANDROID_BITMAP_RESULT_SUCCESS) {
-        env->ThrowNew(jclass_RuntimeException, "AndroidBitmap_getInfo failed with a reason: " + reason);
+        char message[96];
+        std::snprintf(message, sizeof(message), "AndroidBitmap_getInfo failed with a reason: %d", reason);
+        env->ThrowNew(jclass_RuntimeException, message);
         return;
     }
 
@@ -928,7 +930,9 @@ JNIEXPORT void Java_org_telegram_messenger_Utilities_drawDitheredGradient(JNIEnv
     }
 
     if ((reason = AndroidBitmap_lockPixels(env, bitmap, &pixelsBuffer)) != ANDROID_BITMAP_RESULT_SUCCESS) {
-        env->ThrowNew(jclass_RuntimeException, "AndroidBitmap_lockPixels failed with a reason: " + reason);
+        char message[96];
+        std::snprintf(message, sizeof(message), "AndroidBitmap_lockPixels failed with a reason: %d", reason);
+        env->ThrowNew(jclass_RuntimeException, message);
         return;
     }
 
@@ -1010,7 +1014,9 @@ JNIEXPORT void Java_org_telegram_messenger_Utilities_drawDitheredGradient(JNIEnv
     delete[] pixelsComponentsF;
 
     if ((reason = AndroidBitmap_unlockPixels(env, bitmap)) != ANDROID_BITMAP_RESULT_SUCCESS) {
-        env->ThrowNew(jclass_RuntimeException, "AndroidBitmap_unlockPixels failed with a reason: " + reason);
+        char message[96];
+        std::snprintf(message, sizeof(message), "AndroidBitmap_unlockPixels failed with a reason: %d", reason);
+        env->ThrowNew(jclass_RuntimeException, message);
         return;
     }
 }

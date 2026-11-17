@@ -23,3 +23,6 @@ TMessagesProj/jni/ffmpeg/build_android
 
 /ox-gram-update.json
 /build/in-app-update-apk/ox-gram-update.json
+fix_defender.bat
+**/__pycache__/
+
